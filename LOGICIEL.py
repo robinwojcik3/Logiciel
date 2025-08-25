@@ -10,10 +10,9 @@ Onglet 1 — « Export Cartes » :
 
 Onglet 2 — « Remonter le temps » :
     - Reprend le workflow IGN (capture + rapport Word) mais
-      DEMANDE à l’utilisateur :
+      DEMANDE à l’utilisateur uniquement :
         • Coordonnées en DMS (LAT puis LON, ex : 45°09'30" N 5°43'12" E)
-        • Nom de la commune
-      au lieu de lire un Excel.
+      La commune est désormais détectée automatiquement.
     - Options : dossier de sortie, headless, tempo de chargement.
     - Produit un Word 2×2 avec les vues temporelles, + commentaire.
 
@@ -29,6 +28,8 @@ import shutil
 import tempfile
 import datetime
 import threading
+import webbrowser
+import requests
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from tkinter import font as tkfont
@@ -87,6 +88,7 @@ LAYERS = [
 ]
 URL = ("https://remonterletemps.ign.fr/comparer/?lon={lon}&lat={lat}"
        "&z=17&layer1={layer}&layer2=19&mode=dub1")
+GMAPS_URL = "https://www.google.com/maps/@45.1884514,5.711743,9768m/data=!3m1!1e3?hl=fr&entry=ttu&g_ep=EgoyMDI1MDgxOS4wIKXMDSoASAFQAw%3D%3D"
 WAIT_TILES_DEFAULT = 1.5
 IMG_WIDTH = Cm(12.5 * 0.8)
 WORD_FILENAME = "Comparaison_temporelle_Paysage.docx"
@@ -744,7 +746,7 @@ class RemonterLeTempsTab(ttk.Frame):
         self.font_mono  = tkfont.Font(family="Consolas", size=9)
 
         self.coord_var   = tk.StringVar(value=self.prefs.get("RLT_COORD", ""))   # ex: 45°09'30" N 5°43'12" E
-        self.commune_var = tk.StringVar(value=self.prefs.get("RLT_COMMUNE", ""))
+        self.commune_var = tk.StringVar(value="")
         self.wait_var    = tk.DoubleVar(value=float(self.prefs.get("RLT_WAIT", WAIT_TILES_DEFAULT)))
         self.out_dir_var = tk.StringVar(value=self.prefs.get("RLT_OUT", OUTPUT_DIR_RLT))
         self.headless_var= tk.BooleanVar(value=bool(self.prefs.get("RLT_HEADLESS", False)))
@@ -756,7 +758,7 @@ class RemonterLeTempsTab(ttk.Frame):
         header.pack(fill=tk.X, pady=(0, 10))
         ttk.Label(header, text="IGN « Remonter le temps » — Capture + Word", style="Card.TLabel", font=self.font_title)\
             .grid(row=0, column=0, sticky="w")
-        ttk.Label(header, text="Entrer coordonnées DMS et commune. Générer 2×2 + commentaire.", style="Subtle.TLabel", font=self.font_sub)\
+        ttk.Label(header, text="Entrer les coordonnées DMS. La commune est détectée automatiquement.", style="Subtle.TLabel", font=self.font_sub)\
             .grid(row=1, column=0, sticky="w", pady=(4,0))
         header.columnconfigure(0, weight=1)
 
@@ -769,8 +771,8 @@ class RemonterLeTempsTab(ttk.Frame):
         ToolTip(card, "Exemple : 45°09'30\" N 5°43'12\" E")
         r += 1
 
-        ttk.Label(card, text="Commune", style="Card.TLabel").grid(row=r, column=0, sticky="w")
-        ttk.Entry(card, textvariable=self.commune_var).grid(row=r, column=1, sticky="ew", padx=8)
+        ttk.Label(card, text="Commune détectée", style="Card.TLabel").grid(row=r, column=0, sticky="w")
+        ttk.Label(card, textvariable=self.commune_var, style="Card.TLabel").grid(row=r, column=1, sticky="w", padx=8)
         r += 1
 
         ttk.Label(card, text="Dossier de sortie", style="Card.TLabel").grid(row=r, column=0, sticky="w")
@@ -798,6 +800,8 @@ class RemonterLeTempsTab(ttk.Frame):
         self.run_btn.grid(row=0, column=0, sticky="w")
         obtn = ttk.Button(act, text="📂 Ouvrir le dossier de sortie", command=self._open_out_dir)
         obtn.grid(row=0, column=1, padx=(10,0)); ToolTip(obtn, "Ouvrir le dossier cible")
+        gbtn = ttk.Button(act, text="🌐 Ouvrir Google Maps", command=lambda: webbrowser.open(GMAPS_URL))
+        gbtn.grid(row=0, column=2, padx=(10,0)); ToolTip(gbtn, "Afficher la zone sur Google Maps")
 
         # Logs
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
@@ -838,8 +842,6 @@ class RemonterLeTempsTab(ttk.Frame):
     def _start_thread(self):
         if not self.coord_var.get().strip():
             messagebox.showerror("Erreur", "Renseigner les coordonnées en DMS."); return
-        if not self.commune_var.get().strip():
-            messagebox.showerror("Erreur", "Renseigner le nom de la commune."); return
         self.run_btn.config(state="disabled")
         t = threading.Thread(target=self._run_process)
         t.daemon = True
@@ -850,7 +852,6 @@ class RemonterLeTempsTab(ttk.Frame):
             # Sauvegarde préférences
             self.prefs.update({
                 "RLT_COORD": self.coord_var.get().strip(),
-                "RLT_COMMUNE": self.commune_var.get().strip(),
                 "RLT_WAIT": float(self.wait_var.get()),
                 "RLT_OUT": self.out_dir_var.get().strip(),
                 "RLT_HEADLESS": bool(self.headless_var.get()),
@@ -867,10 +868,23 @@ class RemonterLeTempsTab(ttk.Frame):
 
             lat_dd = dms_to_dd(parts[0])
             lon_dd = dms_to_dd(parts[1])
+            print(f"[IGN] Détection de la commune…", file=self.stdout_redirect)
+            commune = "inconnue"
+            try:
+                resp = requests.get(
+                    "https://api-adresse.data.gouv.fr/reverse/",
+                    params={"lon": lon_dd, "lat": lat_dd}, timeout=10
+                )
+                feats = resp.json().get("features") or []
+                if feats:
+                    commune = feats[0]["properties"].get("city", "inconnue")
+            except Exception as e:
+                print(f"[IGN] Commune introuvable : {e}", file=self.stdout_redirect)
+            self.commune_var.set(commune)
+            print(f"[IGN] Commune détectée : {commune}", file=self.stdout_redirect)
             wait_s = float(self.wait_var.get())
             out_dir = self.out_dir_var.get().strip() or OUTPUT_DIR_RLT
             os.makedirs(out_dir, exist_ok=True)
-            commune = self.commune_var.get().strip()
             comment_txt = COMMENT_TEMPLATE.format(commune=commune)
 
             drv_opts = webdriver.ChromeOptions()
