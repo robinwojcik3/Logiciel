@@ -42,8 +42,12 @@ import pillow_heif
 # ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+import zipfile
+import traceback
 
 from docx import Document
 from docx.shared import Cm
@@ -899,10 +903,14 @@ class RemonterLeTempsTab(ttk.Frame):
         act.pack(fill=tk.X, pady=(10,0))
         self.run_btn = ttk.Button(act, text="▶ Capturer + Générer le Word", style="Accent.TButton", command=self._start_thread)
         self.run_btn.grid(row=0, column=0, sticky="w")
+        self.bv_btn = ttk.Button(act, text="▶ Télécharger le bassin versant", command=self._start_bassin_thread)
+        self.bv_btn.grid(row=1, column=0, sticky="w", pady=(8,0))
         obtn = ttk.Button(act, text="📂 Ouvrir le dossier de sortie", command=self._open_out_dir)
         obtn.grid(row=0, column=1, padx=(10,0)); ToolTip(obtn, "Ouvrir le dossier cible")
         gbtn = ttk.Button(act, text="🌍 Ouvrir Google Maps", command=self._open_gmaps)
         gbtn.grid(row=0, column=2, padx=(10,0)); ToolTip(gbtn, "Ouvrir Google Maps")
+        outbtn = ttk.Button(act, text="📂 Ouvrir le dossier OUTPUT", command=self._open_output_dir)
+        outbtn.grid(row=0, column=3, padx=(10,0)); ToolTip(outbtn, "Ouvrir le dossier global de sortie")
 
         # Logs
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
@@ -944,6 +952,117 @@ class RemonterLeTempsTab(ttk.Frame):
         url = ("https://www.google.com/maps/@45.1884514,5.711743,9768m/data=!3m1!1e3?hl=fr&entry=ttu&g_ep=EgoyMDI1MDgxOS4w"
                "IKXMDSoASAFQAw%3D%3D")
         webbrowser.open(url)
+
+    def _open_output_dir(self):
+        try:
+            os.makedirs(OUT_IMG, exist_ok=True)
+            os.startfile(OUT_IMG)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
+
+    def _start_bassin_thread(self):
+        if not self.coord_var.get().strip():
+            messagebox.showerror("Erreur", "Renseigner les coordonnées en DMS.")
+            return
+        self.bv_btn.config(state="disabled")
+        t = threading.Thread(target=self._run_bassin_process)
+        t.daemon = True
+        t.start()
+
+    def _run_bassin_process(self):
+        coords = self.coord_var.get().strip()
+        download_dir = OUT_IMG
+        target_folder_name = "Bassin versant"
+        target_path = os.path.join(download_dir, target_folder_name)
+        url = "https://mghydro.com/watersheds/"
+        driver = None
+        try:
+            print("[BV] Initialisation du navigateur...", file=self.stdout_redirect)
+            options = webdriver.ChromeOptions()
+            options.add_argument("--log-level=3")
+            options.add_experimental_option('excludeSwitches', ['enable-logging'])
+            options.add_argument("--disable-extensions")
+            prefs = {
+                "download.default_directory": download_dir,
+                "download.prompt_for_download": False,
+                "profile.default_content_settings.popups": 0,
+                "download.directory_upgrade": True,
+            }
+            options.add_experimental_option("prefs", prefs)
+            driver = webdriver.Chrome(options=options)
+            driver.maximize_window()
+            print("[BV] Navigateur initialisé.", file=self.stdout_redirect)
+            print(f"[BV] Navigation vers {url}...", file=self.stdout_redirect)
+            driver.get(url)
+            wait = WebDriverWait(driver, 2)
+            opts_button = wait.until(EC.element_to_be_clickable((By.ID, "opts_click")))
+            opts_button.click()
+            time.sleep(1)
+            downloadable_checkbox = wait.until(EC.element_to_be_clickable((By.ID, "downloadable")))
+            if not downloadable_checkbox.is_selected():
+                downloadable_checkbox.click()
+            time.sleep(0.5)
+            search_icon = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".leaflet-control-search .search-button")))
+            search_icon.click()
+            search_input = wait.until(EC.visibility_of_element_located((By.ID, "searchtext84")))
+            search_input.clear()
+            time.sleep(0.3)
+            search_input.send_keys(coords)
+            time.sleep(1.5)
+            search_input.send_keys(Keys.ARROW_DOWN)
+            time.sleep(0.3)
+            search_input.send_keys(Keys.ENTER)
+            time.sleep(1.5)
+            map_element = wait.until(EC.presence_of_element_located((By.ID, "map")))
+            ActionChains(driver).move_to_element(map_element).click().perform()
+            time.sleep(0.8)
+            wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "div.leaflet-popup")))
+            delineate_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".leaflet-popup .gobutton")))
+            delineate_button.click()
+            time.sleep(1.5)
+            downloads_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(@class, 'ui-selectmenu-text') and contains(text(), 'Watershed Boundary')]")))
+            downloads_button.click()
+            time.sleep(0.8)
+            ActionChains(driver).send_keys(Keys.ARROW_DOWN).pause(0.3).send_keys(Keys.ARROW_DOWN).pause(0.3).send_keys(Keys.ENTER).perform()
+            time.sleep(1.5)
+            print("[BV] Attente de la fin du téléchargement...", file=self.stdout_redirect)
+            zip_file_path = None
+            wait_time = 30
+            start_time = time.time()
+            while time.time() - start_time < wait_time:
+                zip_candidates = [
+                    f for f in os.listdir(download_dir)
+                    if f.lower().endswith(".zip") and not f.lower().endswith(".crdownload")
+                ]
+                if zip_candidates:
+                    zip_candidates_full = [os.path.join(download_dir, z) for z in zip_candidates]
+                    zip_file_path = max(zip_candidates_full, key=os.path.getmtime)
+                    size1 = os.path.getsize(zip_file_path)
+                    time.sleep(1)
+                    size2 = os.path.getsize(zip_file_path)
+                    if size1 == size2:
+                        break
+                time.sleep(1)
+            if zip_file_path:
+                if os.path.exists(target_path):
+                    shutil.rmtree(target_path, ignore_errors=True)
+                os.makedirs(target_path, exist_ok=True)
+                with zipfile.ZipFile(zip_file_path, 'r') as zf:
+                    zf.extractall(path=target_path)
+                os.remove(zip_file_path)
+                print(f"[BV] Fichiers extraits dans {target_path}", file=self.stdout_redirect)
+            else:
+                print("[BV] Aucun fichier ZIP trouvé.", file=self.stdout_redirect)
+        except Exception as e:
+            print(f"[BV] Erreur : {e}", file=self.stdout_redirect)
+            print(traceback.format_exc(), file=self.stdout_redirect)
+        finally:
+            if driver:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+            self.after(0, lambda: self.bv_btn.config(state="normal"))
 
     def _detect_commune(self, lat: float, lon: float) -> str:
         try:
