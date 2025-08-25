@@ -430,27 +430,36 @@ class StyleHelper:
         except Exception: pass
 
     def apply(self, light: bool = True):
+        """Apply a vibrant, funkier theme to the whole interface."""
         if light:
-            bg, fg, card_bg, accent, border, subfg = "#F6F7F9", "#111827", "#FFFFFF", "#2563EB", "#E5E7EB", "#6B7280"
+            bg, fg = "#FFF8F0", "#2E0039"
+            card_bg, accent = "#FFFFFF", "#FF5DB1"
+            border, subfg = "#FFD2EB", "#5E2750"
         else:
-            bg, fg, card_bg, accent, border, subfg = "#0F172A", "#E5E7EB", "#111827", "#3B82F6", "#1F2937", "#9CA3AF"
+            bg, fg = "#1B003A", "#F5E1FF"
+            card_bg, accent = "#2E004D", "#00E3A6"
+            border, subfg = "#4B0082", "#C0A1FF"
 
         self.master.configure(bg=bg)
         s = self.style
-        s.configure(".", background=bg, foreground=fg, fieldbackground=card_bg, bordercolor=border)
-        s.configure("Card.TFrame", background=card_bg, bordercolor=border, relief="solid", borderwidth=1)
+        s.configure(".", background=bg, foreground=fg, fieldbackground=card_bg,
+                    bordercolor=border, focusthickness=3, focuscolor=accent)
+        s.configure("Card.TFrame", background=card_bg, bordercolor=border,
+                    relief="raised", borderwidth=2)
         s.configure("Header.TFrame", background=card_bg, bordercolor=border, relief="flat")
         s.configure("TLabel", background=bg, foreground=fg)
         s.configure("Card.TLabel", background=card_bg, foreground=fg)
         s.configure("Subtle.TLabel", background=bg, foreground=subfg)
         s.configure("Tooltip.TLabel", background="#111827", foreground="#F9FAFB")
-        s.configure("Accent.TButton", padding=10, background=accent, foreground="#FFFFFF")
-        s.map("Accent.TButton", background=[("active", "#1D4ED8")], foreground=[("active", "#FFFFFF")])
+        s.configure("Accent.TButton", padding=10, background=accent, foreground="#FFFFFF",
+                    borderwidth=0)
+        s.map("Accent.TButton", background=[("active", accent)],
+               foreground=[("active", "#FFFFFF")])
         s.configure("Card.TCheckbutton", background=card_bg, foreground=fg)
         s.configure("Card.TRadiobutton", background=card_bg, foreground=fg)
         s.configure("Card.TEntry", fieldbackground=card_bg)
         s.configure("Status.TLabel", background=card_bg, foreground=subfg)
-        s.configure("TProgressbar", troughcolor=border)
+        s.configure("TProgressbar", troughcolor=border, background=accent)
 
 # =========================
 # Onglet 1 — Export Cartes (mêmes fonctionnalités)
