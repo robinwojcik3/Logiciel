@@ -30,10 +30,12 @@ import tempfile
 import datetime
 import threading
 import tkinter as tk
+import webbrowser
 from tkinter import ttk, filedialog, messagebox
 from tkinter import font as tkfont
 from typing import List, Optional, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import requests
 
 # ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
 from selenium import webdriver
@@ -87,6 +89,10 @@ LAYERS = [
 ]
 URL = ("https://remonterletemps.ign.fr/comparer/?lon={lon}&lat={lat}"
        "&z=17&layer1={layer}&layer2=19&mode=dub1")
+GMAPS_URL = (
+    "https://www.google.com/maps/@45.1884514,5.711743,9768m/data="
+    "!3m1!1e3?hl=fr&entry=ttu&g_ep=EgoyMDI1MDgxOS4wIKXMDSoASAFQAw%3D%3D"
+)
 WAIT_TILES_DEFAULT = 1.5
 IMG_WIDTH = Cm(12.5 * 0.8)
 WORD_FILENAME = "Comparaison_temporelle_Paysage.docx"
@@ -745,6 +751,7 @@ class RemonterLeTempsTab(ttk.Frame):
 
         self.coord_var   = tk.StringVar(value=self.prefs.get("RLT_COORD", ""))   # ex: 45°09'30" N 5°43'12" E
         self.commune_var = tk.StringVar(value=self.prefs.get("RLT_COMMUNE", ""))
+        self.coord_var.trace_add("write", lambda *_: self._detect_commune())
         self.wait_var    = tk.DoubleVar(value=float(self.prefs.get("RLT_WAIT", WAIT_TILES_DEFAULT)))
         self.out_dir_var = tk.StringVar(value=self.prefs.get("RLT_OUT", OUTPUT_DIR_RLT))
         self.headless_var= tk.BooleanVar(value=bool(self.prefs.get("RLT_HEADLESS", False)))
@@ -756,7 +763,7 @@ class RemonterLeTempsTab(ttk.Frame):
         header.pack(fill=tk.X, pady=(0, 10))
         ttk.Label(header, text="IGN « Remonter le temps » — Capture + Word", style="Card.TLabel", font=self.font_title)\
             .grid(row=0, column=0, sticky="w")
-        ttk.Label(header, text="Entrer coordonnées DMS et commune. Générer 2×2 + commentaire.", style="Subtle.TLabel", font=self.font_sub)\
+        ttk.Label(header, text="Entrer coordonnées DMS. La commune est détectée automatiquement. Générer 2×2 + commentaire.", style="Subtle.TLabel", font=self.font_sub)\
             .grid(row=1, column=0, sticky="w", pady=(4,0))
         header.columnconfigure(0, weight=1)
 
@@ -769,8 +776,8 @@ class RemonterLeTempsTab(ttk.Frame):
         ToolTip(card, "Exemple : 45°09'30\" N 5°43'12\" E")
         r += 1
 
-        ttk.Label(card, text="Commune", style="Card.TLabel").grid(row=r, column=0, sticky="w")
-        ttk.Entry(card, textvariable=self.commune_var).grid(row=r, column=1, sticky="ew", padx=8)
+        ttk.Label(card, text="Commune détectée", style="Card.TLabel").grid(row=r, column=0, sticky="w")
+        ttk.Entry(card, textvariable=self.commune_var, state="readonly").grid(row=r, column=1, sticky="ew", padx=8)
         r += 1
 
         ttk.Label(card, text="Dossier de sortie", style="Card.TLabel").grid(row=r, column=0, sticky="w")
@@ -798,6 +805,8 @@ class RemonterLeTempsTab(ttk.Frame):
         self.run_btn.grid(row=0, column=0, sticky="w")
         obtn = ttk.Button(act, text="📂 Ouvrir le dossier de sortie", command=self._open_out_dir)
         obtn.grid(row=0, column=1, padx=(10,0)); ToolTip(obtn, "Ouvrir le dossier cible")
+        gbtn = ttk.Button(act, text="🗺️ Google Maps", command=self._open_gmaps)
+        gbtn.grid(row=0, column=2, padx=(10,0)); ToolTip(gbtn, "Ouvrir Google Maps")
 
         # Logs
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
@@ -822,6 +831,44 @@ class RemonterLeTempsTab(ttk.Frame):
         # Utilisation: print(..., file=self.stdout_redirect)
 
     # --- Actions onglet 2 ---
+    def _open_gmaps(self):
+        webbrowser.open(GMAPS_URL)
+
+    def _detect_commune(self, *_):
+        try:
+            parts = re.split(r"\s{2,}|,|\t", self.coord_var.get().strip())
+            if len(parts) < 2:
+                parts = re.split(r"\s+", self.coord_var.get().strip(), maxsplit=1)
+            if len(parts) < 2:
+                self.commune_var.set("")
+                return
+            lat_dd = dms_to_dd(parts[0])
+            lon_dd = dms_to_dd(parts[1])
+            commune = self._fetch_commune(lat_dd, lon_dd)
+            self.commune_var.set(commune or "")
+        except Exception:
+            self.commune_var.set("")
+
+    def _fetch_commune(self, lat_dd: float, lon_dd: float) -> Optional[str]:
+        try:
+            resp = requests.get(
+                "https://geo.api.gouv.fr/communes",
+                params={
+                    "lat": lat_dd,
+                    "lon": lon_dd,
+                    "fields": "nom",
+                    "format": "json",
+                    "geometry": "centre",
+                },
+                timeout=10,
+            )
+            data = resp.json()
+            if isinstance(data, list) and data:
+                return data[0].get("nom")
+        except Exception:
+            return None
+        return None
+
     def _pick_out_dir(self):
         base = self.out_dir_var.get() or OUTPUT_DIR_RLT
         d = filedialog.askdirectory(title="Choisir le dossier de sortie", initialdir=base if os.path.isdir(base) else os.path.expanduser("~"))
@@ -839,7 +886,9 @@ class RemonterLeTempsTab(ttk.Frame):
         if not self.coord_var.get().strip():
             messagebox.showerror("Erreur", "Renseigner les coordonnées en DMS."); return
         if not self.commune_var.get().strip():
-            messagebox.showerror("Erreur", "Renseigner le nom de la commune."); return
+            self._detect_commune()
+        if not self.commune_var.get().strip():
+            messagebox.showerror("Erreur", "Impossible de détecter la commune."); return
         self.run_btn.config(state="disabled")
         t = threading.Thread(target=self._run_process)
         t.daemon = True
@@ -870,7 +919,8 @@ class RemonterLeTempsTab(ttk.Frame):
             wait_s = float(self.wait_var.get())
             out_dir = self.out_dir_var.get().strip() or OUTPUT_DIR_RLT
             os.makedirs(out_dir, exist_ok=True)
-            commune = self.commune_var.get().strip()
+            commune = self.commune_var.get().strip() or (self._fetch_commune(lat_dd, lon_dd) or "")
+            self.commune_var.set(commune)
             comment_txt = COMMENT_TEMPLATE.format(commune=commune)
 
             drv_opts = webdriver.ChromeOptions()
