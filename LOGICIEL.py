@@ -429,11 +429,16 @@ class StyleHelper:
         try: self.style.theme_use("clam")
         except Exception: pass
 
-    def apply(self, light: bool = True):
-        if light:
+    def apply(self, theme: str = "light"):
+        if theme == "light":
             bg, fg, card_bg, accent, border, subfg = "#F6F7F9", "#111827", "#FFFFFF", "#2563EB", "#E5E7EB", "#6B7280"
-        else:
+            active_accent = "#1D4ED8"
+        elif theme == "dark":
             bg, fg, card_bg, accent, border, subfg = "#0F172A", "#E5E7EB", "#111827", "#3B82F6", "#1F2937", "#9CA3AF"
+            active_accent = "#2563EB"
+        else:  # thème funky
+            bg, fg, card_bg, accent, border, subfg = "#1E1E2F", "#FCEFF9", "#27293D", "#FF47A1", "#37394D", "#FFE66D"
+            active_accent = "#E0007D"
 
         self.master.configure(bg=bg)
         s = self.style
@@ -445,7 +450,7 @@ class StyleHelper:
         s.configure("Subtle.TLabel", background=bg, foreground=subfg)
         s.configure("Tooltip.TLabel", background="#111827", foreground="#F9FAFB")
         s.configure("Accent.TButton", padding=10, background=accent, foreground="#FFFFFF")
-        s.map("Accent.TButton", background=[("active", "#1D4ED8")], foreground=[("active", "#FFFFFF")])
+        s.map("Accent.TButton", background=[("active", active_accent)], foreground=[("active", "#FFFFFF")])
         s.configure("Card.TCheckbutton", background=card_bg, foreground=fg)
         s.configure("Card.TRadiobutton", background=card_bg, foreground=fg)
         s.configure("Card.TEntry", fieldbackground=card_bg)
@@ -983,14 +988,14 @@ class MainApp:
         self.prefs = load_prefs()
         self.style_helper = StyleHelper(root, self.prefs)
         self.theme_var = tk.StringVar(value=self.prefs.get("theme", "light"))
-        self.style_helper.apply(light=(self.theme_var.get() == "light"))
+        self.style_helper.apply(self.theme_var.get())
 
         # Header global + bouton thème
         top = ttk.Frame(root, style="Header.TFrame", padding=(12, 8))
         top.pack(fill=tk.X)
         ttk.Label(top, text="Contexte éco — Suite d’outils", style="Card.TLabel",
                   font=tkfont.Font(family="Segoe UI", size=16, weight="bold")).pack(side=tk.LEFT)
-        btn_theme = ttk.Button(top, text="Thème clair/sombre", command=self._toggle_theme)
+        btn_theme = ttk.Button(top, text="Changer de thème", command=self._toggle_theme)
         btn_theme.pack(side=tk.RIGHT)
 
         # Notebook
@@ -1011,11 +1016,13 @@ class MainApp:
         root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _toggle_theme(self):
-        new_theme = "dark" if self.theme_var.get() == "light" else "light"
+        themes = ["light", "dark", "funky"]
+        current = self.theme_var.get()
+        new_theme = themes[(themes.index(current) + 1) % len(themes)]
         self.theme_var.set(new_theme)
         self.prefs["theme"] = new_theme
         save_prefs(self.prefs)
-        self.style_helper.apply(light=(new_theme == "light"))
+        self.style_helper.apply(new_theme)
 
     def _on_close(self):
         try:
