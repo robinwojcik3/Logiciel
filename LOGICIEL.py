@@ -430,10 +430,23 @@ class StyleHelper:
         except Exception: pass
 
     def apply(self, light: bool = True):
+        # Palette plus moderne et "funky" pour donner un côté plus vivant à l'interface
         if light:
-            bg, fg, card_bg, accent, border, subfg = "#F6F7F9", "#111827", "#FFFFFF", "#2563EB", "#E5E7EB", "#6B7280"
+            # Tons pastels lumineux avec un accent rose flashy
+            bg = "#FDF4FF"        # arrière-plan légèrement violet
+            fg = "#2D1B69"        # texte violet foncé
+            card_bg = "#FFFFFF"   # cartes blanches
+            accent = "#FF6F91"    # rose néon
+            border = "#E0E0E0"    # bord gris clair
+            subfg = "#8C7AA9"     # texte secondaire lavande
         else:
-            bg, fg, card_bg, accent, border, subfg = "#0F172A", "#E5E7EB", "#111827", "#3B82F6", "#1F2937", "#9CA3AF"
+            # Mode sombre avec nuances de violet et l'accent rose
+            bg = "#1B1521"
+            fg = "#F5E1FF"
+            card_bg = "#2C2233"
+            accent = "#FF6F91"
+            border = "#40304B"
+            subfg = "#B39DBC"
 
         self.master.configure(bg=bg)
         s = self.style
@@ -444,8 +457,9 @@ class StyleHelper:
         s.configure("Card.TLabel", background=card_bg, foreground=fg)
         s.configure("Subtle.TLabel", background=bg, foreground=subfg)
         s.configure("Tooltip.TLabel", background="#111827", foreground="#F9FAFB")
-        s.configure("Accent.TButton", padding=10, background=accent, foreground="#FFFFFF")
-        s.map("Accent.TButton", background=[("active", "#1D4ED8")], foreground=[("active", "#FFFFFF")])
+        # Boutons plus plats et colorés
+        s.configure("Accent.TButton", padding=10, background=accent, foreground="#FFFFFF", borderwidth=0, focusthickness=0)
+        s.map("Accent.TButton", background=[("active", "#FF4F7A")], foreground=[("active", "#FFFFFF")])
         s.configure("Card.TCheckbutton", background=card_bg, foreground=fg)
         s.configure("Card.TRadiobutton", background=card_bg, foreground=fg)
         s.configure("Card.TEntry", fieldbackground=card_bg)
@@ -988,8 +1002,9 @@ class MainApp:
         # Header global + bouton thème
         top = ttk.Frame(root, style="Header.TFrame", padding=(12, 8))
         top.pack(fill=tk.X)
-        ttk.Label(top, text="Contexte éco — Suite d’outils", style="Card.TLabel",
-                  font=tkfont.Font(family="Segoe UI", size=16, weight="bold")).pack(side=tk.LEFT)
+        # Titre un peu plus décalé avec une police fantaisie
+        ttk.Label(top, text="Contexte éco — Suite d’outils 🎉", style="Card.TLabel",
+                  font=tkfont.Font(family="Comic Sans MS", size=16, weight="bold")).pack(side=tk.LEFT)
         btn_theme = ttk.Button(top, text="Thème clair/sombre", command=self._toggle_theme)
         btn_theme.pack(side=tk.RIGHT)
 
