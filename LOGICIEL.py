@@ -9,11 +9,9 @@ Onglet 1 — « Export Cartes » :
     - Parallélisation, logs, thème clair/sombre, préférences.
 
 Onglet 2 — « Remonter le temps » :
-    - Reprend le workflow IGN (capture + rapport Word) mais
-      DEMANDE à l’utilisateur :
-        • Coordonnées en DMS (LAT puis LON, ex : 45°09'30" N 5°43'12" E)
-        • Nom de la commune
-      au lieu de lire un Excel.
+    - Reprend le workflow IGN (capture + rapport Word) en
+      sélectionnant un point sur Google Maps puis en détectant
+      automatiquement la commune, au lieu de lire un Excel.
     - Options : dossier de sortie, headless, tempo de chargement.
     - Produit un Word 2×2 avec les vues temporelles, + commentaire.
 
@@ -34,6 +32,7 @@ from tkinter import ttk, filedialog, messagebox
 from tkinter import font as tkfont
 from typing import List, Optional, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import requests
 
 # ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
 from selenium import webdriver
@@ -91,6 +90,8 @@ WAIT_TILES_DEFAULT = 1.5
 IMG_WIDTH = Cm(12.5 * 0.8)
 WORD_FILENAME = "Comparaison_temporelle_Paysage.docx"
 OUTPUT_DIR_RLT = os.path.join(OUT_IMG, "Remonter le temps")
+GMAPS_DEFAULT_URL = ("https://www.google.com/maps/"
+                     "@45.1884514,5.711743,9768m/data=!3m1!1e3?hl=fr&entry=ttu&g_ep=EgoyMDI1MDgxOS4wIKXMDSoASAFQAw%3D%3D")
 COMMENT_TEMPLATE = (
     "Rédige un commentaire synthétique de l'évolution de l'occupation du sol observée "
     "sur les images aériennes de la zone d'étude, aux différentes dates indiquées "
@@ -391,6 +392,32 @@ def dms_to_dd(text: str) -> float:
     deg, mn, sc, hemi = m.groups()
     dd = float(deg) + float(mn)/60 + float(sc)/3600
     return -dd if hemi.upper() in ("S", "W") else dd
+
+
+def dd_to_dms(lat: float, lon: float) -> str:
+    def conv(dd: float, is_lat: bool) -> str:
+        hemi = ('N' if dd >= 0 else 'S') if is_lat else ('E' if dd >= 0 else 'W')
+        dd = abs(dd)
+        deg = int(dd)
+        mn = int((dd - deg) * 60)
+        sec = int(round((dd - deg - mn / 60) * 3600))
+        return f"{deg}°{mn:02d}'{sec:02d}\" {hemi}"
+    return f"{conv(lat, True)} {conv(lon, False)}"
+
+
+def commune_from_coords(lat: float, lon: float) -> str:
+    try:
+        url = (
+            "https://geo.api.gouv.fr/communes?lat={lat}&lon={lon}&fields=nom"
+            "&format=json&geometry=centre"
+        ).format(lat=lat, lon=lon)
+        r = requests.get(url, timeout=5)
+        data = r.json()
+        if data:
+            return data[0].get('nom', '')
+    except Exception:
+        pass
+    return ""
 
 def add_hyperlink(paragraph, url: str, text: str, italic: bool = True):
     part = paragraph.part
@@ -743,8 +770,8 @@ class RemonterLeTempsTab(ttk.Frame):
         self.font_sub   = tkfont.Font(family="Segoe UI", size=10)
         self.font_mono  = tkfont.Font(family="Consolas", size=9)
 
-        self.coord_var   = tk.StringVar(value=self.prefs.get("RLT_COORD", ""))   # ex: 45°09'30" N 5°43'12" E
-        self.commune_var = tk.StringVar(value=self.prefs.get("RLT_COMMUNE", ""))
+        self.coord_var   = tk.StringVar()   # ex: 45°09'30" N 5°43'12" E
+        self.commune_var = tk.StringVar()
         self.wait_var    = tk.DoubleVar(value=float(self.prefs.get("RLT_WAIT", WAIT_TILES_DEFAULT)))
         self.out_dir_var = tk.StringVar(value=self.prefs.get("RLT_OUT", OUTPUT_DIR_RLT))
         self.headless_var= tk.BooleanVar(value=bool(self.prefs.get("RLT_HEADLESS", False)))
@@ -756,7 +783,7 @@ class RemonterLeTempsTab(ttk.Frame):
         header.pack(fill=tk.X, pady=(0, 10))
         ttk.Label(header, text="IGN « Remonter le temps » — Capture + Word", style="Card.TLabel", font=self.font_title)\
             .grid(row=0, column=0, sticky="w")
-        ttk.Label(header, text="Entrer coordonnées DMS et commune. Générer 2×2 + commentaire.", style="Subtle.TLabel", font=self.font_sub)\
+        ttk.Label(header, text="Choisir un point sur la carte pour générer 2×2 + commentaire.", style="Subtle.TLabel", font=self.font_sub)\
             .grid(row=1, column=0, sticky="w", pady=(4,0))
         header.columnconfigure(0, weight=1)
 
@@ -764,13 +791,18 @@ class RemonterLeTempsTab(ttk.Frame):
         card = ttk.Frame(self, style="Card.TFrame", padding=12)
         card.pack(fill=tk.X)
         r = 0
-        ttk.Label(card, text="Coordonnées DMS (lat puis lon)", style="Card.TLabel").grid(row=r, column=0, sticky="w")
-        ttk.Entry(card, textvariable=self.coord_var).grid(row=r, column=1, sticky="ew", padx=8)
-        ToolTip(card, "Exemple : 45°09'30\" N 5°43'12\" E")
+        ttk.Label(card, text="Coordonnées DMS", style="Card.TLabel").grid(row=r, column=0, sticky="w")
+        coord_row = ttk.Frame(card, style="Card.TFrame")
+        coord_row.grid(row=r, column=1, sticky="ew", padx=0)
+        coord_row.columnconfigure(0, weight=1)
+        ttk.Entry(coord_row, textvariable=self.coord_var, state='readonly').grid(row=0, column=0, sticky="ew")
+        btn_map = ttk.Button(coord_row, text="Choisir sur Google Maps", command=self._choose_on_map)
+        btn_map.grid(row=0, column=1, padx=(6,0))
+        ToolTip(btn_map, "Ouvrir Google Maps pour sélectionner un point")
         r += 1
 
-        ttk.Label(card, text="Commune", style="Card.TLabel").grid(row=r, column=0, sticky="w")
-        ttk.Entry(card, textvariable=self.commune_var).grid(row=r, column=1, sticky="ew", padx=8)
+        ttk.Label(card, text="Commune détectée", style="Card.TLabel").grid(row=r, column=0, sticky="w")
+        ttk.Entry(card, textvariable=self.commune_var, state='readonly').grid(row=r, column=1, sticky="ew", padx=8)
         r += 1
 
         ttk.Label(card, text="Dossier de sortie", style="Card.TLabel").grid(row=r, column=0, sticky="w")
@@ -835,11 +867,51 @@ class RemonterLeTempsTab(ttk.Frame):
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
 
+    def _choose_on_map(self):
+        drv_opts = webdriver.ChromeOptions()
+        drv_opts.add_argument("--start-maximized")
+        try:
+            driver = webdriver.Chrome(options=drv_opts)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Chrome introuvable : {e}")
+            return
+        driver.get(GMAPS_DEFAULT_URL)
+        driver.execute_script(
+            """
+            window.clickedURL = null;
+            document.addEventListener('click', () => {
+                setTimeout(() => { window.clickedURL = location.href; }, 500);
+            }, true);
+            """
+        )
+        lat_dd = lon_dd = None
+        try:
+            while True:
+                url = driver.execute_script("return window.clickedURL")
+                if url:
+                    m = re.search(r'/@(-?\d+\.\d+),(-?\d+\.\d+),', url)
+                    if m:
+                        lat_dd = float(m.group(1))
+                        lon_dd = float(m.group(2))
+                        break
+                time.sleep(0.5)
+        finally:
+            driver.quit()
+
+        if lat_dd is None or lon_dd is None:
+            messagebox.showwarning("Google Maps", "Aucune coordonnée sélectionnée.")
+            return
+
+        self.coord_var.set(dd_to_dms(lat_dd, lon_dd))
+        commune = commune_from_coords(lat_dd, lon_dd)
+        self.commune_var.set(commune)
+        self._start_thread()
+
     def _start_thread(self):
         if not self.coord_var.get().strip():
-            messagebox.showerror("Erreur", "Renseigner les coordonnées en DMS."); return
+            messagebox.showerror("Erreur", "Choisir un point sur la carte."); return
         if not self.commune_var.get().strip():
-            messagebox.showerror("Erreur", "Renseigner le nom de la commune."); return
+            messagebox.showerror("Erreur", "Commune introuvable pour ces coordonnées."); return
         self.run_btn.config(state="disabled")
         t = threading.Thread(target=self._run_process)
         t.daemon = True
