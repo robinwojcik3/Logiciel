@@ -16,6 +16,10 @@ Onglet 2 — « Remonter le temps » :
     - Options : dossier de sortie, headless, tempo de chargement.
     - Produit un Word 2×2 avec les vues temporelles, + commentaire.
 
+Nouvel onglet — « Bassin versant » :
+    - Télécharge le shapefile du bassin versant via mghydro.com.
+    - Utilise les mêmes coordonnées DMS que l’onglet précédent.
+
 Pré-requis Python : qgis (environnement QGIS), selenium, pillow, python-docx, openpyxl (non utilisé ici), chromedriver dans PATH.
 """
 
@@ -38,12 +42,16 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import requests
 from io import BytesIO
 import pillow_heif
+import zipfile
+import traceback
 
 # ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver import ActionChains
 
 from docx import Document
 from docx.shared import Cm
@@ -107,6 +115,10 @@ COMMENT_TEMPLATE = (
     "Fais ta réponse en un seul court paragraphe. Intègre les éléments de contexte "
     "historique et territorial propres à la commune de {commune} pour interpréter ces évolutions."
 )
+
+# Onglet 2bis — Bassin versant
+WATERSHED_URL = "https://mghydro.com/watersheds/"
+OUTPUT_DIR_BV = os.path.join(OUT_IMG, "Bassin versant")
 
 # Onglet 3 — Identification Pl@ntNet
 API_KEY = "2b10vfT6MvFC2lcAzqG1ZMKO"  # Votre clé API Pl@ntNet
@@ -1096,6 +1108,217 @@ class RemonterLeTempsTab(ttk.Frame):
         self.after(0, lambda: self.status_label.config(text=txt))
 
 # =========================
+# Onglet 2bis — Bassin versant (UI + logique)
+# =========================
+class BassinVersantTab(ttk.Frame):
+    def __init__(self, parent, style_helper: StyleHelper, coord_var: tk.StringVar):
+        super().__init__(parent, padding=12)
+        self.style_helper = style_helper
+        self.coord_var = coord_var
+
+        self.font_title = tkfont.Font(family="Segoe UI", size=15, weight="bold")
+        self.font_sub   = tkfont.Font(family="Segoe UI", size=10)
+        self.font_mono  = tkfont.Font(family="Consolas", size=9)
+
+        self._build_ui()
+
+    def _build_ui(self):
+        header = ttk.Frame(self, style="Header.TFrame", padding=(14, 12))
+        header.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(header, text="Bassin versant — téléchargement", style="Card.TLabel", font=self.font_title)\
+            .grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text="Utilise les coordonnées DMS de l’onglet précédent pour récupérer le shapefile.",
+                  style="Subtle.TLabel", font=self.font_sub).grid(row=1, column=0, sticky="w", pady=(4,0))
+        header.columnconfigure(0, weight=1)
+
+        act = ttk.Frame(self, style="Card.TFrame", padding=12)
+        act.pack(fill=tk.X)
+        self.run_btn = ttk.Button(act, text="▶ Télécharger le bassin versant", style="Accent.TButton",
+                                  command=self._start_thread)
+        self.run_btn.grid(row=0, column=0, sticky="w")
+        obtn = ttk.Button(act, text="📂 Ouvrir le dossier des résultats", command=self._open_out_dir)
+        obtn.grid(row=0, column=1, padx=(10,0)); ToolTip(obtn, "Ouvrir le dossier cible")
+
+        bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
+        bottom.pack(fill=tk.BOTH, expand=True, pady=(10,0))
+        self.status_label = ttk.Label(bottom, text="Prêt.", style="Status.TLabel")
+        self.status_label.grid(row=0, column=0, sticky="w")
+        bottom.columnconfigure(0, weight=1)
+
+        log_frame = ttk.Frame(bottom, style="Card.TFrame")
+        log_frame.grid(row=1, column=0, sticky="nsew", pady=(8,0))
+        bottom.rowconfigure(1, weight=1)
+
+        self.log_text = tk.Text(log_frame, height=12, wrap=tk.WORD, state='disabled',
+                                bg=self.style_helper.style.lookup("Card.TFrame", "background"),
+                                fg=self.style_helper.style.lookup("TLabel", "foreground"))
+        self.log_text.configure(font=self.font_mono, relief="flat")
+        log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
+        self.log_text['yscrollcommand'] = log_scroll.set
+        log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.stdout_redirect = TextRedirector(self.log_text)
+
+    def _open_out_dir(self):
+        try:
+            os.makedirs(OUTPUT_DIR_BV, exist_ok=True)
+            os.startfile(OUTPUT_DIR_BV)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
+
+    def _start_thread(self):
+        if not self.coord_var.get().strip():
+            messagebox.showerror("Erreur", "Renseigner les coordonnées en DMS dans l’onglet précédent.")
+            return
+        self.run_btn.config(state="disabled")
+        t = threading.Thread(target=self._run_process)
+        t.daemon = True
+        t.start()
+
+    def _run_process(self):
+        download_dir = OUT_IMG
+        target_path = OUTPUT_DIR_BV
+        try:
+            parts = re.split(r"\s{2,}|,|\t", self.coord_var.get().strip())
+            if len(parts) < 2:
+                parts = re.split(r"\s+", self.coord_var.get().strip(), maxsplit=1)
+            if len(parts) < 2:
+                raise ValueError("Coordonnées DMS attendues au format « LAT  LON »")
+            lat_dd = dms_to_dd(parts[0])
+            lon_dd = dms_to_dd(parts[1])
+            user_address = f"{lat_dd:.6f}, {lon_dd:.6f}"
+
+            options = webdriver.ChromeOptions()
+            options.add_argument("--log-level=3")
+            options.add_experimental_option('excludeSwitches', ['enable-logging'])
+            options.add_argument("--disable-extensions")
+            prefs = {
+                "download.default_directory": download_dir,
+                "download.prompt_for_download": False,
+                "profile.default_content_settings.popups": 0,
+                "download.directory_upgrade": True
+            }
+            options.add_experimental_option("prefs", prefs)
+
+            print("Initialisation du navigateur...", file=self.stdout_redirect)
+            driver = webdriver.Chrome(options=options)
+            driver.maximize_window()
+            print("Navigateur initialisé.", file=self.stdout_redirect)
+
+            print(f"Navigation vers {WATERSHED_URL}...", file=self.stdout_redirect)
+            driver.get(WATERSHED_URL)
+
+            wait = WebDriverWait(driver, 2)
+            print("Recherche du bouton 'Options' (id='opts_click')...", file=self.stdout_redirect)
+            opts_button = wait.until(EC.element_to_be_clickable((By.ID, "opts_click")))
+            opts_button.click()
+            time.sleep(1)
+
+            print("Recherche de la case 'Make results downloadable' (id='downloadable')...", file=self.stdout_redirect)
+            downloadable_checkbox = wait.until(EC.element_to_be_clickable((By.ID, "downloadable")))
+            if not downloadable_checkbox.is_selected():
+                downloadable_checkbox.click()
+                print("Case 'Make results downloadable' cochée.", file=self.stdout_redirect)
+            else:
+                print("La case 'Make results downloadable' est déjà cochée.", file=self.stdout_redirect)
+            time.sleep(0.5)
+
+            print("Recherche de l'icône de la loupe...", file=self.stdout_redirect)
+            search_icon_locator = (By.CSS_SELECTOR, ".leaflet-control-search .search-button")
+            search_icon = wait.until(EC.element_to_be_clickable(search_icon_locator))
+            search_icon.click()
+
+            print("Attente de la barre de recherche (ID = 'searchtext84')...", file=self.stdout_redirect)
+            search_input_locator = (By.ID, "searchtext84")
+            search_input = wait.until(EC.visibility_of_element_located(search_input_locator))
+
+            print(f"Saisie des coordonnées : '{user_address}'", file=self.stdout_redirect)
+            search_input.clear()
+            time.sleep(0.3)
+            search_input.send_keys(user_address)
+            time.sleep(1.5)
+            search_input.send_keys(Keys.ARROW_DOWN)
+            time.sleep(0.3)
+            search_input.send_keys(Keys.ENTER)
+            time.sleep(1.5)
+
+            print("Recherche de l'élément de la carte (ID = 'map')...", file=self.stdout_redirect)
+            map_locator = (By.ID, "map")
+            map_element = wait.until(EC.presence_of_element_located(map_locator))
+            ActionChains(driver).move_to_element(map_element).click().perform()
+            time.sleep(0.8)
+
+            print("Attente du popup de délimitation...", file=self.stdout_redirect)
+            popup_locator = (By.CSS_SELECTOR, "div.leaflet-popup")
+            wait.until(EC.visibility_of_element_located(popup_locator))
+
+            print("Recherche du bouton 'Delineate!'...", file=self.stdout_redirect)
+            delineate_button_locator = (By.CSS_SELECTOR, ".leaflet-popup .gobutton")
+            delineate_button = wait.until(EC.element_to_be_clickable(delineate_button_locator))
+            delineate_button.click()
+            time.sleep(1.5)
+
+            print("Accès à la section Downloads...", file=self.stdout_redirect)
+            downloads_button_locator = (By.XPATH, "//span[contains(@class, 'ui-selectmenu-text') and contains(text(), 'Watershed Boundary')]")
+            downloads_button = wait.until(EC.element_to_be_clickable(downloads_button_locator))
+            downloads_button.click()
+            time.sleep(0.8)
+            ActionChains(driver)\
+                .send_keys(Keys.ARROW_DOWN).pause(0.3)\
+                .send_keys(Keys.ARROW_DOWN).pause(0.3)\
+                .send_keys(Keys.ENTER).perform()
+            time.sleep(1.5)
+
+        except Exception:
+            print("\n--- Une erreur est survenue lors de l'exécution Selenium ---", file=self.stdout_redirect)
+            print(traceback.format_exc(), file=self.stdout_redirect)
+        finally:
+            try:
+                driver.quit()
+            except Exception:
+                pass
+
+        try:
+            print("\nAttente de la fin du téléchargement du fichier .zip...", file=self.stdout_redirect)
+            zip_file_path = None
+            wait_time = 30
+            start_time = time.time()
+            while time.time() - start_time < wait_time:
+                zip_candidates = [
+                    f for f in os.listdir(download_dir)
+                    if f.lower().endswith(".zip") and not f.lower().endswith(".crdownload")
+                ]
+                if zip_candidates:
+                    zip_candidates_full = [os.path.join(download_dir, z) for z in zip_candidates]
+                    zip_file_path = max(zip_candidates_full, key=os.path.getmtime)
+                    size1 = os.path.getsize(zip_file_path)
+                    time.sleep(1)
+                    size2 = os.path.getsize(zip_file_path)
+                    if size1 == size2:
+                        print(f"Fichier ZIP détecté : {os.path.basename(zip_file_path)} (taille {size2} octets).", file=self.stdout_redirect)
+                        break
+                time.sleep(1)
+
+            if not zip_file_path:
+                print("Aucun fichier .zip trouvé, délai dépassé.", file=self.stdout_redirect)
+            else:
+                if os.path.exists(target_path):
+                    print(f"Le dossier '{os.path.basename(target_path)}' existe déjà. Il sera remplacé.", file=self.stdout_redirect)
+                    shutil.rmtree(target_path, ignore_errors=True)
+                os.makedirs(target_path, exist_ok=True)
+                print(f"Décompression de {os.path.basename(zip_file_path)} dans '{os.path.basename(target_path)}' ...", file=self.stdout_redirect)
+                with zipfile.ZipFile(zip_file_path, 'r') as zf:
+                    zf.extractall(path=target_path)
+                print("Décompression terminée.", file=self.stdout_redirect)
+                os.remove(zip_file_path)
+                print("Fichier ZIP supprimé.", file=self.stdout_redirect)
+        except Exception:
+            print("\n--- Une erreur est survenue lors de la décompression ---", file=self.stdout_redirect)
+            print(traceback.format_exc(), file=self.stdout_redirect)
+        finally:
+            self.after(0, lambda: self.run_btn.config(state="normal"))
+
+# =========================
 # Onglet 3 — Identification Pl@ntNet (UI + logique)
 # =========================
 class PlantNetTab(ttk.Frame):
@@ -1233,16 +1456,19 @@ class MainApp:
 
         self.tab_export = ExportCartesTab(nb, self.style_helper, self.prefs)
         self.tab_rlt    = RemonterLeTempsTab(nb, self.style_helper, self.prefs)
+        self.tab_bv     = BassinVersantTab(nb, self.style_helper, self.tab_rlt.coord_var)
         self.tab_plant  = PlantNetTab(nb, self.style_helper, self.prefs)
 
         nb.add(self.tab_export, text="Export Cartes")
         nb.add(self.tab_rlt, text="Remonter le temps")
+        nb.add(self.tab_bv, text="Bassin versant")
         nb.add(self.tab_plant, text="Pl@ntNet")
 
         # Raccourcis utiles
         root.bind("<Control-1>", lambda _e: nb.select(0))
         root.bind("<Control-2>", lambda _e: nb.select(1))
         root.bind("<Control-3>", lambda _e: nb.select(2))
+        root.bind("<Control-4>", lambda _e: nb.select(3))
 
         # Sauvegarde prefs à la fermeture
         root.protocol("WM_DELETE_WINDOW", self._on_close)
