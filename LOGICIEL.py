@@ -49,6 +49,12 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 
 from PIL import Image
+import requests
+from io import BytesIO
+import pillow_heif  # Importer pillow-heif pour la prise en charge des fichiers HEIC
+
+# Enregistrer le décodeur HEIF
+pillow_heif.register_heif_opener()
 
 # =========================
 # Paramètres globaux
@@ -972,6 +978,204 @@ class RemonterLeTempsTab(ttk.Frame):
         self.after(0, lambda: self.status_label.config(text=txt))
 
 # =========================
+# Onglet 3 — Identification Plantes (Pl@ntNet)
+# =========================
+
+# --- CONFIGURATION ---
+API_KEY = "2b10vfT6MvFC2lcAzqG1ZMKO"  # Votre clé API Pl@ntNet
+PROJECT = "all"  # Vous pouvez spécifier une flore particulière comme "weurope", "canada", etc.
+API_URL = f"https://my-api.plantnet.org/v2/identify/{PROJECT}?api-key={API_KEY}"
+
+FOLDER = ""  # Sélectionné par l'utilisateur via l'onglet
+# --- FIN CONFIGURATION ---
+
+# Fonction pour réduire la taille et compresser l'image
+def resize_image(image_path, max_size=(800, 800), quality=70):
+    """
+    Redimensionne et compresse une image.
+
+    :param image_path: Chemin de l'image à traiter.
+    :param max_size: Tuple indiquant la taille maximale (largeur, hauteur).
+    :param quality: Qualité de compression (1-100).
+    :return: BytesIO de l'image traitée ou None en cas d'erreur.
+    """
+    try:
+        with Image.open(image_path) as img:
+            img.thumbnail(max_size)
+            buffer = BytesIO()
+            img.save(buffer, format='JPEG', quality=quality)  # Convertir en JPEG pour une meilleure compression
+            buffer.seek(0)
+            return buffer
+    except Exception as e:
+        print(f"Erreur lors du redimensionnement de l'image : {e}")
+        return None
+
+# Fonction pour identifier la plante via l'API Pl@ntNet
+def identify_plant(image_path, organ):
+    """
+    Envoie une image à l'API Pl@ntNet pour identification.
+
+    :param image_path: Chemin de l'image à envoyer.
+    :param organ: Type d'organe de la plante (par exemple, 'flower').
+    :return: Nom scientifique de la plante identifiée ou None.
+    """
+    print(f"Envoi de l'image à l'API : {image_path}")
+    try:
+        resized_image = resize_image(image_path)
+        if not resized_image:
+            print(f"Échec du redimensionnement de l'image : {image_path}")
+            return None
+
+        files = {
+            'images': (os.path.basename(image_path), resized_image, 'image/jpeg')
+        }
+        data = {
+            'organs': organ
+        }
+
+        # Envoyer la requête
+        response = requests.post(API_URL, files=files, data=data)
+
+        print(f"Réponse de l'API : {response.status_code}")
+        if response.status_code == 200:
+            json_result = response.json()
+            try:
+                species = json_result['results'][0]['species']['scientificNameWithoutAuthor']
+                print(f"Plante identifiée : {species}")
+                return species
+            except (KeyError, IndexError):
+                print(f"Aucun résultat trouvé pour l'image : {image_path}")
+                return None
+        else:
+            print(f"Erreur API : {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        print(f"Exception lors de l'identification de la plante : {e}")
+        return None
+
+# Fonction pour copier et renommer le fichier
+def copy_and_rename_file(file_path, new_name, count):
+    """
+    Copie et renomme un fichier dans le dossier de destination.
+
+    :param file_path: Chemin du fichier original.
+    :param new_name: Nom scientifique de la plante.
+    :param count: Compteur pour différencier les fichiers portant le même nom.
+    """
+    ext = os.path.splitext(file_path)[1]
+    if count == 1:
+        # Premier fichier avec ce nom, pas de numéro
+        new_file_name = f"{new_name} @plantnet{ext}"
+    else:
+        # Ajouter un numéro entre parenthèses après '@plantnet'
+        new_file_name = f"{new_name} @plantnet({count}){ext}"
+    new_path = os.path.join(FOLDER, new_file_name)
+    try:
+        shutil.copy(file_path, new_path)
+        print(f"Fichier copié et renommé : {file_path} -> {new_path}")
+    except Exception as e:
+        print(f"Erreur lors de la copie du fichier : {e}")
+
+
+class PlantNetTab(ttk.Frame):
+    def __init__(self, parent, style_helper: StyleHelper, prefs: dict):
+        super().__init__(parent, padding=12)
+        self.style_helper = style_helper
+        self.prefs = prefs
+
+        self.font_title = tkfont.Font(family="Segoe UI", size=15, weight="bold")
+        self.font_sub   = tkfont.Font(family="Segoe UI", size=10)
+        self.font_mono  = tkfont.Font(family="Consolas", size=9)
+
+        self.folder_var = tk.StringVar()
+
+        self._build_ui()
+
+    def _build_ui(self):
+        header = ttk.Frame(self, style="Header.TFrame", padding=(14, 12))
+        header.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(header, text="Pl@ntNet — Identification", style="Card.TLabel", font=self.font_title)\
+            .grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text="Sélectionner un dossier d'images puis lancer l'analyse.", style="Subtle.TLabel", font=self.font_sub)\
+            .grid(row=1, column=0, sticky="w", pady=(4,0))
+        header.columnconfigure(0, weight=1)
+
+        card = ttk.Frame(self, style="Card.TFrame", padding=12)
+        card.pack(fill=tk.X)
+        ttk.Label(card, text="Dossier d'images", style="Card.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Entry(card, textvariable=self.folder_var).grid(row=0, column=1, sticky="ew", padx=(8,0))
+        ttk.Button(card, text="Parcourir…", command=self._select_folder).grid(row=0, column=2, padx=(8,0))
+        card.columnconfigure(1, weight=1)
+
+        act = ttk.Frame(self, style="Card.TFrame", padding=12)
+        act.pack(fill=tk.X, pady=(10,0))
+        ttk.Button(act, text="▶ Lancer l’identification", style="Accent.TButton", command=self._start_thread)\
+            .grid(row=0, column=0, sticky="w")
+
+        bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
+        bottom.pack(fill=tk.BOTH, expand=True, pady=(10,0))
+        log_frame = ttk.Frame(bottom, style="Card.TFrame")
+        log_frame.pack(fill=tk.BOTH, expand=True)
+        self.log_text = tk.Text(log_frame, height=12, wrap=tk.WORD, state='disabled',
+                                bg=self.style_helper.style.lookup("Card.TFrame", "background"),
+                                fg=self.style_helper.style.lookup("TLabel", "foreground"))
+        self.log_text.configure(font=self.font_mono, relief="flat")
+        log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
+        self.log_text['yscrollcommand'] = log_scroll.set
+        log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.stdout_redirect = TextRedirector(self.log_text)
+
+    def _select_folder(self):
+        d = filedialog.askdirectory(title="Choisir le dossier d'images", initialdir=os.path.expanduser("~"))
+        if d:
+            self.folder_var.set(d)
+
+    def _start_thread(self):
+        if not self.folder_var.get():
+            messagebox.showerror("Erreur", "Sélectionnez un dossier d'images.")
+            return
+        global FOLDER
+        FOLDER = self.folder_var.get()
+        t = threading.Thread(target=self._run_logic)
+        t.daemon = True
+        t.start()
+
+    def _run_logic(self):
+        old_stdout = sys.stdout
+        sys.stdout = self.stdout_redirect
+        try:
+            if not API_KEY:
+                print("Veuillez configurer votre clé API avant de lancer le script.")
+            elif not os.path.exists(FOLDER):
+                print(f"Le dossier à traiter n'existe pas : {FOLDER}")
+            else:
+                image_extensions = ['.jpg', '.jpeg', '.png', '.heic', '.heif']
+                image_files = []
+                for root_dir, dirs, files in os.walk(FOLDER):
+                    for f in files:
+                        if os.path.splitext(f)[1].lower() in image_extensions:
+                            if '@plantnet' not in f:
+                                image_files.append(os.path.join(root_dir, f))
+
+                if not image_files:
+                    print("Aucune image à traiter dans le dossier.")
+                else:
+                    plant_name_counts = {}
+                    for image_path in image_files:
+                        organ = 'flower'
+                        plant_name = identify_plant(image_path, organ)
+                        if plant_name:
+                            count = plant_name_counts.get(plant_name, 0) + 1
+                            plant_name_counts[plant_name] = count
+                            copy_and_rename_file(image_path, plant_name, count)
+                        else:
+                            print(f"Aucune identification possible pour l'image : {image_path}")
+        finally:
+            sys.stdout = old_stdout
+
+
+# =========================
 # App principale avec Notebook
 # =========================
 class MainApp:
@@ -999,13 +1203,16 @@ class MainApp:
 
         self.tab_export = ExportCartesTab(nb, self.style_helper, self.prefs)
         self.tab_rlt    = RemonterLeTempsTab(nb, self.style_helper, self.prefs)
+        self.tab_plnt   = PlantNetTab(nb, self.style_helper, self.prefs)
 
         nb.add(self.tab_export, text="Export Cartes")
         nb.add(self.tab_rlt, text="Remonter le temps")
+        nb.add(self.tab_plnt, text="Pl@ntNet")
 
         # Raccourcis utiles
         root.bind("<Control-1>", lambda _e: nb.select(0))
         root.bind("<Control-2>", lambda _e: nb.select(1))
+        root.bind("<Control-3>", lambda _e: nb.select(2))
 
         # Sauvegarde prefs à la fermeture
         root.protocol("WM_DELETE_WINDOW", self._on_close)
