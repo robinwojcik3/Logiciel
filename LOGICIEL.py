@@ -305,12 +305,17 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
         else ("minimal" if os.path.isfile(os.path.join(platform_dir, "qminimal.dll")) else "offscreen")
     os.environ["QT_QPA_PLATFORM"] = qpa
 
-    os.environ["PATH"] = os.pathsep.join([
+    bin_paths = [
         os.path.join(qt_base, "bin"),
         os.path.join(cfg["QGIS_APP"], "bin"),
         os.path.join(cfg["QGIS_ROOT"], "bin"),
-        os.environ.get("PATH", ""),
-    ])
+    ]
+    os.environ["PATH"] = os.pathsep.join(bin_paths + [os.environ.get("PATH", "")])
+
+    if hasattr(os, "add_dll_directory"):
+        for p in bin_paths:
+            if os.path.isdir(p):
+                os.add_dll_directory(p)
 
     sys.path.insert(0, os.path.join(cfg["QGIS_APP"], "python"))
     sys.path.insert(0, os.path.join(cfg["QGIS_ROOT"], "apps", cfg["PY_VER"], "Lib", "site-packages"))
