@@ -40,6 +40,7 @@ from io import BytesIO
 import pillow_heif
 import zipfile
 import traceback
+from id_contexte_eco import run_id_contexte_eco, IDCE_OUTPUT_DIR
 
 # ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
 from selenium import webdriver
@@ -1336,6 +1337,103 @@ class PlantNetTab(ttk.Frame):
             sys.stdout = old_stdout
             self.after(0, lambda: self.run_btn.config(state="normal"))
 
+
+class IDContexteEcoTab(ttk.Frame):
+    def __init__(self, parent, style_helper: StyleHelper, prefs: dict):
+        super().__init__(parent, padding=12)
+        self.style_helper = style_helper
+        self.prefs = prefs
+
+        self.font_title = tkfont.Font(family="Segoe UI", size=15, weight="bold")
+        self.font_sub   = tkfont.Font(family="Segoe UI", size=10)
+        self.font_mono  = tkfont.Font(family="Consolas", size=9)
+
+        self.ze_shp_var = tk.StringVar(value=self.prefs.get("ID_ZE_SHP", ""))
+        self.ae_shp_var = tk.StringVar(value=self.prefs.get("ID_AE_SHP", ""))
+
+        self._build_ui()
+
+    def _build_ui(self):
+        header = ttk.Frame(self, style="Header.TFrame", padding=(14, 12))
+        header.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(header, text="Identification des zonages", style="Card.TLabel", font=self.font_title)\
+            .grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text="Sélection des shapefiles puis export Excel.", style="Subtle.TLabel", font=self.font_sub)\
+            .grid(row=1, column=0, sticky="w", pady=(4,0))
+        header.columnconfigure(0, weight=1)
+
+        card = ttk.Frame(self, style="Card.TFrame", padding=12)
+        card.pack(fill=tk.X)
+        self._file_row(card, 0, "📁 Zone d'étude…", self.ze_shp_var)
+        self._file_row(card, 1, "📁 Aire d'étude élargie…", self.ae_shp_var)
+        card.columnconfigure(1, weight=1)
+
+        act = ttk.Frame(self, style="Card.TFrame", padding=12)
+        act.pack(fill=tk.X, pady=(10,0))
+        self.run_btn = ttk.Button(act, text="▶ Lancer l'analyse", style="Accent.TButton", command=self._start_thread)
+        self.run_btn.grid(row=0, column=0, sticky="w")
+        obtn = ttk.Button(act, text="📂 Ouvrir le dossier de sortie", command=self._open_out_dir)
+        obtn.grid(row=0, column=1, padx=(10,0)); ToolTip(obtn, IDCE_OUTPUT_DIR)
+
+        bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
+        bottom.pack(fill=tk.BOTH, expand=True, pady=(10,0))
+        self.log_text = tk.Text(bottom, height=12, wrap=tk.WORD, state='disabled',
+                                bg=self.style_helper.style.lookup("Card.TFrame", "background"),
+                                fg=self.style_helper.style.lookup("TLabel", "foreground"))
+        self.log_text.configure(font=self.font_mono, relief="flat")
+        log_scroll = ttk.Scrollbar(bottom, orient="vertical", command=self.log_text.yview)
+        self.log_text['yscrollcommand'] = log_scroll.set
+        log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.stdout_redirect = TextRedirector(self.log_text)
+
+    def _file_row(self, parent, row: int, label: str, var: tk.StringVar):
+        btn = ttk.Button(parent, text=label, command=lambda: self._select_shapefile(var))
+        btn.grid(row=row, column=0, sticky="w", pady=(0 if row else 4, 4))
+        ent = ttk.Entry(parent, textvariable=var, width=10)
+        ent.grid(row=row, column=1, sticky="ew", padx=8)
+        ent.configure(state="readonly")
+        clear_btn = ttk.Button(parent, text="✖", width=3, command=lambda: var.set(""))
+        clear_btn.grid(row=row, column=2, sticky="e")
+        ToolTip(clear_btn, "Effacer")
+
+    def _select_shapefile(self, var: tk.StringVar):
+        base = var.get() or os.path.expanduser("~")
+        path = filedialog.askopenfilename(title="Choisir un shapefile", initialdir=base if os.path.isdir(base) else os.path.expanduser("~"), filetypes=[("Shapefile ESRI", "*.shp")])
+        if path:
+            var.set(path)
+
+    def _open_out_dir(self):
+        try:
+            os.makedirs(IDCE_OUTPUT_DIR, exist_ok=True)
+            os.startfile(IDCE_OUTPUT_DIR)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
+
+    def _start_thread(self):
+        self.run_btn.config(state="disabled")
+        t = threading.Thread(target=self._run_process)
+        t.daemon = True
+        t.start()
+
+    def _run_process(self):
+        ze = self.ze_shp_var.get().strip()
+        ae = self.ae_shp_var.get().strip()
+        if not ze or not ae:
+            print("Veuillez sélectionner les deux shapefiles.", file=self.stdout_redirect)
+            self.after(0, lambda: self.run_btn.config(state="normal"))
+            return
+        self.prefs["ID_ZE_SHP"] = ze
+        self.prefs["ID_AE_SHP"] = ae
+        save_prefs(self.prefs)
+        old_stdout = sys.stdout
+        sys.stdout = self.stdout_redirect
+        try:
+            run_id_contexte_eco(ae, ze, log_fn=lambda m: print(m))
+        finally:
+            sys.stdout = old_stdout
+            self.after(0, lambda: self.run_btn.config(state="normal"))
+
 # =========================
 # App principale avec Notebook
 # =========================
@@ -1365,15 +1463,18 @@ class MainApp:
         self.tab_export = ExportCartesTab(nb, self.style_helper, self.prefs)
         self.tab_rlt    = RemonterLeTempsTab(nb, self.style_helper, self.prefs)
         self.tab_plant  = PlantNetTab(nb, self.style_helper, self.prefs)
+        self.tab_idce   = IDContexteEcoTab(nb, self.style_helper, self.prefs)
 
         nb.add(self.tab_export, text="Export Cartes")
         nb.add(self.tab_rlt, text="Remonter le temps")
         nb.add(self.tab_plant, text="Pl@ntNet")
+        nb.add(self.tab_idce, text="ID contexte éco")
 
         # Raccourcis utiles
         root.bind("<Control-1>", lambda _e: nb.select(0))
         root.bind("<Control-2>", lambda _e: nb.select(1))
         root.bind("<Control-3>", lambda _e: nb.select(2))
+        root.bind("<Control-4>", lambda _e: nb.select(3))
 
         # Sauvegarde prefs à la fermeture
         root.protocol("WM_DELETE_WINDOW", self._on_close)
