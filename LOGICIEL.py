@@ -1351,6 +1351,7 @@ class IDContexteEcoTab(ttk.Frame):
 
         self.ae_var = tk.StringVar()
         self.ze_var = tk.StringVar()
+        self.buffer_var = tk.DoubleVar(value=float(self.prefs.get("ID_TAMPON_KM", 5.0)))
 
         self._build_ui()
 
@@ -1372,8 +1373,12 @@ class IDContexteEcoTab(ttk.Frame):
 
         act = ttk.Frame(self, style="Card.TFrame", padding=12)
         act.pack(fill=tk.X, pady=(10,0))
+        ttk.Label(act, text="Tampon (km)", style="Card.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Spinbox(act, from_=0.0, to=50.0, increment=0.5, textvariable=self.buffer_var,
+                    width=6, justify="right").grid(row=0, column=1, sticky="w", padx=(6,0))
         self.run_btn = ttk.Button(act, text="▶ Lancer l'analyse", style="Accent.TButton", command=self._start_thread)
-        self.run_btn.grid(row=0, column=0, sticky="w")
+        self.run_btn.grid(row=0, column=2, sticky="w", padx=(12,0))
+        act.columnconfigure(1, weight=1)
 
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
         bottom.pack(fill=tk.BOTH, expand=True, pady=(10,0))
@@ -1427,11 +1432,19 @@ class IDContexteEcoTab(ttk.Frame):
             self.after(0, lambda: self.run_btn.config(state="normal"))
             return
 
+        # Sauvegarde des préférences
+        self.prefs.update({
+            "AE_SHP": ae,
+            "ZE_SHP": ze,
+            "ID_TAMPON_KM": float(self.buffer_var.get()),
+        })
+        save_prefs(self.prefs)
+
         old_stdout = sys.stdout
         sys.stdout = self.stdout_redirect
         try:
             from id_contexte_eco import run_analysis as run_id_context
-            run_id_context(ae, ze)
+            run_id_context(ae, ze, buffer_km=float(self.buffer_var.get()))
             print("Analyse terminée.")
         except Exception as e:
             print(f"Erreur: {e}")
