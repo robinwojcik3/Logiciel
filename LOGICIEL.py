@@ -35,6 +35,7 @@ from tkinter import ttk, filedialog, messagebox
 from tkinter import font as tkfont
 from typing import List, Optional, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing as mp
 import requests
 from io import BytesIO
 import pillow_heif
@@ -818,7 +819,14 @@ class ExportCartesTab(ttk.Frame):
                 self.progress["value"] = min(self.progress_done, self.total_expected)
                 self.status_label.config(text=f"Progression : {self.progress_done}/{self.total_expected}")
 
-            with ProcessPoolExecutor(max_workers=int(self.workers_var.get())) as ex:
+            qgis_py = os.path.join(QGIS_ROOT, "apps", PY_VER, "python.exe")
+            mp_ctx = mp.get_context("spawn")
+            try:
+                mp_ctx.set_executable(qgis_py)
+            except Exception:
+                pass
+
+            with ProcessPoolExecutor(max_workers=int(self.workers_var.get()), mp_context=mp_ctx) as ex:
                 futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
                 for fut in as_completed(futures):
                     try:
