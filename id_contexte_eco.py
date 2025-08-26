@@ -33,12 +33,13 @@ def log_with_time(message):
     print(f"[{now}] {message}")
 
 
-def run_analysis(couche_reference1: str, couche_reference2: str):
+def run_analysis(couche_reference1: str, couche_reference2: str, buffer_km: float = 5.0):
     """
     Lance l'analyse d'identification des zonages à partir des shapefiles
     fournis par l'utilisateur.
     :param couche_reference1: chemin vers la couche "Aire d'étude élargie"
     :param couche_reference2: chemin vers la couche "Zone d'étude"
+    :param buffer_km: largeur du tampon autour de la zone d'étude en kilomètres
     """
     log_with_time("Démarrage du script d'identification des zonages...")
 
@@ -86,6 +87,16 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
         except Exception as e:
             log_with_time(f"Erreur lors de la reprojection de la deuxième couche de référence : {e}")
             return
+
+    # Appliquer le tampon autour de la zone d'étude
+    try:
+        buffer_m = buffer_km * 1000.0
+        buffer_geom = reference2_gdf.buffer(buffer_m)
+        reference_gdf = gpd.GeoDataFrame(geometry=buffer_geom, crs=crs_projected)
+        log_with_time(f"Tampon de {buffer_km} km appliqué à la zone d'étude")
+    except Exception as e:
+        log_with_time(f"Erreur lors de la création du tampon : {e}")
+        return
 
     # Calculer le centroïde global de la couche de référence 2 en utilisant union_all()
     try:
@@ -739,7 +750,8 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        print("Usage: id_contexte_eco.py <couche_reference1> <couche_reference2>")
+    if len(sys.argv) < 3:
+        print("Usage: id_contexte_eco.py <couche_reference1> <couche_reference2> [tampon_km]")
         sys.exit(1)
-    run_analysis(sys.argv[1], sys.argv[2])
+    tampon = float(sys.argv[3]) if len(sys.argv) > 3 else 5.0
+    run_analysis(sys.argv[1], sys.argv[2], buffer_km=tampon)
