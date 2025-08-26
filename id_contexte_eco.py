@@ -33,12 +33,15 @@ def log_with_time(message):
     print(f"[{now}] {message}")
 
 
-def run_analysis(couche_reference1: str, couche_reference2: str):
+def run_analysis(couche_reference1: str, couche_reference2: str, buffer_km: float = 5.0):
     """
     Lance l'analyse d'identification des zonages à partir des shapefiles
     fournis par l'utilisateur.
+
     :param couche_reference1: chemin vers la couche "Aire d'étude élargie"
     :param couche_reference2: chemin vers la couche "Zone d'étude"
+    :param buffer_km: distance du tampon appliqué autour de la zone d'étude
+        en kilomètres (défaut : 5 km)
     """
     log_with_time("Démarrage du script d'identification des zonages...")
 
@@ -87,12 +90,16 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
             log_with_time(f"Erreur lors de la reprojection de la deuxième couche de référence : {e}")
             return
 
-    # Calculer le centroïde global de la couche de référence 2 en utilisant union_all()
+    buffer_dist = buffer_km * 1000.0
+
+    # Calculer le centroïde et le tampon de la zone d'étude
     try:
-        reference2_centroid = reference2_gdf.geometry.union_all().centroid
-        log_with_time("Calcul du centroïde de référence effectué")
+        reference2_union = reference2_gdf.geometry.union_all()
+        reference2_centroid = reference2_union.centroid
+        reference2_buffered = reference2_union.buffer(buffer_dist)
+        log_with_time("Calcul du centroïde et du tampon effectués")
     except Exception as e:
-        log_with_time(f"Erreur lors du calcul du centroïde de la deuxième couche de référence : {e}")
+        log_with_time(f"Erreur lors du calcul du centroïde ou du tampon : {e}")
         return
 
     # Fonction pour calculer l'azimut entre deux points
@@ -361,7 +368,7 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
             return
 
         try:
-            distances = overlapping_gdf.geometry.apply(lambda geom: reference2_gdf.distance(geom).min())
+            distances = overlapping_gdf.geometry.apply(lambda geom: geom.distance(reference2_buffered))
             distances_km = distances / 1000
             distances_km = distances_km.round(1)
             overlapping_gdf['Distance (km)'] = distances_km
@@ -575,7 +582,7 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
                 continue
 
             try:
-                distances = overlapping_gdf.geometry.apply(lambda geom: reference2_gdf.distance(geom).min())
+                distances = overlapping_gdf.geometry.apply(lambda geom: geom.distance(reference2_buffered))
                 distances_km = distances / 1000
                 distances_km = distances_km.round(1)
                 overlapping_gdf['Distance (km)'] = distances_km
