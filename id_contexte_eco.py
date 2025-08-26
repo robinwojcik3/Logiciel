@@ -33,34 +33,34 @@ def log_with_time(message):
     print(f"[{now}] {message}")
 
 
-def run_analysis(couche_reference1: str, couche_reference2: str):
-    """
-    Lance l'analyse d'identification des zonages à partir des shapefiles
-    fournis par l'utilisateur.
-    :param couche_reference1: chemin vers la couche "Aire d'étude élargie"
-    :param couche_reference2: chemin vers la couche "Zone d'étude"
+def run_analysis(ae_shp: str, ze_shp: str, buffer_km: float = 5.0):
+    """Lance l'analyse d'identification des zonages.
+
+    :param ae_shp: chemin vers la couche "Aire d'étude élargie"
+    :param ze_shp: chemin vers la couche "Zone d'étude"
+    :param buffer_km: taille du tampon appliqué autour de la ZE (en km)
     """
     log_with_time("Démarrage du script d'identification des zonages...")
 
     # Vérifier si les fichiers de référence existent
-    if not os.path.exists(couche_reference1):
-        log_with_time(f"Le fichier de la première couche de référence n'a pas été trouvé : {couche_reference1}")
+    if not os.path.exists(ae_shp):
+        log_with_time(f"Le fichier de la première couche de référence n'a pas été trouvé : {ae_shp}")
         return
 
-    if not os.path.exists(couche_reference2):
-        log_with_time(f"Le fichier de la deuxième couche de référence n'a pas été trouvé : {couche_reference2}")
+    if not os.path.exists(ze_shp):
+        log_with_time(f"Le fichier de la deuxième couche de référence n'a pas été trouvé : {ze_shp}")
         return
 
     # Chargement des couches de référence
     try:
-        reference_gdf = gpd.read_file(couche_reference1)
+        ae_gdf = gpd.read_file(ae_shp)
         log_with_time("Première couche de référence chargée avec succès")
     except Exception as e:
         log_with_time(f"Erreur lors du chargement de la première couche de référence : {e}")
         return
 
     try:
-        reference2_gdf = gpd.read_file(couche_reference2)
+        ze_gdf = gpd.read_file(ze_shp)
         log_with_time("Deuxième couche de référence chargée avec succès")
     except Exception as e:
         log_with_time(f"Erreur lors du chargement de la deuxième couche de référence : {e}")
@@ -71,25 +71,35 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
     crs_projected = "EPSG:2154"
 
     # Reprojeter les couches si nécessaire
-    if reference_gdf.crs != crs_projected:
+    if ae_gdf.crs != crs_projected:
         try:
-            reference_gdf = reference_gdf.to_crs(crs_projected)
+            ae_gdf = ae_gdf.to_crs(crs_projected)
             log_with_time("Reprojection de la première couche de référence effectuée")
         except Exception as e:
             log_with_time(f"Erreur lors de la reprojection de la première couche de référence : {e}")
             return
 
-    if reference2_gdf.crs != crs_projected:
+    if ze_gdf.crs != crs_projected:
         try:
-            reference2_gdf = reference2_gdf.to_crs(crs_projected)
+            ze_gdf = ze_gdf.to_crs(crs_projected)
             log_with_time("Reprojection de la deuxième couche de référence effectuée")
         except Exception as e:
             log_with_time(f"Erreur lors de la reprojection de la deuxième couche de référence : {e}")
             return
 
-    # Calculer le centroïde global de la couche de référence 2 en utilisant union_all()
+    # Appliquer un tampon autour de la zone d'étude si nécessaire
+    buffer_dist = buffer_km * 1000.0
+    if buffer_dist > 0:
+        try:
+            ze_gdf["geometry"] = ze_gdf.buffer(buffer_dist)
+            log_with_time(f"Tampon de {buffer_km} km appliqué à la zone d'étude")
+        except Exception as e:
+            log_with_time(f"Erreur lors de l'application du tampon : {e}")
+            return
+
+    # Calculer le centroïde global de la zone d'étude en utilisant union_all()
     try:
-        reference2_centroid = reference2_gdf.geometry.union_all().centroid
+        ze_centroid = ze_gdf.geometry.union_all().centroid
         log_with_time("Calcul du centroïde de référence effectué")
     except Exception as e:
         log_with_time(f"Erreur lors du calcul du centroïde de la deuxième couche de référence : {e}")
@@ -350,7 +360,7 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
                 return
 
         try:
-            overlapping_gdf = gpd.sjoin(cible_gdf, reference_gdf, how='inner', predicate='intersects')
+            overlapping_gdf = gpd.sjoin(cible_gdf, ae_gdf, how='inner', predicate='intersects')
             log_with_time(f"Jointure spatiale pour '{nom_couche}' effectuée")
         except Exception as e:
             log_with_time(f"Erreur lors de la jointure spatiale pour '{nom_couche}': {e}")
@@ -361,7 +371,7 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
             return
 
         try:
-            distances = overlapping_gdf.geometry.apply(lambda geom: reference2_gdf.distance(geom).min())
+            distances = overlapping_gdf.geometry.apply(lambda geom: ze_gdf.distance(geom).min())
             distances_km = distances / 1000
             distances_km = distances_km.round(1)
             overlapping_gdf['Distance (km)'] = distances_km
@@ -372,7 +382,7 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
 
         try:
             overlapping_gdf['centroid'] = overlapping_gdf.geometry.centroid
-            overlapping_gdf['Azimuth (°)'] = overlapping_gdf['centroid'].apply(lambda geom: calculate_azimuth(reference2_centroid, geom))
+            overlapping_gdf['Azimuth (°)'] = overlapping_gdf['centroid'].apply(lambda geom: calculate_azimuth(ze_centroid, geom))
             overlapping_gdf['Azimuth'] = overlapping_gdf['Azimuth (°)'].apply(map_azimuth_to_direction)
             log_with_time(f"Calcul de l'azimut pour '{nom_couche}' effectué")
         except Exception as e:
@@ -520,7 +530,7 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
                         continue
 
                 try:
-                    overlapping_gdf = gpd.sjoin(cible_gdf, reference_gdf, how='inner', predicate='intersects')
+                    overlapping_gdf = gpd.sjoin(cible_gdf, ae_gdf, how='inner', predicate='intersects')
                 except Exception as e:
                     log_with_time(f"Erreur lors de la jointure spatiale pour '{nom_couche}': {e}")
                     continue
@@ -566,7 +576,7 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
                     continue
 
             try:
-                overlapping_gdf = gpd.sjoin(cible_gdf, reference_gdf, how='inner', predicate='intersects')
+                overlapping_gdf = gpd.sjoin(cible_gdf, ae_gdf, how='inner', predicate='intersects')
             except Exception as e:
                 log_with_time(f"Erreur lors de la jointure spatiale pour '{nom_couche}': {e}")
                 continue
@@ -575,7 +585,7 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
                 continue
 
             try:
-                distances = overlapping_gdf.geometry.apply(lambda geom: reference2_gdf.distance(geom).min())
+                distances = overlapping_gdf.geometry.apply(lambda geom: ze_gdf.distance(geom).min())
                 distances_km = distances / 1000
                 distances_km = distances_km.round(1)
                 overlapping_gdf['Distance (km)'] = distances_km
@@ -585,7 +595,7 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
 
             try:
                 overlapping_gdf['centroid'] = overlapping_gdf.geometry.centroid
-                overlapping_gdf['Azimuth (°)'] = overlapping_gdf['centroid'].apply(lambda geom: calculate_azimuth(reference2_centroid, geom))
+                overlapping_gdf['Azimuth (°)'] = overlapping_gdf['centroid'].apply(lambda geom: calculate_azimuth(ze_centroid, geom))
                 overlapping_gdf['Azimuth'] = overlapping_gdf['Azimuth (°)'].apply(map_azimuth_to_direction)
             except Exception as e:
                 log_with_time(f"Erreur lors du calcul de l'azimut pour '{nom_couche}': {e}")
@@ -739,7 +749,8 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        print("Usage: id_contexte_eco.py <couche_reference1> <couche_reference2>")
+    if len(sys.argv) not in (3, 4):
+        print("Usage: id_contexte_eco.py <ae_shp> <ze_shp> [buffer_km]")
         sys.exit(1)
-    run_analysis(sys.argv[1], sys.argv[2])
+    buf = float(sys.argv[3]) if len(sys.argv) == 4 else 5.0
+    run_analysis(sys.argv[1], sys.argv[2], buffer_km=buf)
