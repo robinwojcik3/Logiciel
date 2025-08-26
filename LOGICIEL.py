@@ -35,6 +35,7 @@ from tkinter import ttk, filedialog, messagebox
 from tkinter import font as tkfont
 from typing import List, Optional, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing as mp
 import requests
 from io import BytesIO
 import pillow_heif
@@ -311,6 +312,18 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
         os.path.join(cfg["QGIS_ROOT"], "bin"),
         os.environ.get("PATH", ""),
     ])
+
+    # S'assure que les répertoires de DLL sont visibles du loader Windows
+    if hasattr(os, "add_dll_directory"):
+        for d in (
+            os.path.join(qt_base, "bin"),
+            os.path.join(cfg["QGIS_APP"], "bin"),
+            os.path.join(cfg["QGIS_ROOT"], "bin"),
+        ):
+            try:
+                os.add_dll_directory(d)
+            except Exception:
+                pass
 
     sys.path.insert(0, os.path.join(cfg["QGIS_APP"], "python"))
     sys.path.insert(0, os.path.join(cfg["QGIS_ROOT"], "apps", cfg["PY_VER"], "Lib", "site-packages"))
@@ -812,22 +825,41 @@ class ExportCartesTab(ttk.Frame):
                 "CADRAGE_MODE": self.cadrage_var.get(), "OVERWRITE": bool(self.overwrite_var.get()),
             }
 
+            # Force l'exécutable Python des workers sur celui de QGIS
+            qgis_py = os.path.join(QGIS_ROOT, "apps", PY_VER, "python.exe")
+            try:
+                if os.path.isfile(qgis_py):
+                    mp.set_executable(qgis_py)
+            except Exception:
+                pass
+            ctx = mp.get_context("spawn")
+
             ok_total = 0; ko_total = 0
             def ui_update_progress(done_inc):
                 self.progress_done += done_inc
                 self.progress["value"] = min(self.progress_done, self.total_expected)
                 self.status_label.config(text=f"Progression : {self.progress_done}/{self.total_expected}")
 
-            with ProcessPoolExecutor(max_workers=int(self.workers_var.get())) as ex:
-                futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
-                for fut in as_completed(futures):
-                    try:
-                        ok, ko = fut.result()
-                        ok_total += ok; ko_total += ko
-                        self.after(0, ui_update_progress, ok + ko)
-                        log_with_time(f"Lot terminé: {ok} OK, {ko} KO")
-                    except Exception as e:
-                        log_with_time(f"Erreur worker: {e}")
+            try:
+                with ProcessPoolExecutor(max_workers=int(self.workers_var.get()), mp_context=ctx) as ex:
+                    futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
+                    for fut in as_completed(futures):
+                        try:
+                            ok, ko = fut.result()
+                            ok_total += ok; ko_total += ko
+                            self.after(0, ui_update_progress, ok + ko)
+                            log_with_time(f"Lot terminé: {ok} OK, {ko} KO")
+                        except Exception as e:
+                            log_with_time(f"Erreur worker: {e}")
+            except Exception as e:
+                log_with_time(f"Pool QGIS indisponible ({e}) — bascule mono-process.")
+
+            # Fallback si aucun lot n'a été produit
+            if ok_total == 0 and ko_total == 0:
+                log_with_time("Fallback mono-process sans pool…")
+                ok, ko = worker_run((projets, cfg))
+                ok_total += ok; ko_total += ko
+                self.after(0, ui_update_progress, ok + ko)
 
             elapsed = datetime.datetime.now() - start
             log_with_time(f"FIN — OK={ok_total} | KO={ko_total} | Attendu={self.total_expected} | Durée={elapsed}")
