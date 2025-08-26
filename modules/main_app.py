@@ -44,6 +44,7 @@ from io import BytesIO
 import pillow_heif
 import zipfile
 import traceback
+from . import __version__
 
 # ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
 from selenium import webdriver
@@ -1758,6 +1759,13 @@ class MainApp:
         self.root.title("Contexte éco — Outils")
         self.root.geometry("1060x760"); self.root.minsize(900, 640)
 
+        # Barre de menu simple avec une entrée « Aide »
+        menu = tk.Menu(root)
+        root.config(menu=menu)
+        help_menu = tk.Menu(menu, tearoff=False)
+        help_menu.add_command(label="À propos", command=self._show_about)
+        menu.add_cascade(label="Aide", menu=help_menu)
+
         self.prefs = load_prefs()
         self.style_helper = StyleHelper(root, self.prefs)
         self.theme_var = tk.StringVar(value=self.prefs.get("theme", "light"))
@@ -1799,6 +1807,13 @@ class MainApp:
         self.prefs["theme"] = new_theme
         save_prefs(self.prefs)
         self.style_helper.apply(new_theme)
+
+    def _show_about(self):
+        """Affiche une boîte de dialogue avec des informations sur l'application."""
+        messagebox.showinfo(
+            "À propos",
+            f"Contexte éco — Suite d’outils\nVersion {__version__}",
+        )
 
     def _on_close(self):
         try:
