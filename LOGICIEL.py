@@ -1236,6 +1236,10 @@ class PlantNetTab(ttk.Frame):
 
         self.folder_var = tk.StringVar(value=self.prefs.get("PLANTNET_FOLDER", ""))
 
+        # Gestion du thread courant et de son annulation
+        self._run_thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
+
         self._build_ui()
 
     def _build_ui(self):
@@ -1276,6 +1280,11 @@ class PlantNetTab(ttk.Frame):
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.stdout_redirect = TextRedirector(self.log_text)
 
+    def _clear_log(self):
+        self.log_text.config(state='normal')
+        self.log_text.delete('1.0', tk.END)
+        self.log_text.config(state='disabled')
+
     def _pick_folder(self):
         base = self.folder_var.get() or os.path.expanduser("~")
         d = filedialog.askdirectory(title="Choisir le dossier d'images", initialdir=base if os.path.isdir(base) else os.path.expanduser("~"))
@@ -1290,20 +1299,31 @@ class PlantNetTab(ttk.Frame):
             messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
 
     def _start_thread(self):
-        self.run_btn.config(state="disabled")
-        t = threading.Thread(target=self._run_process)
-        t.daemon = True
-        t.start()
+        """Lance ou annule l'analyse selon l'état actuel."""
+        if self._run_thread and self._run_thread.is_alive():
+            # Annulation demandée
+            self._stop_event.set()
+            self._clear_log()
+            self.run_btn.config(text="▶ Lancer l'analyse")
+            return
+
+        self._clear_log()
+        self._stop_event.clear()
+        self.run_btn.config(text="■ Annuler l'analyse")
+        self._run_thread = threading.Thread(target=self._run_process, daemon=True)
+        self._run_thread.start()
 
     def _run_process(self):
         folder = self.folder_var.get().strip()
+        if self._stop_event.is_set():
+            return
         if not folder:
             print("Veuillez sélectionner un dossier.", file=self.stdout_redirect)
-            self.after(0, lambda: self.run_btn.config(state="normal"))
+            self.after(0, lambda: self.run_btn.config(text="▶ Lancer l'analyse"))
             return
         if not os.path.exists(folder):
             print(f"Le dossier à traiter n'existe pas : {folder}", file=self.stdout_redirect)
-            self.after(0, lambda: self.run_btn.config(state="normal"))
+            self.after(0, lambda: self.run_btn.config(text="▶ Lancer l'analyse"))
             return
 
         self.prefs["PLANTNET_FOLDER"] = folder
@@ -1319,7 +1339,7 @@ class PlantNetTab(ttk.Frame):
 
         if not image_files:
             print("Aucune image à traiter dans le dossier.", file=self.stdout_redirect)
-            self.after(0, lambda: self.run_btn.config(state="normal"))
+            self.after(0, lambda: self.run_btn.config(text="▶ Lancer l'analyse"))
             return
 
         plant_name_counts = {}
@@ -1327,6 +1347,9 @@ class PlantNetTab(ttk.Frame):
         sys.stdout = self.stdout_redirect
         try:
             for image_path in image_files:
+                if self._stop_event.is_set():
+                    print("Analyse interrompue.", file=self.stdout_redirect)
+                    break
                 organ = 'flower'
                 plant_name = identify_plant(image_path, organ)
                 if plant_name:
@@ -1335,10 +1358,11 @@ class PlantNetTab(ttk.Frame):
                     copy_and_rename_file(image_path, folder, plant_name, count)
                 else:
                     print(f"Aucune identification possible pour l'image : {image_path}")
-            print("Analyse terminée.")
+            if not self._stop_event.is_set():
+                print("Analyse terminée.")
         finally:
             sys.stdout = old_stdout
-            self.after(0, lambda: self.run_btn.config(state="normal"))
+            self.after(0, lambda: self.run_btn.config(text="▶ Lancer l'analyse"))
 
 # =========================
 # Onglet 4 — ID contexte éco
