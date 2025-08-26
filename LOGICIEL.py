@@ -39,9 +39,6 @@ from tkinter import ttk, filedialog, messagebox
 from tkinter import font as tkfont
 from typing import List, Optional, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
-import requests
-from io import BytesIO
-import pillow_heif
 import zipfile
 import traceback
 
@@ -61,9 +58,17 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 
 from PIL import Image
-
-# Enregistrer le décodeur HEIF
-pillow_heif.register_heif_opener()
+from modules.utils import (
+    log_with_time,
+    normalize_name,
+    to_long_unc,
+    chunk_even,
+    load_prefs,
+    save_prefs,
+    TextRedirector,
+    ToolTip,
+)
+from modules.plantnet import identify_plant, copy_and_rename_file
 
 # =========================
 # Paramètres globaux
@@ -90,9 +95,6 @@ QGIS_ROOT = r"C:\Program Files\QGIS 3.40.3"
 QGIS_APP  = os.path.join(QGIS_ROOT, "apps", "qgis")
 PY_VER    = "Python312"
 
-# Préférences
-PREFS_PATH = os.path.join(os.path.expanduser("~"), "ExportCartesContexteEco.config.json")
-
 # Onglet 2 — Remonter le temps & Bassin versant (constants issus du script source)
 LAYERS = [
     ("Aujourd’hui",   "10"),
@@ -115,169 +117,6 @@ COMMENT_TEMPLATE = (
     "Fais ta réponse en un seul court paragraphe. Intègre les éléments de contexte "
     "historique et territorial propres à la commune de {commune} pour interpréter ces évolutions."
 )
-
-# Onglet 3 — Identification Pl@ntNet
-API_KEY = "2b10vfT6MvFC2lcAzqG1ZMKO"  # Votre clé API Pl@ntNet
-PROJECT = "all"
-API_URL = f"https://my-api.plantnet.org/v2/identify/{PROJECT}?api-key={API_KEY}"
-
-# =========================
-# Utils communs
-# =========================
-def log_with_time(msg: str) -> None:
-    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}")
-
-def normalize_name(s: str) -> str:
-    s2 = s.replace("\u00A0", " ").replace("\u202F", " ")
-    while "  " in s2:
-        s2 = s2.replace("  ", " ")
-    return s2.strip().lower()
-
-def to_long_unc(path: str) -> str:
-    if path.startswith("\\\\?\\"): return path
-    if path.startswith("\\\\"):   return "\\\\?\\UNC" + path[1:]
-    return "\\\\?\\" + path
-
-def chunk_even(lst: List[str], k: int) -> List[List[str]]:
-    if not lst: return []
-    k = max(1, min(k, len(lst)))
-    base = len(lst) // k
-    extra = len(lst) % k
-    out, start = [], 0
-    for i in range(k):
-        size = base + (1 if i < extra else 0)
-        out.append(lst[start:start+size])
-        start += size
-    return out
-
-def load_prefs() -> dict:
-    if os.path.isfile(PREFS_PATH):
-        try:
-            with open(PREFS_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
-    return {}
-
-def save_prefs(d: dict) -> None:
-    try:
-        with open(PREFS_PATH, "w", encoding="utf-8") as f:
-            json.dump(d, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
-
-class TextRedirector:
-    def __init__(self, widget): self.widget = widget
-    def write(self, s):
-        self.widget.config(state='normal')
-        self.widget.insert(tk.END, s)
-        self.widget.see(tk.END)
-        self.widget.config(state='disabled')
-        self.widget.update_idletasks()
-    def flush(self): pass
-
-class ToolTip:
-    def __init__(self, widget, text: str, delay: int = 600):
-        self.widget = widget; self.text = text; self.delay = delay
-        self.tipwindow = None; self.id = None
-        widget.bind("<Enter>", self._schedule); widget.bind("<Leave>", self._hide)
-    def _schedule(self, _=None):
-        self._cancel(); self.id = self.widget.after(self.delay, self._show)
-    def _cancel(self):
-        if self.id: self.widget.after_cancel(self.id); self.id = None
-    def _show(self):
-        if self.tipwindow: return
-        x = self.widget.winfo_rootx() + 15; y = self.widget.winfo_rooty() + 25
-        self.tipwindow = tw = tk.Toplevel(self.widget); tw.wm_overrideredirect(True); tw.wm_geometry(f"+{x}+{y}")
-        ttk.Label(tw, text=self.text, style="Tooltip.TLabel", padding=(8, 4)).pack()
-    def _hide(self, _=None):
-        self._cancel()
-        if self.tipwindow: self.tipwindow.destroy(); self.tipwindow = None
-
-# =========================
-# Fonctions Pl@ntNet
-# =========================
-def resize_image(image_path, max_size=(800, 800), quality=70):
-    """
-    Redimensionne et compresse une image.
-
-    :param image_path: Chemin de l'image à traiter.
-    :param max_size: Tuple indiquant la taille maximale (largeur, hauteur).
-    :param quality: Qualité de compression (1-100).
-    :return: BytesIO de l'image traitée ou None en cas d'erreur.
-    """
-    try:
-        with Image.open(image_path) as img:
-            img.thumbnail(max_size)
-            buffer = BytesIO()
-            img.save(buffer, format='JPEG', quality=quality)
-            buffer.seek(0)
-            return buffer
-    except Exception as e:
-        print(f"Erreur lors du redimensionnement de l'image : {e}")
-        return None
-
-def identify_plant(image_path, organ):
-    """
-    Envoie une image à l'API Pl@ntNet pour identification.
-
-    :param image_path: Chemin de l'image à envoyer.
-    :param organ: Type d'organe de la plante (par exemple, 'flower').
-    :return: Nom scientifique de la plante identifiée ou None.
-    """
-    print(f"Envoi de l'image à l'API : {image_path}")
-    try:
-        resized_image = resize_image(image_path)
-        if not resized_image:
-            print(f"Échec du redimensionnement de l'image : {image_path}")
-            return None
-
-        files = {
-            'images': (os.path.basename(image_path), resized_image, 'image/jpeg')
-        }
-        data = {
-            'organs': organ
-        }
-
-        response = requests.post(API_URL, files=files, data=data)
-
-        print(f"Réponse de l'API : {response.status_code}")
-        if response.status_code == 200:
-            json_result = response.json()
-            try:
-                species = json_result['results'][0]['species']['scientificNameWithoutAuthor']
-                print(f"Plante identifiée : {species}")
-                return species
-            except (KeyError, IndexError):
-                print(f"Aucun résultat trouvé pour l'image : {image_path}")
-                return None
-        else:
-            print(f"Erreur API : {response.status_code} - {response.text}")
-            return None
-    except Exception as e:
-        print(f"Exception lors de l'identification de la plante : {e}")
-        return None
-
-def copy_and_rename_file(file_path, dest_folder, new_name, count):
-    """
-    Copie et renomme un fichier dans le dossier de destination.
-
-    :param file_path: Chemin du fichier original.
-    :param dest_folder: Dossier de destination.
-    :param new_name: Nom scientifique de la plante.
-    :param count: Compteur pour différencier les fichiers portant le même nom.
-    """
-    ext = os.path.splitext(file_path)[1]
-    if count == 1:
-        new_file_name = f"{new_name} @plantnet{ext}"
-    else:
-        new_file_name = f"{new_name} @plantnet({count}){ext}"
-    new_path = os.path.join(dest_folder, new_file_name)
-    try:
-        shutil.copy(file_path, new_path)
-        print(f"Fichier copié et renommé : {file_path} -> {new_path}")
-    except Exception as e:
-        print(f"Erreur lors de la copie du fichier : {e}")
 
 # =========================
 # Fonctions QGIS (onglet 1) — inchangées
@@ -1809,7 +1648,10 @@ class MainApp:
 # =========================
 # Main
 # =========================
-if __name__ == "__main__":
+def main():
     root = tk.Tk()
     app = MainApp(root)
     root.mainloop()
+
+if __name__ == "__main__":
+    main()
