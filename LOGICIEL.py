@@ -58,8 +58,6 @@ from docx.oxml.ns import qn
 
 from PIL import Image
 
-# Script d'identification des zonages
-from id_contexte_eco import run_analysis as run_id_context
 # Enregistrer le décodeur HEIF
 pillow_heif.register_heif_opener()
 
@@ -1432,6 +1430,7 @@ class IDContexteEcoTab(ttk.Frame):
         old_stdout = sys.stdout
         sys.stdout = self.stdout_redirect
         try:
+            from id_contexte_eco import run_analysis as run_id_context
             run_id_context(ae, ze)
             print("Analyse terminée.")
         except Exception as e:
