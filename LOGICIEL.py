@@ -558,6 +558,8 @@ class StyleHelper:
         s.configure("Status.TLabel", background=card_bg, foreground=subfg)
         s.configure("TProgressbar", troughcolor=border)
 
+
+from contexte_tab import ContexteEcoTab
 # =========================
 # Onglet 1 — Export Cartes (mêmes fonctionnalités)
 # =========================
@@ -1465,21 +1467,18 @@ class MainApp:
         nb = ttk.Notebook(root)
         nb.pack(fill=tk.BOTH, expand=True, padx=12, pady=10)
 
-        self.tab_export = ExportCartesTab(nb, self.style_helper, self.prefs)
-        self.tab_rlt    = RemonterLeTempsTab(nb, self.style_helper, self.prefs)
-        self.tab_plant  = PlantNetTab(nb, self.style_helper, self.prefs)
-        self.tab_idcon  = IDContexteEcoTab(nb, self.style_helper, self.prefs)
+        self.tab_ctx   = ContexteEcoTab(nb, self.style_helper, self.prefs)
+        self.tab_rlt   = RemonterLeTempsTab(nb, self.style_helper, self.prefs)
+        self.tab_plant = PlantNetTab(nb, self.style_helper, self.prefs)
 
-        nb.add(self.tab_export, text="Export Cartes")
+        nb.add(self.tab_ctx, text="Contexte éco")
         nb.add(self.tab_rlt, text="Remonter le temps")
         nb.add(self.tab_plant, text="Pl@ntNet")
-        nb.add(self.tab_idcon, text="ID contexte éco")
 
         # Raccourcis utiles
         root.bind("<Control-1>", lambda _e: nb.select(0))
         root.bind("<Control-2>", lambda _e: nb.select(1))
         root.bind("<Control-3>", lambda _e: nb.select(2))
-        root.bind("<Control-4>", lambda _e: nb.select(3))
 
         # Sauvegarde prefs à la fermeture
         root.protocol("WM_DELETE_WINDOW", self._on_close)
