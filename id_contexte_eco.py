@@ -33,12 +33,13 @@ def log_with_time(message):
     print(f"[{now}] {message}")
 
 
-def run_analysis(couche_reference1: str, couche_reference2: str):
+def run_analysis(couche_reference1: str, couche_reference2: str, buffer_km: float = 5.0):
     """
     Lance l'analyse d'identification des zonages à partir des shapefiles
     fournis par l'utilisateur.
     :param couche_reference1: chemin vers la couche "Aire d'étude élargie"
     :param couche_reference2: chemin vers la couche "Zone d'étude"
+    :param buffer_km: distance du tampon autour de la zone d'étude
     """
     log_with_time("Démarrage du script d'identification des zonages...")
 
@@ -369,6 +370,14 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
         except Exception as e:
             log_with_time(f"Erreur lors du calcul des distances pour '{nom_couche}': {e}")
             return
+
+        if buffer_km is not None:
+            mask = overlapping_gdf['Distance (km)'] <= buffer_km
+            overlapping_gdf = overlapping_gdf[mask]
+            distances_km = overlapping_gdf['Distance (km)']
+            if overlapping_gdf.empty:
+                log_with_time(f"Aucun site dans le tampon de {buffer_km} km pour '{nom_couche}'.")
+                return
 
         try:
             overlapping_gdf['centroid'] = overlapping_gdf.geometry.centroid
@@ -739,7 +748,8 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        print("Usage: id_contexte_eco.py <couche_reference1> <couche_reference2>")
+    if len(sys.argv) not in (3, 4):
+        print("Usage: id_contexte_eco.py <couche_reference1> <couche_reference2> [tampon_km]")
         sys.exit(1)
-    run_analysis(sys.argv[1], sys.argv[2])
+    tampon = float(sys.argv[3]) if len(sys.argv) == 4 else 5.0
+    run_analysis(sys.argv[1], sys.argv[2], tampon)
