@@ -312,6 +312,17 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
         os.environ.get("PATH", ""),
     ])
 
+    if hasattr(os, "add_dll_directory"):
+        for p in (
+            os.path.join(qt_base, "bin"),
+            os.path.join(cfg["QGIS_APP"], "bin"),
+            os.path.join(cfg["QGIS_ROOT"], "bin"),
+        ):
+            try:
+                os.add_dll_directory(p)
+            except Exception:
+                pass
+
     sys.path.insert(0, os.path.join(cfg["QGIS_APP"], "python"))
     sys.path.insert(0, os.path.join(cfg["QGIS_ROOT"], "apps", cfg["PY_VER"], "Lib", "site-packages"))
 
