@@ -37,9 +37,14 @@ from typing import List, Optional, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import requests
 from io import BytesIO
-import pillow_heif
 import zipfile
 import traceback
+
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+except Exception as e:
+    print(f"[WARN] pillow_heif non disponible ({e}); les fichiers HEIF ne seront pas pris en charge.")
 
 # ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
 from selenium import webdriver
@@ -60,8 +65,6 @@ from PIL import Image
 
 # Script d'identification des zonages
 from id_contexte_eco import run_analysis as run_id_context
-# Enregistrer le décodeur HEIF
-pillow_heif.register_heif_opener()
 
 # =========================
 # Paramètres globaux
