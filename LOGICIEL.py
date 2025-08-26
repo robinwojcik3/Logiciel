@@ -8,7 +8,7 @@ Onglet 1 — « Export Cartes » :
     - Exporte les PNG des mises en page QGIS avec cadrage AE/ZE.
     - Parallélisation, logs, thème clair/sombre, préférences.
 
-Onglet 2 — « Remonter le temps » :
+Onglet 2 — « Remonter le temps & Bassin versant » :
     - Reprend le workflow IGN (capture + rapport Word) mais
       DEMANDE à l’utilisateur :
         • Coordonnées en DMS (LAT puis LON, ex : 45°09'30" N 5°43'12" E)
@@ -89,7 +89,7 @@ PY_VER    = "Python312"
 # Préférences
 PREFS_PATH = os.path.join(os.path.expanduser("~"), "ExportCartesContexteEco.config.json")
 
-# Onglet 2 — Remonter le temps (constants issus du script source)
+# Onglet 2 — Remonter le temps & Bassin versant (constants issus du script source)
 LAYERS = [
     ("Aujourd’hui",   "10"),
     ("2000-2005",     "18"),
@@ -837,7 +837,7 @@ class ExportCartesTab(ttk.Frame):
             self.after(0, lambda: self.export_button.config(state="normal"))
 
 # =========================
-# Onglet 2 — Remonter le temps (UI + logique)
+# Onglet 2 — Remonter le temps & Bassin versant (UI + logique)
 # =========================
 class RemonterLeTempsTab(ttk.Frame):
     def __init__(self, parent, style_helper: StyleHelper, prefs: dict):
@@ -1471,7 +1471,7 @@ class MainApp:
         self.tab_idcon  = IDContexteEcoTab(nb, self.style_helper, self.prefs)
 
         nb.add(self.tab_export, text="Export Cartes")
-        nb.add(self.tab_rlt, text="Remonter le temps")
+        nb.add(self.tab_rlt, text="Remonter le temps & Bassin versant")
         nb.add(self.tab_plant, text="Pl@ntNet")
         nb.add(self.tab_idcon, text="ID contexte éco")
 
