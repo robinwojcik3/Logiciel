@@ -33,12 +33,13 @@ def log_with_time(message):
     print(f"[{now}] {message}")
 
 
-def run_analysis(couche_reference1: str, couche_reference2: str):
+def run_analysis(couche_reference1: str, couche_reference2: str, tampon_km: float = 5.0):
     """
     Lance l'analyse d'identification des zonages à partir des shapefiles
     fournis par l'utilisateur.
     :param couche_reference1: chemin vers la couche "Aire d'étude élargie"
     :param couche_reference2: chemin vers la couche "Zone d'étude"
+    :param tampon_km: distance du tampon appliqué autour de la zone d'étude (km)
     """
     log_with_time("Démarrage du script d'identification des zonages...")
 
@@ -86,6 +87,17 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
         except Exception as e:
             log_with_time(f"Erreur lors de la reprojection de la deuxième couche de référence : {e}")
             return
+
+    # Combiner l'aire d'étude avec un tampon autour de la zone d'étude
+    try:
+        buffer_geom = reference2_gdf.geometry.buffer(tampon_km * 1000).unary_union
+        ae_geom = reference_gdf.geometry.unary_union
+        combined = ae_geom.union(buffer_geom)
+        reference_gdf = gpd.GeoDataFrame(geometry=[combined], crs=crs_projected)
+        log_with_time(f"Tampon de {tampon_km} km appliqué")
+    except Exception as e:
+        log_with_time(f"Erreur lors de l'application du tampon : {e}")
+        return
 
     # Calculer le centroïde global de la couche de référence 2 en utilisant union_all()
     try:
@@ -739,7 +751,8 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        print("Usage: id_contexte_eco.py <couche_reference1> <couche_reference2>")
+    if len(sys.argv) < 3:
+        print("Usage: id_contexte_eco.py <couche_reference1> <couche_reference2> [tampon_km]")
         sys.exit(1)
-    run_analysis(sys.argv[1], sys.argv[2])
+    tampon = float(sys.argv[3]) if len(sys.argv) > 3 else 5.0
+    run_analysis(sys.argv[1], sys.argv[2], tampon)
