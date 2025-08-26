@@ -40,6 +40,7 @@ from io import BytesIO
 import pillow_heif
 import zipfile
 import traceback
+from id_contexte_eco import run_id_contexte_eco
 
 # ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
 from selenium import webdriver
@@ -1337,6 +1338,85 @@ class PlantNetTab(ttk.Frame):
             self.after(0, lambda: self.run_btn.config(state="normal"))
 
 # =========================
+# Onglet 4 — ID Contexte éco
+# =========================
+class IDContexteEcoTab(ttk.Frame):
+    def __init__(self, parent, style_helper: StyleHelper, prefs: dict):
+        super().__init__(parent, padding=12)
+        self.style_helper = style_helper
+        self.prefs = prefs
+
+        self.font_title = tkfont.Font(family="Segoe UI", size=15, weight="bold")
+        self.ae_var = tk.StringVar()
+        self.ze_var = tk.StringVar()
+
+        self._build_ui()
+
+    def _build_ui(self):
+        header = ttk.Frame(self, style="Header.TFrame", padding=(14, 12))
+        header.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(header, text="Identification des zonages", style="Card.TLabel", font=self.font_title)\
+            .grid(row=0, column=0, sticky="w")
+        header.columnconfigure(0, weight=1)
+
+        shp = ttk.Frame(self, style="Card.TFrame", padding=12)
+        shp.pack(fill=tk.X)
+        self._file_row(shp, 0, "📁 Aire d'étude élargie…", self.ae_var, self._select_ae)
+        self._file_row(shp, 1, "📁 Zone d'étude…", self.ze_var, self._select_ze)
+        shp.columnconfigure(1, weight=1)
+
+        act = ttk.Frame(self, style="Card.TFrame", padding=12)
+        act.pack(fill=tk.X, pady=(10,0))
+        run_btn = ttk.Button(act, text="▶ Lancer l'analyse", style="Accent.TButton", command=self.start_thread)
+        run_btn.grid(row=0, column=0, sticky="w")
+
+        log_frame = ttk.Frame(self, style="Card.TFrame", padding=12)
+        log_frame.pack(fill=tk.BOTH, expand=True, pady=(10,0))
+        self.log_text = tk.Text(log_frame, height=10, wrap=tk.WORD, state='disabled',
+                                bg=self.style_helper.style.lookup("Card.TFrame", "background"),
+                                fg=self.style_helper.style.lookup("TLabel", "foreground"))
+        self.log_text.pack(fill=tk.BOTH, expand=True)
+
+    def _file_row(self, parent, row: int, label: str, var: tk.StringVar, cmd):
+        btn = ttk.Button(parent, text=label, command=cmd)
+        btn.grid(row=row, column=0, sticky="w", pady=(8 if row == 0 else 4, 2))
+        ent = ttk.Entry(parent, textvariable=var, state="readonly")
+        ent.grid(row=row, column=1, sticky="ew", padx=8)
+        clr = ttk.Button(parent, text="✖", width=3, command=lambda: var.set(""))
+        clr.grid(row=row, column=2, sticky="e")
+        parent.columnconfigure(1, weight=1)
+
+    def _select_ae(self):
+        path = filedialog.askopenfilename(title="Sélectionner l'aire d'étude élargie",
+                                           filetypes=[("Shapefile ESRI", "*.shp")])
+        if path:
+            self.ae_var.set(path)
+
+    def _select_ze(self):
+        path = filedialog.askopenfilename(title="Sélectionner la zone d'étude",
+                                           filetypes=[("Shapefile ESRI", "*.shp")])
+        if path:
+            self.ze_var.set(path)
+
+    def start_thread(self):
+        ae = self.ae_var.get().strip()
+        ze = self.ze_var.get().strip()
+        if not ae or not ze:
+            messagebox.showerror("Erreur", "Veuillez sélectionner les deux shapefiles.")
+            return
+        t = threading.Thread(target=self._run_process, args=(ae, ze))
+        t.daemon = True
+        t.start()
+
+    def _run_process(self, ae: str, ze: str):
+        original = sys.stdout
+        sys.stdout = TextRedirector(self.log_text)
+        try:
+            run_id_contexte_eco(ae, ze)
+        finally:
+            sys.stdout = original
+
+# =========================
 # App principale avec Notebook
 # =========================
 class MainApp:
@@ -1365,15 +1445,18 @@ class MainApp:
         self.tab_export = ExportCartesTab(nb, self.style_helper, self.prefs)
         self.tab_rlt    = RemonterLeTempsTab(nb, self.style_helper, self.prefs)
         self.tab_plant  = PlantNetTab(nb, self.style_helper, self.prefs)
+        self.tab_id     = IDContexteEcoTab(nb, self.style_helper, self.prefs)
 
         nb.add(self.tab_export, text="Export Cartes")
         nb.add(self.tab_rlt, text="Remonter le temps")
         nb.add(self.tab_plant, text="Pl@ntNet")
+        nb.add(self.tab_id, text="ID contexte éco")
 
         # Raccourcis utiles
         root.bind("<Control-1>", lambda _e: nb.select(0))
         root.bind("<Control-2>", lambda _e: nb.select(1))
         root.bind("<Control-3>", lambda _e: nb.select(2))
+        root.bind("<Control-4>", lambda _e: nb.select(3))
 
         # Sauvegarde prefs à la fermeture
         root.protocol("WM_DELETE_WINDOW", self._on_close)
