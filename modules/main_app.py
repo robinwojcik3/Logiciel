@@ -82,8 +82,12 @@ SUBPATH    = r"Espace_RWO\CARTO ROBIN"
 
 OUT_IMG    = r"C:\Users\utilisateur\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 3) BDD\PYTHON\2) Contexte éco\OUTPUT"
 
-# Dossier par défaut pour la sélection des shapefiles (onglet 1)
-DEFAULT_SHAPE_DIR = r"C:\Users\utilisateur\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 2) CARTO terrain"
+# Dossier par défaut pour la sélection des shapefiles (onglet 1).
+# Peut être modifié en définissant la variable d'environnement CONTEXT_ECO_SHAPE_DIR.
+DEFAULT_SHAPE_DIR = os.environ.get(
+    "CONTEXT_ECO_SHAPE_DIR",
+    r"C:\Users\utilisateur\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 2) CARTO terrain",
+)
 
 # QGIS
 QGIS_ROOT = r"C:\Program Files\QGIS 3.40.3"
