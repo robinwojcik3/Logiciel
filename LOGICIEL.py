@@ -312,6 +312,21 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
         os.environ.get("PATH", ""),
     ])
 
+    # À partir de Python 3.8 sous Windows, les DLL ne sont plus recherchées
+    # automatiquement dans PATH. On enregistre donc explicitement les
+    # répertoires contenant les bibliothèques de QGIS pour éviter l'erreur
+    # « DLL load failed while importing _core » lors de l'import des modules
+    # QGIS dans les processus parallèles.
+    dll_dirs = []
+    if hasattr(os, "add_dll_directory"):
+        for p in (
+            os.path.join(qt_base, "bin"),
+            os.path.join(cfg["QGIS_APP"], "bin"),
+            os.path.join(cfg["QGIS_ROOT"], "bin"),
+        ):
+            if os.path.isdir(p):
+                dll_dirs.append(os.add_dll_directory(p))
+
     sys.path.insert(0, os.path.join(cfg["QGIS_APP"], "python"))
     sys.path.insert(0, os.path.join(cfg["QGIS_ROOT"], "apps", cfg["PY_VER"], "Lib", "site-packages"))
 
