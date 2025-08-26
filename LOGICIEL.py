@@ -28,6 +28,7 @@ import shutil
 import tempfile
 import datetime
 import threading
+import multiprocessing
 import urllib.request
 import webbrowser
 import tkinter as tk
@@ -801,6 +802,8 @@ class ExportCartesTab(ttk.Frame):
 
             log_with_time(f"{len(projets)} projets (attendu = calcul en cours)")
             log_with_time(f"Workers={self.workers_var.get()}, DPI={self.dpi_var.get()}, marge={self.margin_var.get():.2f}, overwrite={self.overwrite_var.get()}")
+            qgis_python = os.path.join(QGIS_ROOT, "apps", PY_VER, "python.exe")
+            multiprocessing.set_executable(qgis_python)
 
             chunks = chunk_even(projets, self.workers_var.get())
             cfg = {
