@@ -1434,7 +1434,7 @@ class IDContexteEcoTab(ttk.Frame):
         old_stdout = sys.stdout
         sys.stdout = self.stdout_redirect
         try:
-            from id_contexte_eco import run_analysis as run_id_context
+            from .id_contexte_eco import run_analysis as run_id_context
             run_id_context(ae, ze)
             print("Analyse terminée.")
         except Exception as e:
@@ -1732,7 +1732,7 @@ class ContexteEcoTab(ttk.Frame):
         old_stdout = sys.stdout
         sys.stdout = self.stdout_redirect
         try:
-            from id_contexte_eco import run_analysis as run_id_context
+            from .id_contexte_eco import run_analysis as run_id_context
             run_id_context(ae, ze, buffer_km)
             log_with_time("Analyse terminée.")
             self.after(0, lambda: self.status_label.config(text="Terminé"))
@@ -1809,7 +1809,12 @@ class MainApp:
 # =========================
 # Main
 # =========================
-if __name__ == "__main__":
+def launch():
+    """Lance l'interface principale."""
     root = tk.Tk()
     app = MainApp(root)
     root.mainloop()
+
+
+if __name__ == "__main__":
+    launch()
