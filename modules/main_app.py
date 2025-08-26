@@ -44,6 +44,7 @@ from io import BytesIO
 import pillow_heif
 import zipfile
 import traceback
+from . import APP_NAME, APP_VERSION
 
 # ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
 from selenium import webdriver
@@ -1766,10 +1767,12 @@ class MainApp:
         # Header global + bouton thème
         top = ttk.Frame(root, style="Header.TFrame", padding=(12, 8))
         top.pack(fill=tk.X)
-        ttk.Label(top, text="Contexte éco — Suite d’outils", style="Card.TLabel",
+        ttk.Label(top, text=APP_NAME, style="Card.TLabel",
                   font=tkfont.Font(family="Segoe UI", size=16, weight="bold")).pack(side=tk.LEFT)
         btn_theme = ttk.Button(top, text="Changer de thème", command=self._toggle_theme)
         btn_theme.pack(side=tk.RIGHT)
+        btn_about = ttk.Button(top, text="À propos", command=self._show_about)
+        btn_about.pack(side=tk.RIGHT, padx=(0, 8))
 
         # Notebook
         nb = ttk.Notebook(root)
@@ -1799,6 +1802,9 @@ class MainApp:
         self.prefs["theme"] = new_theme
         save_prefs(self.prefs)
         self.style_helper.apply(new_theme)
+
+    def _show_about(self):
+        messagebox.showinfo("À propos", f"{APP_NAME}\nVersion {APP_VERSION}")
 
     def _on_close(self):
         try:
