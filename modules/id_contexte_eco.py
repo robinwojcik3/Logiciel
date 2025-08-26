@@ -9,6 +9,7 @@ ils sont fournis par l'interface graphique principale.
 import os
 import sys
 import datetime
+import logging
 
 # Configuration des variables d'environnement pour PROJ et GDAL
 qgis_base = r"C:\Program Files\QGIS 3.40.3"
@@ -27,19 +28,43 @@ from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 from openpyxl.utils import get_column_letter
 
 
-def log_with_time(message):
-    """Affiche un message avec un horodatage"""
-    now = datetime.datetime.now().strftime("%H:%M:%S")
-    print(f"[{now}] {message}")
+logger = logging.getLogger(__name__)
 
 
-def run_analysis(ae_shp: str, ze_shp: str, buffer_km: float = 5.0):
+def setup_logging(log_file: str | None = None) -> None:
+    """Configure le système de journalisation."""
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter("[%(asctime)s] %(message)s", "%H:%M:%S")
+
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setFormatter(formatter)
+    logger.handlers = [stream_handler]
+
+    if log_file:
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
+
+def log_with_time(message: str) -> None:
+    """Affiche un message avec un horodatage."""
+    logger.info(message)
+
+
+def run_analysis(
+    ae_shp: str,
+    ze_shp: str,
+    buffer_km: float = 5.0,
+    log_file: str | None = None,
+):
     """Lance l'analyse d'identification des zonages à partir des shapefiles.
 
     :param ae_shp: chemin vers la couche "Aire d'étude élargie"
     :param ze_shp: chemin vers la couche "Zone d'étude"
     :param buffer_km: distance du tampon autour de la ZE en kilomètres
+    :param log_file: fichier de sortie pour conserver les messages de log
     """
+    setup_logging(log_file)
     log_with_time("Démarrage du script d'identification des zonages...")
 
     # Vérifier si les fichiers de référence existent
