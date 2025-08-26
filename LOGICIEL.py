@@ -305,6 +305,23 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
         else ("minimal" if os.path.isfile(os.path.join(platform_dir, "qminimal.dll")) else "offscreen")
     os.environ["QT_QPA_PLATFORM"] = qpa
 
+    # --- Chargement explicite des DLL (Windows, Python >= 3.8) ---
+    try:
+        if hasattr(os, "add_dll_directory"):
+            dll_dirs = [
+                os.path.join(qt_base, "bin"),
+                os.path.join(cfg["QGIS_APP"], "bin"),
+                os.path.join(cfg["QGIS_ROOT"], "bin"),
+            ]
+            for d in dll_dirs:
+                if os.path.isdir(d):
+                    try:
+                        os.add_dll_directory(d)
+                    except OSError:
+                        pass
+    except Exception:
+        pass
+
     os.environ["PATH"] = os.pathsep.join([
         os.path.join(qt_base, "bin"),
         os.path.join(cfg["QGIS_APP"], "bin"),
@@ -755,6 +772,20 @@ class ExportCartesTab(ttk.Frame):
                 base = os.path.join(QGIS_ROOT, "apps", name)
                 if os.path.isdir(base): qt_base = base; break
             if not qt_base: raise RuntimeError("Répertoire Qt introuvable")
+            # Assure aussi les DLL dans le process principal
+            try:
+                if hasattr(os, "add_dll_directory"):
+                    for d in [os.path.join(qt_base, "bin"),
+                              os.path.join(QGIS_APP, "bin"),
+                              os.path.join(QGIS_ROOT, "bin")]:
+                        if os.path.isdir(d):
+                            try:
+                                os.add_dll_directory(d)
+                            except OSError:
+                                pass
+            except Exception:
+                pass
+
             sys.path.insert(0, os.path.join(QGIS_APP, "python"))
             sys.path.insert(0, os.path.join(QGIS_ROOT, "apps", PY_VER, "Lib", "site-packages"))
             from qgis.core import QgsApplication  # noqa: F401
