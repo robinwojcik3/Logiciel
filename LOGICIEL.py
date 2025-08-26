@@ -40,6 +40,7 @@ from io import BytesIO
 import pillow_heif
 import zipfile
 import traceback
+import subprocess
 
 # ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
 from selenium import webdriver
@@ -116,6 +117,10 @@ COMMENT_TEMPLATE = (
 API_KEY = "2b10vfT6MvFC2lcAzqG1ZMKO"  # Votre clé API Pl@ntNet
 PROJECT = "all"
 API_URL = f"https://my-api.plantnet.org/v2/identify/{PROJECT}?api-key={API_KEY}"
+
+# Onglet 4 — ID contexte éco
+ID_PYTHON = r"C:\USERS\UTILISATEUR\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 3) BDD\PYTHON\2) Contexte éco\INPUT\Configuration Python\venv_geopandas\Scripts\python.exe"
+ID_SCRIPT = os.path.join(os.path.dirname(__file__), "id_contexte_eco_script.py")
 
 # =========================
 # Utils communs
@@ -1337,6 +1342,112 @@ class PlantNetTab(ttk.Frame):
             self.after(0, lambda: self.run_btn.config(state="normal"))
 
 # =========================
+# Onglet 4 — ID contexte éco
+# =========================
+class IDContexteEcoTab(ttk.Frame):
+    def __init__(self, parent, style_helper: StyleHelper, prefs: dict):
+        super().__init__(parent, padding=12)
+        self.style_helper = style_helper
+        self.prefs = prefs
+
+        self.font_title = tkfont.Font(family="Segoe UI", size=15, weight="bold")
+        self.font_sub   = tkfont.Font(family="Segoe UI", size=10)
+        self.font_mono  = tkfont.Font(family="Consolas", size=9)
+
+        self.ze_shp_var = tk.StringVar(value=self.prefs.get("ID_ZE_SHP", ""))
+        self.ae_shp_var = tk.StringVar(value=self.prefs.get("ID_AE_SHP", ""))
+
+        self._build_ui()
+
+    def _build_ui(self):
+        header = ttk.Frame(self, style="Header.TFrame", padding=(14, 12))
+        header.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(header, text="Identification des zonages", style="Card.TLabel", font=self.font_title)\
+            .grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text="Sélectionner les shapefiles et lancer l'analyse.", style="Subtle.TLabel", font=self.font_sub)\
+            .grid(row=1, column=0, sticky="w", pady=(4,0))
+        header.columnconfigure(0, weight=1)
+
+        shp = ttk.Frame(self, style="Card.TFrame", padding=12); shp.pack(fill=tk.X)
+        ttk.Label(shp, text="Shapefiles", style="Card.TLabel").grid(row=0, column=0, columnspan=4, sticky="w")
+        self._file_row(shp, 1, "📁 Zone d'étude…", self.ze_shp_var, lambda: self._select_shapefile('ZE'))
+        self._file_row(shp, 2, "📁 Aire d'étude élargie…", self.ae_shp_var, lambda: self._select_shapefile('AE'))
+        shp.columnconfigure(1, weight=1)
+
+        act = ttk.Frame(self, style="Card.TFrame", padding=12); act.pack(fill=tk.X, pady=(10,0))
+        self.run_btn = ttk.Button(act, text="▶ Lancer l'analyse", style="Accent.TButton", command=self.start_process_thread)
+        self.run_btn.grid(row=0, column=0, sticky="w")
+
+        bottom = ttk.Frame(self, style="Card.TFrame", padding=12); bottom.pack(fill=tk.BOTH, expand=True, pady=(10,0))
+        self.status_label = ttk.Label(bottom, text="Prêt.", style="Status.TLabel")
+        self.status_label.grid(row=0, column=0, sticky="w")
+        bottom.columnconfigure(0, weight=1)
+        self.log_text = tk.Text(bottom, height=10, wrap=tk.WORD, state='disabled',
+                                bg=self.style_helper.style.lookup("Card.TFrame", "background"),
+                                fg=self.style_helper.style.lookup("TLabel", "foreground"))
+        self.log_text.configure(font=self.font_mono, relief="flat")
+        log_scroll = ttk.Scrollbar(bottom, orient="vertical", command=self.log_text.yview)
+        self.log_text['yscrollcommand'] = log_scroll.set
+        log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sys.stdout = TextRedirector(self.log_text)
+
+    def _file_row(self, parent, row: int, label: str, var: tk.StringVar, cmd):
+        ttk.Label(parent, text=label, style="Card.TLabel").grid(row=row, column=0, sticky="w", pady=(6,0))
+        ent = ttk.Entry(parent, textvariable=var, width=10)
+        ent.grid(row=row, column=1, sticky="ew", padx=8)
+        ent.configure(state="readonly")
+        ttk.Button(parent, text="Parcourir…", command=cmd).grid(row=row, column=2, sticky="e")
+        ttk.Button(parent, text="✖", width=3, command=lambda: var.set(""))\
+            .grid(row=row, column=3, sticky="e")
+        parent.columnconfigure(1, weight=1)
+
+    def _select_shapefile(self, shp_type):
+        label_text = "Zone d'étude" if shp_type == 'ZE' else "Aire d'étude élargie"
+        title = f"Sélectionner le shapefile pour '{label_text}'"
+        base_dir = DEFAULT_SHAPE_DIR if os.path.isdir(DEFAULT_SHAPE_DIR) else os.path.expanduser("~")
+        path = filedialog.askopenfilename(title=title, initialdir=base_dir, filetypes=[("Shapefile ESRI", "*.shp")])
+        if path:
+            if shp_type == 'ZE': self.ze_shp_var.set(path)
+            else: self.ae_shp_var.set(path)
+
+    def start_process_thread(self):
+        if not self.ze_shp_var.get() or not self.ae_shp_var.get():
+            messagebox.showerror("Erreur", "Sélectionnez les deux shapefiles.")
+            return
+        if not os.path.isfile(self.ze_shp_var.get()) or not os.path.isfile(self.ae_shp_var.get()):
+            messagebox.showerror("Erreur", "Un shapefile est introuvable.")
+            return
+        self.prefs["ID_ZE_SHP"] = self.ze_shp_var.get()
+        self.prefs["ID_AE_SHP"] = self.ae_shp_var.get()
+        save_prefs(self.prefs)
+        self.run_btn.config(state="disabled")
+        t = threading.Thread(target=self._run_process)
+        t.daemon = True
+        t.start()
+
+    def _run_process(self):
+        self.after(0, lambda: self.status_label.config(text="En cours..."))
+        script_path = ID_SCRIPT
+        cmd = [ID_PYTHON, script_path, "--aire", self.ae_shp_var.get(), "--zone", self.ze_shp_var.get()]
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            for line in proc.stdout:
+                print(line, end="")
+            proc.wait()
+            if proc.returncode == 0:
+                log_with_time("Analyse terminée.")
+                self.after(0, lambda: self.status_label.config(text="Terminé."))
+            else:
+                log_with_time(f"Erreur (code {proc.returncode})")
+                self.after(0, lambda: self.status_label.config(text="Erreur."))
+        except Exception as e:
+            log_with_time(f"Erreur lors de l'exécution : {e}")
+            self.after(0, lambda: self.status_label.config(text="Erreur."))
+        finally:
+            self.after(0, lambda: self.run_btn.config(state="normal"))
+
+# =========================
 # App principale avec Notebook
 # =========================
 class MainApp:
@@ -1365,15 +1476,18 @@ class MainApp:
         self.tab_export = ExportCartesTab(nb, self.style_helper, self.prefs)
         self.tab_rlt    = RemonterLeTempsTab(nb, self.style_helper, self.prefs)
         self.tab_plant  = PlantNetTab(nb, self.style_helper, self.prefs)
+        self.tab_id     = IDContexteEcoTab(nb, self.style_helper, self.prefs)
 
         nb.add(self.tab_export, text="Export Cartes")
         nb.add(self.tab_rlt, text="Remonter le temps")
         nb.add(self.tab_plant, text="Pl@ntNet")
+        nb.add(self.tab_id, text="ID contexte éco")
 
         # Raccourcis utiles
         root.bind("<Control-1>", lambda _e: nb.select(0))
         root.bind("<Control-2>", lambda _e: nb.select(1))
         root.bind("<Control-3>", lambda _e: nb.select(2))
+        root.bind("<Control-4>", lambda _e: nb.select(3))
 
         # Sauvegarde prefs à la fermeture
         root.protocol("WM_DELETE_WINDOW", self._on_close)
