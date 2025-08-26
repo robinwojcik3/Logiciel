@@ -740,6 +740,12 @@ class ExportCartesTab(ttk.Frame):
         selected = len(self._selected_projects()); total = len(self.filtered_projects)
         self.status_label.config(text=f"Projets sélectionnés : {selected} / {total}")
 
+    def _clear_log(self):
+        self.log_text.config(state='normal')
+        self.log_text.delete('1.0', tk.END)
+        self.log_text.config(state='disabled')
+        os.system('cls' if os.name == 'nt' else 'clear')
+
     def _open_out_dir(self):
         try:
             os.makedirs(OUT_IMG, exist_ok=True); os.startfile(OUT_IMG)
@@ -767,6 +773,13 @@ class ExportCartesTab(ttk.Frame):
             messagebox.showerror("QGIS", f"Échec import QGIS : {e}")
 
     def start_export_thread(self):
+        # Annulation si déjà en cours
+        if self.export_thread and self.export_thread.is_alive():
+            self.export_cancel.set()
+            self._clear_log()
+            self.export_button.config(text="▶ Lancer l’export", state="normal")
+            return
+
         if not self.ze_shp_var.get() or not self.ae_shp_var.get():
             messagebox.showerror("Erreur", "Sélectionnez les deux shapefiles."); return
         if not os.path.isfile(self.ze_shp_var.get()) or not os.path.isfile(self.ae_shp_var.get()):
@@ -776,7 +789,7 @@ class ExportCartesTab(ttk.Frame):
             messagebox.showerror("Erreur", "Sélectionnez au moins un projet."); return
 
         self._update_counts()
-        self.export_button.config(state="disabled")
+        self.export_button.config(state="disabled", text="■ Annuler")
         self.progress_done = 0; self.progress["value"] = 0
 
         mode = self.cadrage_var.get(); per_project = 2 if mode == "BOTH" else 1
@@ -821,8 +834,13 @@ class ExportCartesTab(ttk.Frame):
                 self.status_label.config(text=f"Progression : {self.progress_done}/{self.total_expected}")
 
             with ProcessPoolExecutor(max_workers=int(self.workers_var.get())) as ex:
+                self.executor = ex
                 futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
                 for fut in as_completed(futures):
+                    if self.export_cancel.is_set():
+                        ex.shutdown(cancel_futures=True)
+                        log_with_time("Export annulé.")
+                        break
                     try:
                         ok, ko = fut.result()
                         ok_total += ok; ko_total += ko
@@ -858,6 +876,11 @@ class RemonterLeTempsTab(ttk.Frame):
         self.wait_var    = tk.DoubleVar(value=float(self.prefs.get("RLT_WAIT", WAIT_TILES_DEFAULT)))
         self.out_dir_var = tk.StringVar(value=self.prefs.get("RLT_OUT", OUTPUT_DIR_RLT))
         self.headless_var= tk.BooleanVar(value=bool(self.prefs.get("RLT_HEADLESS", False)))
+
+        self.run_thread = None
+        self.run_cancel = threading.Event()
+        self.bassin_thread = None
+        self.bassin_cancel = threading.Event()
 
         self._build_ui()
 
@@ -955,16 +978,30 @@ class RemonterLeTempsTab(ttk.Frame):
                "IKXMDSoASAFQAw%3D%3D")
         webbrowser.open(url)
 
+    def _clear_log(self):
+        self.log_text.config(state='normal')
+        self.log_text.delete('1.0', tk.END)
+        self.log_text.config(state='disabled')
+        os.system('cls' if os.name == 'nt' else 'clear')
+
     def _start_bassin_thread(self):
+        if self.bassin_thread and self.bassin_thread.is_alive():
+            self.bassin_cancel.set()
+            self._clear_log()
+            self.bassin_btn.config(text="💧 Bassin versant")
+            return
         if not self.coord_var.get().strip():
             messagebox.showerror("Erreur", "Renseigner les coordonnées en DMS."); return
-        self.bassin_btn.config(state="disabled")
-        t = threading.Thread(target=self._run_bassin)
-        t.daemon = True
-        t.start()
+        self.bassin_cancel.clear()
+        self.bassin_btn.config(text="■ Annuler")
+        self.bassin_thread = threading.Thread(target=self._run_bassin, daemon=True)
+        self.bassin_thread.start()
 
     def _run_bassin(self):
         try:
+            if self.bassin_cancel.is_set():
+                print("[BV] Action annulée.", file=self.stdout_redirect)
+                return
             user_address = self.coord_var.get().strip()
             download_dir = OUT_IMG
             target_folder_name = "Bassin versant"
@@ -1002,6 +1039,10 @@ class RemonterLeTempsTab(ttk.Frame):
 
             url = "https://mghydro.com/watersheds/"
             print(f"[BV] Navigation vers {url}...", file=self.stdout_redirect)
+            if self.bassin_cancel.is_set():
+                driver.quit()
+                print("[BV] Action annulée.", file=self.stdout_redirect)
+                return
             driver.get(url)
             wait = WebDriverWait(driver, 2)
 
@@ -1069,7 +1110,9 @@ class RemonterLeTempsTab(ttk.Frame):
         except Exception as e:
             print(f"[BV] Erreur décompression : {e}", file=self.stdout_redirect)
         finally:
-            self.after(0, lambda: self.bassin_btn.config(state="normal"))
+            self.after(0, lambda: self.bassin_btn.config(text="💧 Bassin versant"))
+            self.bassin_thread = None
+            self.bassin_cancel.clear()
 
     def _detect_commune(self, lat: float, lon: float) -> str:
         try:
@@ -1087,15 +1130,23 @@ class RemonterLeTempsTab(ttk.Frame):
         return "Inconnue"
 
     def _start_thread(self):
+        if self.run_thread and self.run_thread.is_alive():
+            self.run_cancel.set()
+            self._clear_log()
+            self.run_btn.config(text="▶ Capturer + Générer le Word")
+            return
         if not self.coord_var.get().strip():
             messagebox.showerror("Erreur", "Renseigner les coordonnées en DMS."); return
-        self.run_btn.config(state="disabled")
-        t = threading.Thread(target=self._run_process)
-        t.daemon = True
-        t.start()
+        self.run_cancel.clear()
+        self.run_btn.config(text="■ Annuler")
+        self.run_thread = threading.Thread(target=self._run_process, daemon=True)
+        self.run_thread.start()
 
     def _run_process(self):
         try:
+            if self.run_cancel.is_set():
+                print("[IGN] Action annulée.", file=self.stdout_redirect)
+                return
             # Sauvegarde préférences
             self.prefs.update({
                 "RLT_COORD": self.coord_var.get().strip(),
@@ -1216,7 +1267,9 @@ class RemonterLeTempsTab(ttk.Frame):
             print(f"[IGN] Erreur : {e}", file=self.stdout_redirect)
             messagebox.showerror("IGN", str(e))
         finally:
-            self.after(0, lambda: self.run_btn.config(state="normal"))
+            self.after(0, lambda: self.run_btn.config(text="▶ Capturer + Générer le Word"))
+            self.run_thread = None
+            self.run_cancel.clear()
 
     def _set_status(self, txt: str):
         self.after(0, lambda: self.status_label.config(text=txt))
@@ -1235,6 +1288,8 @@ class PlantNetTab(ttk.Frame):
         self.font_mono  = tkfont.Font(family="Consolas", size=9)
 
         self.folder_var = tk.StringVar(value=self.prefs.get("PLANTNET_FOLDER", ""))
+        self.run_thread = None
+        self.run_cancel = threading.Event()
 
         self._build_ui()
 
@@ -1289,21 +1344,41 @@ class PlantNetTab(ttk.Frame):
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
 
+    def _clear_log(self):
+        self.log_text.config(state='normal')
+        self.log_text.delete('1.0', tk.END)
+        self.log_text.config(state='disabled')
+        os.system('cls' if os.name == 'nt' else 'clear')
+
     def _start_thread(self):
-        self.run_btn.config(state="disabled")
-        t = threading.Thread(target=self._run_process)
-        t.daemon = True
-        t.start()
+        if self.run_thread and self.run_thread.is_alive():
+            self.run_cancel.set()
+            self._clear_log()
+            self.run_btn.config(text="▶ Lancer l'analyse")
+            return
+        self.run_cancel.clear()
+        self.run_btn.config(text="■ Annuler")
+        self.run_thread = threading.Thread(target=self._run_process, daemon=True)
+        self.run_thread.start()
 
     def _run_process(self):
         folder = self.folder_var.get().strip()
+        if self.run_cancel.is_set():
+            self.after(0, lambda: self.run_btn.config(text="▶ Lancer l'analyse"))
+            self.run_thread = None
+            self.run_cancel.clear()
+            return
         if not folder:
             print("Veuillez sélectionner un dossier.", file=self.stdout_redirect)
-            self.after(0, lambda: self.run_btn.config(state="normal"))
+            self.after(0, lambda: self.run_btn.config(text="▶ Lancer l'analyse"))
+            self.run_thread = None
+            self.run_cancel.clear()
             return
         if not os.path.exists(folder):
             print(f"Le dossier à traiter n'existe pas : {folder}", file=self.stdout_redirect)
-            self.after(0, lambda: self.run_btn.config(state="normal"))
+            self.after(0, lambda: self.run_btn.config(text="▶ Lancer l'analyse"))
+            self.run_thread = None
+            self.run_cancel.clear()
             return
 
         self.prefs["PLANTNET_FOLDER"] = folder
@@ -1319,7 +1394,9 @@ class PlantNetTab(ttk.Frame):
 
         if not image_files:
             print("Aucune image à traiter dans le dossier.", file=self.stdout_redirect)
-            self.after(0, lambda: self.run_btn.config(state="normal"))
+            self.after(0, lambda: self.run_btn.config(text="▶ Lancer l'analyse"))
+            self.run_thread = None
+            self.run_cancel.clear()
             return
 
         plant_name_counts = {}
@@ -1338,7 +1415,9 @@ class PlantNetTab(ttk.Frame):
             print("Analyse terminée.")
         finally:
             sys.stdout = old_stdout
-            self.after(0, lambda: self.run_btn.config(state="normal"))
+            self.after(0, lambda: self.run_btn.config(text="▶ Lancer l'analyse"))
+            self.run_thread = None
+            self.run_cancel.clear()
 
 # =========================
 # Onglet 4 — ID contexte éco
@@ -1470,6 +1549,11 @@ class ContexteEcoTab(ttk.Frame):
         self.total_expected = 0
         self.progress_done  = 0
         self.busy = False
+        # Threads annulables
+        self.export_thread = None
+        self.export_cancel = threading.Event()
+        self.id_thread = None
+        self.id_cancel = threading.Event()
 
         self._build_ui()
         self._populate_projects()
@@ -1623,10 +1707,17 @@ class ContexteEcoTab(ttk.Frame):
         selected = len(self._selected_projects()); total = len(self.filtered_projects)
         self.status_label.config(text=f"Projets sélectionnés : {selected} / {total}")
 
+    def _clear_log(self):
+        self.log_text.config(state='normal')
+        self.log_text.delete('1.0', tk.END)
+        self.log_text.config(state='disabled')
+        os.system('cls' if os.name == 'nt' else 'clear')
+
     # ---------- Lancement export ----------
     def start_export_thread(self):
-        if self.busy:
-            print("Une action est déjà en cours.", file=self.stdout_redirect)
+        if self.export_thread and self.export_thread.is_alive():
+            self.export_cancel.set()
+            self._clear_log()
             return
         if not self.ze_shp_var.get() or not self.ae_shp_var.get():
             messagebox.showerror("Erreur", "Sélectionnez les deux shapefiles."); return
@@ -1637,7 +1728,8 @@ class ContexteEcoTab(ttk.Frame):
             messagebox.showerror("Erreur", "Sélectionnez au moins un projet."); return
 
         self.busy = True
-        self.export_button.config(state="disabled")
+        self.export_cancel.clear()
+        self.export_button.config(text="■ Annuler")
         self.id_button.config(state="disabled")
         mode = self.cadrage_var.get(); per_project = 2 if mode == "BOTH" else 1
         self.total_expected = per_project * len(projets)
@@ -1655,8 +1747,8 @@ class ContexteEcoTab(ttk.Frame):
             "MARGIN_FAC": float(self.margin_var.get()),
         }); save_prefs(self.prefs)
 
-        t = threading.Thread(target=self._run_export_logic, args=(projets,), daemon=True)
-        t.start()
+        self.export_thread = threading.Thread(target=self._run_export_logic, args=(projets,), daemon=True)
+        self.export_thread.start()
 
     def _run_export_logic(self, projets: List[str]):
         old_stdout = sys.stdout
@@ -1681,8 +1773,13 @@ class ContexteEcoTab(ttk.Frame):
                 self.progress["value"] = min(self.progress_done, self.total_expected)
                 self.status_label.config(text=f"Progression : {self.progress_done}/{self.total_expected}")
             with ProcessPoolExecutor(max_workers=int(self.workers_var.get())) as ex:
+                self.executor = ex
                 futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
                 for fut in as_completed(futures):
+                    if self.export_cancel.is_set():
+                        ex.shutdown(cancel_futures=True)
+                        log_with_time("Export annulé.")
+                        break
                     try:
                         ok, ko = fut.result()
                         ok_total += ok; ko_total += ko
@@ -1702,8 +1799,9 @@ class ContexteEcoTab(ttk.Frame):
 
     # ---------- Lancement ID contexte ----------
     def start_id_thread(self):
-        if self.busy:
-            print("Une action est déjà en cours.", file=self.stdout_redirect)
+        if self.id_thread and self.id_thread.is_alive():
+            self.id_cancel.set()
+            self._clear_log()
             return
         ae = self.ae_shp_var.get().strip()
         ze = self.ze_shp_var.get().strip()
@@ -1713,8 +1811,9 @@ class ContexteEcoTab(ttk.Frame):
             messagebox.showerror("Erreur", "Un shapefile est introuvable."); return
 
         self.busy = True
+        self.id_cancel.clear()
         self.export_button.config(state="disabled")
-        self.id_button.config(state="disabled")
+        self.id_button.config(state="disabled", text="■ Annuler")
         self.progress.config(mode="indeterminate")
         self.progress.start()
         self.status_label.config(text="Analyse en cours…")
@@ -1725,17 +1824,23 @@ class ContexteEcoTab(ttk.Frame):
             "ID_TAMPON_KM": float(self.buffer_var.get()),
         }); save_prefs(self.prefs)
 
-        t = threading.Thread(target=self._run_id_logic, args=(ae, ze, float(self.buffer_var.get())), daemon=True)
-        t.start()
+        self.id_thread = threading.Thread(target=self._run_id_logic, args=(ae, ze, float(self.buffer_var.get())), daemon=True)
+        self.id_thread.start()
 
     def _run_id_logic(self, ae: str, ze: str, buffer_km: float):
         old_stdout = sys.stdout
         sys.stdout = self.stdout_redirect
         try:
+            if self.id_cancel.is_set():
+                log_with_time("Analyse annulée.")
+                return
             from id_contexte_eco import run_analysis as run_id_context
             run_id_context(ae, ze, buffer_km)
-            log_with_time("Analyse terminée.")
-            self.after(0, lambda: self.status_label.config(text="Terminé"))
+            if self.id_cancel.is_set():
+                log_with_time("Analyse annulée.")
+            else:
+                log_with_time("Analyse terminée.")
+                self.after(0, lambda: self.status_label.config(text="Terminé"))
         except Exception as e:
             log_with_time(f"Erreur: {e}")
             self.after(0, lambda: messagebox.showerror("Erreur", str(e)))
@@ -1745,9 +1850,13 @@ class ContexteEcoTab(ttk.Frame):
             self.after(0, self._run_finished)
 
     def _run_finished(self):
-        self.export_button.config(state="normal")
-        self.id_button.config(state="normal")
+        self.export_button.config(state="normal", text="▶ Lancer l’export")
+        self.id_button.config(state="normal", text="Lancer l’ID Contexte éco")
         self.busy = False
+        self.export_thread = None
+        self.id_thread = None
+        self.export_cancel.clear()
+        self.id_cancel.clear()
 
 # =========================
 # App principale avec Notebook
