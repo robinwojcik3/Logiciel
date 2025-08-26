@@ -28,6 +28,7 @@ import shutil
 import tempfile
 import datetime
 import threading
+import multiprocessing as mp
 import urllib.request
 import webbrowser
 import tkinter as tk
@@ -818,7 +819,15 @@ class ExportCartesTab(ttk.Frame):
                 self.progress["value"] = min(self.progress_done, self.total_expected)
                 self.status_label.config(text=f"Progression : {self.progress_done}/{self.total_expected}")
 
-            with ProcessPoolExecutor(max_workers=int(self.workers_var.get())) as ex:
+            # S'assure que les processus utilisent l'interpréteur Python de QGIS
+            qgis_py = os.path.join(QGIS_ROOT, "apps", PY_VER, "python.exe")
+            ctx = mp.get_context("spawn")
+            try:
+                ctx.set_executable(qgis_py)
+            except Exception:
+                log_with_time(f"Impossible de définir l'interpréteur des workers: {qgis_py}")
+
+            with ProcessPoolExecutor(max_workers=int(self.workers_var.get()), mp_context=ctx) as ex:
                 futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
                 for fut in as_completed(futures):
                     try:
