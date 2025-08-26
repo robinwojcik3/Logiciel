@@ -33,12 +33,12 @@ def log_with_time(message):
     print(f"[{now}] {message}")
 
 
-def run_analysis(couche_reference1: str, couche_reference2: str):
-    """
-    Lance l'analyse d'identification des zonages à partir des shapefiles
-    fournis par l'utilisateur.
+def run_analysis(couche_reference1: str, couche_reference2: str, buffer_km: float = 5.0):
+    """Lance l'analyse d'identification des zonages à partir des shapefiles fournis.
+
     :param couche_reference1: chemin vers la couche "Aire d'étude élargie"
     :param couche_reference2: chemin vers la couche "Zone d'étude"
+    :param buffer_km: distance du tampon appliqué autour de la zone d'étude, en km
     """
     log_with_time("Démarrage du script d'identification des zonages...")
 
@@ -85,6 +85,18 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
             log_with_time("Reprojection de la deuxième couche de référence effectuée")
         except Exception as e:
             log_with_time(f"Erreur lors de la reprojection de la deuxième couche de référence : {e}")
+            return
+
+    buffer_dist = buffer_km * 1000.0
+    if buffer_dist > 0:
+        try:
+            reference2_gdf = gpd.GeoDataFrame(
+                geometry=reference2_gdf.geometry.buffer(buffer_dist),
+                crs=reference2_gdf.crs,
+            )
+            log_with_time(f"Tampon de {buffer_km} km appliqué à la zone d'étude")
+        except Exception as e:
+            log_with_time(f"Erreur lors de l'application du tampon : {e}")
             return
 
     # Calculer le centroïde global de la couche de référence 2 en utilisant union_all()
