@@ -632,8 +632,6 @@ class ExportCartesTab(ttk.Frame):
         self.export_button.grid(row=0, column=0, sticky="w")
         obtn = ttk.Button(act, text="📂 Ouvrir le dossier de sortie", command=self._open_out_dir)
         obtn.grid(row=0, column=1, padx=(10,0)); ToolTip(obtn, OUT_IMG)
-        tbtn = ttk.Button(act, text="🧪 Tester QGIS", command=self._test_qgis_threaded)
-        tbtn.grid(row=0, column=2, padx=(10,0)); ToolTip(tbtn, "Vérifier l’import QGIS/Qt")
 
         # Projets
         proj = ttk.Frame(right, style="Card.TFrame", padding=12); proj.pack(fill=tk.BOTH, expand=True)
@@ -741,26 +739,6 @@ class ExportCartesTab(ttk.Frame):
             os.makedirs(OUT_IMG, exist_ok=True); os.startfile(OUT_IMG)
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier de sortie : {e}")
-
-    def _test_qgis_threaded(self):
-        t = threading.Thread(target=self._test_qgis); t.daemon = True; t.start()
-
-    def _test_qgis(self):
-        try:
-            log_with_time("Test QGIS : import…")
-            qt_base = None
-            for name in ("Qt6", "Qt5"):
-                base = os.path.join(QGIS_ROOT, "apps", name)
-                if os.path.isdir(base): qt_base = base; break
-            if not qt_base: raise RuntimeError("Répertoire Qt introuvable")
-            sys.path.insert(0, os.path.join(QGIS_APP, "python"))
-            sys.path.insert(0, os.path.join(QGIS_ROOT, "apps", PY_VER, "Lib", "site-packages"))
-            from qgis.core import QgsApplication  # noqa: F401
-            log_with_time("Test QGIS : OK")
-            messagebox.showinfo("QGIS", "Import QGIS OK.")
-        except Exception as e:
-            log_with_time(f"Échec import QGIS : {e}")
-            messagebox.showerror("QGIS", f"Échec import QGIS : {e}")
 
     def start_export_thread(self):
         if not self.ze_shp_var.get() or not self.ae_shp_var.get():
