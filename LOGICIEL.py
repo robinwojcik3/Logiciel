@@ -561,9 +561,9 @@ class StyleHelper:
         s.configure("TProgressbar", troughcolor=border)
 
 # =========================
-# Onglet 1 — Export Cartes (mêmes fonctionnalités)
+# Onglet « Contexte éco » (export cartes + ID)
 # =========================
-class ExportCartesTab(ttk.Frame):
+class ContexteEcoTab(ttk.Frame):
     def __init__(self, parent, style_helper: StyleHelper, prefs: dict):
         super().__init__(parent, padding=12)
         self.parent = parent
@@ -581,40 +581,34 @@ class ExportCartesTab(ttk.Frame):
         self.dpi_var      = tk.IntVar(value=int(self.prefs.get("DPI", DPI_DEFAULT)))
         self.workers_var  = tk.IntVar(value=int(self.prefs.get("N_WORKERS", N_WORKERS_DEFAULT)))
         self.margin_var   = tk.DoubleVar(value=float(self.prefs.get("MARGIN_FAC", MARGIN_FAC_DEFAULT)))
+        self.buffer_var   = tk.DoubleVar(value=float(self.prefs.get("ID_TAMPON_KM", 5.0)))
 
         self.project_vars: dict[str, tk.IntVar] = {}
         self.all_projects: List[str] = []
         self.filtered_projects: List[str] = []
         self.total_expected = 0
         self.progress_done  = 0
+        self.busy = False
 
         self._build_ui()
         self._populate_projects()
         self._update_counts()
 
     def _build_ui(self):
-        header = ttk.Frame(self, style="Header.TFrame", padding=(14, 12))
-        header.pack(fill=tk.X, pady=(0, 10))
-        ttk.Label(header, text="Export cartes — QGIS → PNG", style="Card.TLabel", font=self.font_title)\
-            .grid(row=0, column=0, sticky="w")
-        ttk.Label(header, text="Sélection shapefiles, choix du cadrage, export multi-projets.", style="Subtle.TLabel", font=self.font_sub)\
-            .grid(row=1, column=0, sticky="w", pady=(4,0))
-        header.columnconfigure(0, weight=1)
-
-        grid = ttk.Frame(self); grid.pack(fill=tk.BOTH, expand=True)
-        left = ttk.Frame(grid);  left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
-        right = ttk.Frame(grid); right.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
-        grid.columnconfigure(0, weight=1); grid.columnconfigure(1, weight=1); grid.rowconfigure(0, weight=1)
-
-        # Shapefiles
-        shp = ttk.Frame(left, style="Card.TFrame", padding=12); shp.pack(fill=tk.X)
+        # Section shapefiles
+        shp = ttk.Frame(self, style="Card.TFrame", padding=12); shp.pack(fill=tk.X)
         ttk.Label(shp, text="1. Couches Shapefile", style="Card.TLabel").grid(row=0, column=0, columnspan=4, sticky="w")
         self._file_row(shp, 1, "📁 Zone d'étude…", self.ze_shp_var, lambda: self._select_shapefile('ZE'))
         self._file_row(shp, 2, "📁 Aire d'étude élargie…", self.ae_shp_var, lambda: self._select_shapefile('AE'))
         shp.columnconfigure(1, weight=1)
 
-        # Options
-        opt = ttk.Frame(left, style="Card.TFrame", padding=12); opt.pack(fill=tk.X, pady=(10,0))
+        # Export cartes
+        grid = ttk.Frame(self); grid.pack(fill=tk.BOTH, expand=True, pady=(10,0))
+        left = ttk.Frame(grid);  left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        right = ttk.Frame(grid); right.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+        grid.columnconfigure(0, weight=1); grid.columnconfigure(1, weight=1); grid.rowconfigure(0, weight=1)
+
+        opt = ttk.Frame(left, style="Card.TFrame", padding=12); opt.pack(fill=tk.X)
         ttk.Label(opt, text="2. Cadrage et options", style="Card.TLabel").grid(row=0, column=0, columnspan=6, sticky="w")
         ttk.Radiobutton(opt, text="AE + ZE", variable=self.cadrage_var, value="BOTH", style="Card.TRadiobutton").grid(row=1, column=0, sticky="w", pady=(6,2))
         ttk.Radiobutton(opt, text="ZE uniquement", variable=self.cadrage_var, value="ZE", style="Card.TRadiobutton").grid(row=1, column=1, sticky="w", padx=(12,0))
@@ -630,7 +624,7 @@ class ExportCartesTab(ttk.Frame):
 
         # Actions
         act = ttk.Frame(left, style="Card.TFrame", padding=12); act.pack(fill=tk.X, pady=(10,0))
-        self.export_button = ttk.Button(act, text="▶ Lancer l’export", style="Accent.TButton", command=self.start_export_thread)
+        self.export_button = ttk.Button(act, text="▶ Lancer l’export cartes", style="Accent.TButton", command=self.start_export_thread)
         self.export_button.grid(row=0, column=0, sticky="w")
         obtn = ttk.Button(act, text="📂 Ouvrir le dossier de sortie", command=self._open_out_dir)
         obtn.grid(row=0, column=1, padx=(10,0)); ToolTip(obtn, OUT_IMG)
@@ -657,6 +651,14 @@ class ExportCartesTab(ttk.Frame):
         scrollbar.grid(row=2, column=4, sticky="ns", padx=(6,0))
         proj.rowconfigure(2, weight=1); proj.columnconfigure(1, weight=1)
 
+        # ID Contexte éco
+        idf = ttk.Frame(self, style="Card.TFrame", padding=12); idf.pack(fill=tk.X, pady=(10,0))
+        ttk.Label(idf, text="Tampon zone d'étude (km)", style="Card.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Spinbox(idf, from_=0.0, to=50.0, increment=0.5, textvariable=self.buffer_var, width=6, justify="right").grid(row=0, column=1, padx=(8,0))
+        self.id_button = ttk.Button(idf, text="▶ Lancer l’ID Contexte éco", style="Accent.TButton", command=self.start_id_thread)
+        self.id_button.grid(row=0, column=2, padx=(12,0))
+        idf.columnconfigure(1, weight=1)
+
         # Bas
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12); bottom.pack(fill=tk.BOTH, expand=True, pady=(10,0))
         self.status_label = ttk.Label(bottom, text="Prêt.", style="Status.TLabel"); self.status_label.grid(row=0, column=0, sticky="w")
@@ -673,7 +675,7 @@ class ExportCartesTab(ttk.Frame):
         self.log_text['yscrollcommand'] = log_scroll.set
         log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        sys.stdout = TextRedirector(self.log_text)
+        self.stdout_redirect = TextRedirector(self.log_text)
 
     def _file_row(self, parent, row: int, label: str, var: tk.StringVar, cmd):
         btn = ttk.Button(parent, text=label, command=cmd)
@@ -744,6 +746,11 @@ class ExportCartesTab(ttk.Frame):
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier de sortie : {e}")
 
+    def _run_finished(self):
+        self.export_button.config(state="normal")
+        self.id_button.config(state="normal")
+        self.busy = False
+
     def _test_qgis_threaded(self):
         t = threading.Thread(target=self._test_qgis); t.daemon = True; t.start()
 
@@ -764,7 +771,48 @@ class ExportCartesTab(ttk.Frame):
             log_with_time(f"Échec import QGIS : {e}")
             messagebox.showerror("QGIS", f"Échec import QGIS : {e}")
 
+    def start_id_thread(self):
+        if self.busy:
+            print("Une action est déjà en cours.", file=self.stdout_redirect); return
+        if not self.ze_shp_var.get() or not self.ae_shp_var.get():
+            messagebox.showerror("Erreur", "Sélectionnez les deux shapefiles."); return
+        if not os.path.isfile(self.ze_shp_var.get()) or not os.path.isfile(self.ae_shp_var.get()):
+            messagebox.showerror("Erreur", "Un shapefile est introuvable."); return
+
+        self.busy = True
+        self.export_button.config(state="disabled")
+        self.id_button.config(state="disabled")
+        self.progress.configure(mode="indeterminate")
+        self.progress.start()
+        self.status_label.config(text="Analyse en cours…")
+
+        self.prefs.update({
+            "ZE_SHP": self.ze_shp_var.get(),
+            "AE_SHP": self.ae_shp_var.get(),
+            "ID_TAMPON_KM": float(self.buffer_var.get()),
+        }); save_prefs(self.prefs)
+
+        t = threading.Thread(target=self._run_id)
+        t.daemon = True; t.start()
+
+    def _run_id(self):
+        old_stdout = sys.stdout
+        sys.stdout = self.stdout_redirect
+        try:
+            run_id_context(self.ae_shp_var.get(), self.ze_shp_var.get(), float(self.buffer_var.get()))
+            print("Analyse terminée.")
+        except Exception as e:
+            print(f"Erreur: {e}")
+        finally:
+            sys.stdout = old_stdout
+            self.after(0, self.progress.stop)
+            self.after(0, lambda: self.progress.configure(mode='determinate', value=0))
+            self.after(0, lambda: self.status_label.config(text="Terminé."))
+            self.after(0, self._run_finished)
+
     def start_export_thread(self):
+        if self.busy:
+            print("Une action est déjà en cours.", file=self.stdout_redirect); return
         if not self.ze_shp_var.get() or not self.ae_shp_var.get():
             messagebox.showerror("Erreur", "Sélectionnez les deux shapefiles."); return
         if not os.path.isfile(self.ze_shp_var.get()) or not os.path.isfile(self.ae_shp_var.get()):
@@ -773,9 +821,12 @@ class ExportCartesTab(ttk.Frame):
         if not projets:
             messagebox.showerror("Erreur", "Sélectionnez au moins un projet."); return
 
-        self._update_counts()
+        self.busy = True
         self.export_button.config(state="disabled")
+        self.id_button.config(state="disabled")
         self.progress_done = 0; self.progress["value"] = 0
+        self.progress.configure(mode="determinate")
+        self.status_label.config(text="Préparation…")
 
         mode = self.cadrage_var.get(); per_project = 2 if mode == "BOTH" else 1
         self.total_expected = per_project * len(projets)
@@ -789,12 +840,15 @@ class ExportCartesTab(ttk.Frame):
             "DPI": int(self.dpi_var.get()),
             "N_WORKERS": int(self.workers_var.get()),
             "MARGIN_FAC": float(self.margin_var.get()),
+            "ID_TAMPON_KM": float(self.buffer_var.get()),
         }); save_prefs(self.prefs)
 
         t = threading.Thread(target=self._run_export_logic, args=(projets,))
         t.daemon = True; t.start()
 
     def _run_export_logic(self, projets: List[str]):
+        old_stdout = sys.stdout
+        sys.stdout = self.stdout_redirect
         try:
             start = datetime.datetime.now()
             os.makedirs(OUT_IMG, exist_ok=True)
@@ -836,7 +890,8 @@ class ExportCartesTab(ttk.Frame):
             log_with_time(f"Erreur critique: {e}")
             self.after(0, lambda: messagebox.showerror("Erreur", str(e)))
         finally:
-            self.after(0, lambda: self.export_button.config(state="normal"))
+            sys.stdout = old_stdout
+            self.after(0, self._run_finished)
 
 # =========================
 # Onglet 2 — Remonter le temps (UI + logique)
@@ -1466,21 +1521,18 @@ class MainApp:
         nb = ttk.Notebook(root)
         nb.pack(fill=tk.BOTH, expand=True, padx=12, pady=10)
 
-        self.tab_export = ExportCartesTab(nb, self.style_helper, self.prefs)
-        self.tab_rlt    = RemonterLeTempsTab(nb, self.style_helper, self.prefs)
-        self.tab_plant  = PlantNetTab(nb, self.style_helper, self.prefs)
-        self.tab_idcon  = IDContexteEcoTab(nb, self.style_helper, self.prefs)
+        self.tab_ctx   = ContexteEcoTab(nb, self.style_helper, self.prefs)
+        self.tab_rlt   = RemonterLeTempsTab(nb, self.style_helper, self.prefs)
+        self.tab_plant = PlantNetTab(nb, self.style_helper, self.prefs)
 
-        nb.add(self.tab_export, text="Export Cartes")
+        nb.add(self.tab_ctx, text="Contexte éco")
         nb.add(self.tab_rlt, text="Remonter le temps")
         nb.add(self.tab_plant, text="Pl@ntNet")
-        nb.add(self.tab_idcon, text="ID contexte éco")
 
         # Raccourcis utiles
         root.bind("<Control-1>", lambda _e: nb.select(0))
         root.bind("<Control-2>", lambda _e: nb.select(1))
         root.bind("<Control-3>", lambda _e: nb.select(2))
-        root.bind("<Control-4>", lambda _e: nb.select(3))
 
         # Sauvegarde prefs à la fermeture
         root.protocol("WM_DELETE_WINDOW", self._on_close)
