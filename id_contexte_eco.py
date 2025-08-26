@@ -33,34 +33,34 @@ def log_with_time(message):
     print(f"[{now}] {message}")
 
 
-def run_analysis(couche_reference1: str, couche_reference2: str):
+def run_analysis(ae_shp: str, ze_shp: str, buffer_km: float = 5.0):
     """
-    Lance l'analyse d'identification des zonages à partir des shapefiles
-    fournis par l'utilisateur.
-    :param couche_reference1: chemin vers la couche "Aire d'étude élargie"
-    :param couche_reference2: chemin vers la couche "Zone d'étude"
+    Lance l'analyse d'identification des zonages à partir des shapefiles fournis.
+    :param ae_shp: chemin vers la couche "Aire d'étude élargie"
+    :param ze_shp: chemin vers la couche "Zone d'étude"
+    :param buffer_km: tampon autour de la zone d'étude en kilomètres
     """
     log_with_time("Démarrage du script d'identification des zonages...")
 
     # Vérifier si les fichiers de référence existent
-    if not os.path.exists(couche_reference1):
-        log_with_time(f"Le fichier de la première couche de référence n'a pas été trouvé : {couche_reference1}")
+    if not os.path.exists(ae_shp):
+        log_with_time(f"Le fichier de la première couche de référence n'a pas été trouvé : {ae_shp}")
         return
 
-    if not os.path.exists(couche_reference2):
-        log_with_time(f"Le fichier de la deuxième couche de référence n'a pas été trouvé : {couche_reference2}")
+    if not os.path.exists(ze_shp):
+        log_with_time(f"Le fichier de la deuxième couche de référence n'a pas été trouvé : {ze_shp}")
         return
 
     # Chargement des couches de référence
     try:
-        reference_gdf = gpd.read_file(couche_reference1)
+        reference_gdf = gpd.read_file(ae_shp)
         log_with_time("Première couche de référence chargée avec succès")
     except Exception as e:
         log_with_time(f"Erreur lors du chargement de la première couche de référence : {e}")
         return
 
     try:
-        reference2_gdf = gpd.read_file(couche_reference2)
+        reference2_gdf = gpd.read_file(ze_shp)
         log_with_time("Deuxième couche de référence chargée avec succès")
     except Exception as e:
         log_with_time(f"Erreur lors du chargement de la deuxième couche de référence : {e}")
@@ -86,6 +86,11 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
         except Exception as e:
             log_with_time(f"Erreur lors de la reprojection de la deuxième couche de référence : {e}")
             return
+
+    buffer_dist = buffer_km * 1000.0
+    if buffer_dist > 0:
+        reference2_gdf = gpd.GeoDataFrame(reference2_gdf, geometry=reference2_gdf.geometry.buffer(buffer_dist), crs=crs_projected)
+        log_with_time(f"Tampon appliqué sur la zone d'étude : {buffer_km} km")
 
     # Calculer le centroïde global de la couche de référence 2 en utilisant union_all()
     try:
@@ -739,7 +744,8 @@ def run_analysis(couche_reference1: str, couche_reference2: str):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        print("Usage: id_contexte_eco.py <couche_reference1> <couche_reference2>")
+    if len(sys.argv) < 3:
+        print("Usage: id_contexte_eco.py <ae_shp> <ze_shp> [tampon_km]")
         sys.exit(1)
-    run_analysis(sys.argv[1], sys.argv[2])
+    buffer_arg = float(sys.argv[3]) if len(sys.argv) > 3 else 5.0
+    run_analysis(sys.argv[1], sys.argv[2], buffer_arg)
