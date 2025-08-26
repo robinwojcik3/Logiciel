@@ -44,6 +44,7 @@ from io import BytesIO
 import pillow_heif
 import zipfile
 import traceback
+from . import __version__ as APP_VERSION
 
 # ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
 from selenium import webdriver
@@ -1771,6 +1772,13 @@ class MainApp:
         btn_theme = ttk.Button(top, text="Changer de thème", command=self._toggle_theme)
         btn_theme.pack(side=tk.RIGHT)
 
+        # Menu Aide
+        menubar = tk.Menu(root)
+        help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(label="À propos", command=self._show_about)
+        menubar.add_cascade(label="Aide", menu=help_menu)
+        root.config(menu=menubar)
+
         # Notebook
         nb = ttk.Notebook(root)
         nb.pack(fill=tk.BOTH, expand=True, padx=12, pady=10)
@@ -1805,6 +1813,12 @@ class MainApp:
             save_prefs(self.prefs)
         finally:
             self.root.destroy()
+
+    def _show_about(self):
+        messagebox.showinfo(
+            "À propos",
+            f"Contexte éco — Suite d’outils\nVersion {APP_VERSION}"
+        )
 
 # =========================
 # Main
