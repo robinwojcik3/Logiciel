@@ -859,6 +859,11 @@ class RemonterLeTempsTab(ttk.Frame):
         self.out_dir_var = tk.StringVar(value=self.prefs.get("RLT_OUT", OUTPUT_DIR_RLT))
         self.headless_var= tk.BooleanVar(value=bool(self.prefs.get("RLT_HEADLESS", False)))
 
+        self.run_thread: Optional[threading.Thread] = None
+        self.run_stop_event = threading.Event()
+        self.bassin_thread: Optional[threading.Thread] = None
+        self.bassin_stop_event = threading.Event()
+
         self._build_ui()
 
     def _build_ui(self):
@@ -956,14 +961,23 @@ class RemonterLeTempsTab(ttk.Frame):
         webbrowser.open(url)
 
     def _start_bassin_thread(self):
+        if self.bassin_thread and self.bassin_thread.is_alive():
+            self.bassin_stop_event.set()
+            self._clear_console()
+            self.bassin_btn.config(text="💧 Bassin versant")
+            return
         if not self.coord_var.get().strip():
             messagebox.showerror("Erreur", "Renseigner les coordonnées en DMS."); return
-        self.bassin_btn.config(state="disabled")
-        t = threading.Thread(target=self._run_bassin)
-        t.daemon = True
-        t.start()
+        self.bassin_stop_event.clear()
+        self._clear_console()
+        self.bassin_btn.config(text="■ Arrêter")
+        self.bassin_thread = threading.Thread(target=self._run_bassin, daemon=True)
+        self.bassin_thread.start()
 
     def _run_bassin(self):
+        if self.bassin_stop_event.is_set():
+            self.after(0, lambda: self.bassin_btn.config(text="💧 Bassin versant"))
+            return
         try:
             user_address = self.coord_var.get().strip()
             download_dir = OUT_IMG
@@ -1069,7 +1083,8 @@ class RemonterLeTempsTab(ttk.Frame):
         except Exception as e:
             print(f"[BV] Erreur décompression : {e}", file=self.stdout_redirect)
         finally:
-            self.after(0, lambda: self.bassin_btn.config(state="normal"))
+            self.bassin_stop_event.clear()
+            self.after(0, lambda: self.bassin_btn.config(text="💧 Bassin versant"))
 
     def _detect_commune(self, lat: float, lon: float) -> str:
         try:
@@ -1087,14 +1102,23 @@ class RemonterLeTempsTab(ttk.Frame):
         return "Inconnue"
 
     def _start_thread(self):
+        if self.run_thread and self.run_thread.is_alive():
+            self.run_stop_event.set()
+            self._clear_console()
+            self.run_btn.config(text="▶ Capturer + Générer le Word")
+            return
         if not self.coord_var.get().strip():
             messagebox.showerror("Erreur", "Renseigner les coordonnées en DMS."); return
-        self.run_btn.config(state="disabled")
-        t = threading.Thread(target=self._run_process)
-        t.daemon = True
-        t.start()
+        self.run_stop_event.clear()
+        self._clear_console()
+        self.run_btn.config(text="■ Arrêter")
+        self.run_thread = threading.Thread(target=self._run_process, daemon=True)
+        self.run_thread.start()
 
     def _run_process(self):
+        if self.run_stop_event.is_set():
+            self.after(0, lambda: self.run_btn.config(text="▶ Capturer + Générer le Word"))
+            return
         try:
             # Sauvegarde préférences
             self.prefs.update({
@@ -1216,10 +1240,16 @@ class RemonterLeTempsTab(ttk.Frame):
             print(f"[IGN] Erreur : {e}", file=self.stdout_redirect)
             messagebox.showerror("IGN", str(e))
         finally:
-            self.after(0, lambda: self.run_btn.config(state="normal"))
+            self.run_stop_event.clear()
+            self.after(0, lambda: self.run_btn.config(text="▶ Capturer + Générer le Word"))
 
     def _set_status(self, txt: str):
         self.after(0, lambda: self.status_label.config(text=txt))
+
+    def _clear_console(self):
+        self.log_text.config(state="normal")
+        self.log_text.delete("1.0", tk.END)
+        self.log_text.config(state="disabled")
 
 # =========================
 # Onglet 3 — Identification Pl@ntNet (UI + logique)
@@ -1235,6 +1265,9 @@ class PlantNetTab(ttk.Frame):
         self.font_mono  = tkfont.Font(family="Consolas", size=9)
 
         self.folder_var = tk.StringVar(value=self.prefs.get("PLANTNET_FOLDER", ""))
+
+        self.thread: Optional[threading.Thread] = None
+        self.stop_event = threading.Event()
 
         self._build_ui()
 
@@ -1290,20 +1323,29 @@ class PlantNetTab(ttk.Frame):
             messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
 
     def _start_thread(self):
-        self.run_btn.config(state="disabled")
-        t = threading.Thread(target=self._run_process)
-        t.daemon = True
-        t.start()
+        if self.thread and self.thread.is_alive():
+            self.stop_event.set()
+            self._clear_console()
+            self.run_btn.config(text="▶ Lancer l'analyse")
+            return
+        self.stop_event.clear()
+        self._clear_console()
+        self.run_btn.config(text="■ Arrêter")
+        self.thread = threading.Thread(target=self._run_process, daemon=True)
+        self.thread.start()
 
     def _run_process(self):
+        if self.stop_event.is_set():
+            self.after(0, lambda: self.run_btn.config(text="▶ Lancer l'analyse"))
+            return
         folder = self.folder_var.get().strip()
         if not folder:
             print("Veuillez sélectionner un dossier.", file=self.stdout_redirect)
-            self.after(0, lambda: self.run_btn.config(state="normal"))
+            self.after(0, lambda: self.run_btn.config(text="▶ Lancer l'analyse"))
             return
         if not os.path.exists(folder):
             print(f"Le dossier à traiter n'existe pas : {folder}", file=self.stdout_redirect)
-            self.after(0, lambda: self.run_btn.config(state="normal"))
+            self.after(0, lambda: self.run_btn.config(text="▶ Lancer l'analyse"))
             return
 
         self.prefs["PLANTNET_FOLDER"] = folder
@@ -1319,7 +1361,7 @@ class PlantNetTab(ttk.Frame):
 
         if not image_files:
             print("Aucune image à traiter dans le dossier.", file=self.stdout_redirect)
-            self.after(0, lambda: self.run_btn.config(state="normal"))
+            self.after(0, lambda: self.run_btn.config(text="▶ Lancer l'analyse"))
             return
 
         plant_name_counts = {}
@@ -1327,6 +1369,8 @@ class PlantNetTab(ttk.Frame):
         sys.stdout = self.stdout_redirect
         try:
             for image_path in image_files:
+                if self.stop_event.is_set():
+                    break
                 organ = 'flower'
                 plant_name = identify_plant(image_path, organ)
                 if plant_name:
@@ -1338,7 +1382,13 @@ class PlantNetTab(ttk.Frame):
             print("Analyse terminée.")
         finally:
             sys.stdout = old_stdout
-            self.after(0, lambda: self.run_btn.config(state="normal"))
+            self.stop_event.clear()
+            self.after(0, lambda: self.run_btn.config(text="▶ Lancer l'analyse"))
+
+    def _clear_console(self):
+        self.log_text.config(state="normal")
+        self.log_text.delete("1.0", tk.END)
+        self.log_text.config(state="disabled")
 
 # =========================
 # Onglet 4 — ID contexte éco
@@ -1470,6 +1520,8 @@ class ContexteEcoTab(ttk.Frame):
         self.total_expected = 0
         self.progress_done  = 0
         self.busy = False
+        self.thread: Optional[threading.Thread] = None
+        self.stop_event = threading.Event()
 
         self._build_ui()
         self._populate_projects()
@@ -1626,8 +1678,13 @@ class ContexteEcoTab(ttk.Frame):
     # ---------- Lancement export ----------
     def start_export_thread(self):
         if self.busy:
-            print("Une action est déjà en cours.", file=self.stdout_redirect)
+            self.stop_event.set()
+            self._clear_console()
+            self.export_button.config(text="Lancer l’export cartes")
+            self.id_button.config(state="normal")
             return
+        self.stop_event.clear()
+        self._clear_console()
         if not self.ze_shp_var.get() or not self.ae_shp_var.get():
             messagebox.showerror("Erreur", "Sélectionnez les deux shapefiles."); return
         if not os.path.isfile(self.ze_shp_var.get()) or not os.path.isfile(self.ae_shp_var.get()):
@@ -1637,7 +1694,7 @@ class ContexteEcoTab(ttk.Frame):
             messagebox.showerror("Erreur", "Sélectionnez au moins un projet."); return
 
         self.busy = True
-        self.export_button.config(state="disabled")
+        self.export_button.config(text="■ Arrêter")
         self.id_button.config(state="disabled")
         mode = self.cadrage_var.get(); per_project = 2 if mode == "BOTH" else 1
         self.total_expected = per_project * len(projets)
@@ -1655,10 +1712,13 @@ class ContexteEcoTab(ttk.Frame):
             "MARGIN_FAC": float(self.margin_var.get()),
         }); save_prefs(self.prefs)
 
-        t = threading.Thread(target=self._run_export_logic, args=(projets,), daemon=True)
-        t.start()
+        self.thread = threading.Thread(target=self._run_export_logic, args=(projets,), daemon=True)
+        self.thread.start()
 
     def _run_export_logic(self, projets: List[str]):
+        if self.stop_event.is_set():
+            self.after(0, self._run_finished)
+            return
         old_stdout = sys.stdout
         sys.stdout = self.stdout_redirect
         try:
@@ -1683,6 +1743,9 @@ class ContexteEcoTab(ttk.Frame):
             with ProcessPoolExecutor(max_workers=int(self.workers_var.get())) as ex:
                 futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
                 for fut in as_completed(futures):
+                    if self.stop_event.is_set():
+                        ex.shutdown(wait=False, cancel_futures=True)
+                        return
                     try:
                         ok, ko = fut.result()
                         ok_total += ok; ko_total += ko
@@ -1703,8 +1766,13 @@ class ContexteEcoTab(ttk.Frame):
     # ---------- Lancement ID contexte ----------
     def start_id_thread(self):
         if self.busy:
-            print("Une action est déjà en cours.", file=self.stdout_redirect)
+            self.stop_event.set()
+            self._clear_console()
+            self.id_button.config(text="Lancer l’ID Contexte éco")
+            self.export_button.config(state="normal")
             return
+        self.stop_event.clear()
+        self._clear_console()
         ae = self.ae_shp_var.get().strip()
         ze = self.ze_shp_var.get().strip()
         if not ae or not ze:
@@ -1714,7 +1782,7 @@ class ContexteEcoTab(ttk.Frame):
 
         self.busy = True
         self.export_button.config(state="disabled")
-        self.id_button.config(state="disabled")
+        self.id_button.config(text="■ Arrêter")
         self.progress.config(mode="indeterminate")
         self.progress.start()
         self.status_label.config(text="Analyse en cours…")
@@ -1725,10 +1793,13 @@ class ContexteEcoTab(ttk.Frame):
             "ID_TAMPON_KM": float(self.buffer_var.get()),
         }); save_prefs(self.prefs)
 
-        t = threading.Thread(target=self._run_id_logic, args=(ae, ze, float(self.buffer_var.get())), daemon=True)
-        t.start()
+        self.thread = threading.Thread(target=self._run_id_logic, args=(ae, ze, float(self.buffer_var.get())), daemon=True)
+        self.thread.start()
 
     def _run_id_logic(self, ae: str, ze: str, buffer_km: float):
+        if self.stop_event.is_set():
+            self.after(0, self._run_finished)
+            return
         old_stdout = sys.stdout
         sys.stdout = self.stdout_redirect
         try:
@@ -1745,9 +1816,15 @@ class ContexteEcoTab(ttk.Frame):
             self.after(0, self._run_finished)
 
     def _run_finished(self):
-        self.export_button.config(state="normal")
-        self.id_button.config(state="normal")
+        self.export_button.config(text="Lancer l’export cartes", state="normal")
+        self.id_button.config(text="Lancer l’ID Contexte éco", state="normal")
         self.busy = False
+        self.stop_event.clear()
+
+    def _clear_console(self):
+        self.log_text.config(state="normal")
+        self.log_text.delete("1.0", tk.END)
+        self.log_text.config(state="disabled")
 
 # =========================
 # App principale avec Notebook
