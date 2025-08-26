@@ -40,6 +40,7 @@ from io import BytesIO
 import pillow_heif
 import zipfile
 import traceback
+from export_cartes import worker_run as legacy_worker_run
 
 # ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
 from selenium import webdriver
@@ -819,7 +820,7 @@ class ExportCartesTab(ttk.Frame):
                 self.status_label.config(text=f"Progression : {self.progress_done}/{self.total_expected}")
 
             with ProcessPoolExecutor(max_workers=int(self.workers_var.get())) as ex:
-                futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
+                futures = [ex.submit(legacy_worker_run, (chunk, cfg)) for chunk in chunks if chunk]
                 for fut in as_completed(futures):
                     try:
                         ok, ko = fut.result()
