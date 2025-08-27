@@ -1698,43 +1698,50 @@ class ContexteEcoTab(ttk.Frame):
                 if data['occupation_p1'] != 'Non trouvé':
                     print(data['occupation_p1'], file=self.stdout_redirect)
 
-                # Étapes supplémentaires : ouverture et interaction avec FloreApp
-                try:
-                    wait = WebDriverWait(self.wiki_driver, 0.5)
-                    # 1) Ouvrir l'URL dans un nouvel onglet
-                    self.wiki_driver.execute_script(
-                        "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
-                    )
-                    self.wiki_driver.switch_to.window(self.wiki_driver.window_handles[-1])
-                    # 2) Cliquer sur la barre de recherche
-                    addr = wait.until(
-                        EC.element_to_be_clickable((By.ID, "address-input"))
-                    )
-                    addr.click()
-                    # 3) Saisir les coordonnées du centroïde
-                    addr.clear()
-                    addr.send_keys(coords_dms)
-                    # 4) Valider la recherche
-                    wait.until(
-                        EC.element_to_be_clickable((By.ID, "search-address-btn"))
-                    ).click()
-                    # 5) Ouvrir le menu des couches
-                    wait.until(
-                        EC.element_to_be_clickable(
-                            (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
+                # Étapes supplémentaires : ouverture des cartes et activation des couches
+                def _open_layer(layer_label: str) -> None:
+                    """Ouvre FloreApp dans un nouvel onglet et coche ``layer_label``."""
+                    try:
+                        wait = WebDriverWait(self.wiki_driver, 0.5)
+                        # 1) Ouvrir l'URL dans un nouvel onglet
+                        self.wiki_driver.execute_script(
+                            "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
                         )
-                    ).click()
-                    # 6) Activer la couche "Carte flore"
-                    wait.until(
-                        EC.element_to_be_clickable(
-                            (By.XPATH, "//*[contains(text(),'Carte flore')]")
+                        self.wiki_driver.switch_to.window(self.wiki_driver.window_handles[-1])
+                        # 2) Cliquer sur la barre de recherche
+                        addr = wait.until(
+                            EC.element_to_be_clickable((By.ID, "address-input"))
                         )
-                    ).click()
-                except Exception as fe:
-                    print(
-                        f"[Wiki] Étapes FloreApp échouées : {fe}",
-                        file=self.stdout_redirect,
-                    )
+                        addr.click()
+                        # 3) Saisir les coordonnées du centroïde
+                        addr.clear()
+                        addr.send_keys(coords_dms)
+                        # 4) Valider la recherche
+                        wait.until(
+                            EC.element_to_be_clickable((By.ID, "search-address-btn"))
+                        ).click()
+                        # 5) Ouvrir le menu des couches
+                        wait.until(
+                            EC.element_to_be_clickable(
+                                (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
+                            )
+                        ).click()
+                        # 6) Cocher la couche demandée
+                        checkbox = wait.until(
+                            EC.element_to_be_clickable(
+                                (By.XPATH, f"//label[contains(.,'{layer_label}')]/input")
+                            )
+                        )
+                        if not checkbox.is_selected():
+                            checkbox.click()
+                    except Exception as fe:
+                        print(
+                            f"[Wiki] Étapes {layer_label} échouées : {fe}",
+                            file=self.stdout_redirect,
+                        )
+
+                _open_layer("Carte de la végétation")
+                _open_layer("Carte des sols")
         except Exception as e:
             print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
         finally:
