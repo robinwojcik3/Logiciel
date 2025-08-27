@@ -12,6 +12,10 @@ python Start.py
 
 L'application s'ouvrira avec plusieurs onglets proposant les fonctionnalités principales.
 
+## Export des cartes
+
+Dans l'onglet « Contexte éco », il est possible de choisir le dossier de sortie des exports. L'utilisateur peut sauvegarder seulement les images PNG, seulement les projets QGIS ou bien les deux. Les projets QGIS enregistrés gardent les chemins vers les shapefiles fournis par l'utilisateur.
+
 ## Structure du projet
 
 - `Start.py` : point d'entrée qui ouvre l'interface graphique.
