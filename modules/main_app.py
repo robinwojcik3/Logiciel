@@ -522,6 +522,19 @@ def dms_to_dd(text: str) -> float:
     dd = float(deg) + float(mn)/60 + float(sc)/3600
     return -dd if hemi.upper() in ("S", "W") else dd
 
+def dd_to_dms(lat: float, lon: float) -> str:
+    """Convertit des coordonnées décimales en DMS (degrés, minutes, secondes)."""
+    def _convert(value: float, positive: str, negative: str) -> str:
+        hemi = positive if value >= 0 else negative
+        value = abs(value)
+        deg = int(value)
+        minutes_full = (value - deg) * 60
+        minutes = int(minutes_full)
+        seconds = (minutes_full - minutes) * 60
+        return f"{deg}°{minutes:02d}'{seconds:04.1f}\"{hemi}"
+
+    return f"{_convert(lat, 'N', 'S')} {_convert(lon, 'E', 'W')}"
+
 def add_hyperlink(paragraph, url: str, text: str, italic: bool = True):
     part = paragraph.part
     r_id = part.relate_to(
@@ -1667,6 +1680,7 @@ class ContexteEcoTab(ttk.Frame):
             gdf = gdf.to_crs("EPSG:4326")
             centroid = gdf.geometry.unary_union.centroid
             lat, lon = centroid.y, centroid.x
+            coords_dms = dd_to_dms(lat, lon)
             commune, dep = self._detect_commune(lat, lon)
             query = f"{commune} {dep}".strip()
             print(f"[Wiki] Requête : {query}", file=self.stdout_redirect)
@@ -1686,7 +1700,7 @@ class ContexteEcoTab(ttk.Frame):
 
                 # Étapes supplémentaires : ouverture et interaction avec FloreApp
                 try:
-                    wait = WebDriverWait(self.wiki_driver, 10)
+                    wait = WebDriverWait(self.wiki_driver, 0.5)
                     # 1) Ouvrir l'URL dans un nouvel onglet
                     self.wiki_driver.execute_script(
                         "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
@@ -1699,7 +1713,7 @@ class ContexteEcoTab(ttk.Frame):
                     addr.click()
                     # 3) Saisir les coordonnées du centroïde
                     addr.clear()
-                    addr.send_keys(f"{lat}, {lon}")
+                    addr.send_keys(coords_dms)
                     # 4) Valider la recherche
                     wait.until(
                         EC.element_to_be_clickable((By.ID, "search-address-btn"))
@@ -1710,10 +1724,10 @@ class ContexteEcoTab(ttk.Frame):
                             (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
                         )
                     ).click()
-                    # 6) Activer la couche "Carte de la végétation"
+                    # 6) Activer la couche "Carte flore"
                     wait.until(
                         EC.element_to_be_clickable(
-                            (By.XPATH, "//*[contains(text(),'Carte de la végétation')]")
+                            (By.XPATH, "//*[contains(text(),'Carte flore')]")
                         )
                     ).click()
                 except Exception as fe:
