@@ -321,6 +321,11 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
         os.environ.get("PATH", ""),
     ])
 
+    if hasattr(os, "add_dll_directory"):
+        os.add_dll_directory(os.path.join(qt_base, "bin"))
+        os.add_dll_directory(os.path.join(cfg["QGIS_APP"], "bin"))
+        os.add_dll_directory(os.path.join(cfg["QGIS_ROOT"], "bin"))
+
     sys.path.insert(0, os.path.join(cfg["QGIS_APP"], "python"))
     sys.path.insert(0, os.path.join(cfg["QGIS_ROOT"], "apps", cfg["PY_VER"], "Lib", "site-packages"))
 
@@ -795,6 +800,27 @@ class ExportCartesTab(ttk.Frame):
                 base = os.path.join(QGIS_ROOT, "apps", name)
                 if os.path.isdir(base): qt_base = base; break
             if not qt_base: raise RuntimeError("Répertoire Qt introuvable")
+            os.environ["OSGEO4W_ROOT"] = QGIS_ROOT
+            os.environ["QGIS_PREFIX_PATH"] = QGIS_APP
+            os.environ.setdefault("GDAL_DATA", os.path.join(QGIS_ROOT, "share", "gdal"))
+            os.environ.setdefault("PROJ_LIB", os.path.join(QGIS_ROOT, "share", "proj"))
+            os.environ.setdefault("QT_QPA_FONTDIR", r"C:\\Windows\\Fonts")
+            platform_dir = os.path.join(qt_base, "plugins", "platforms")
+            os.environ["QT_PLUGIN_PATH"] = os.path.join(qt_base, "plugins")
+            os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = platform_dir
+            qpa = "windows" if os.path.isfile(os.path.join(platform_dir, "qwindows.dll")) \
+                else ("minimal" if os.path.isfile(os.path.join(platform_dir, "qminimal.dll")) else "offscreen")
+            os.environ["QT_QPA_PLATFORM"] = qpa
+            os.environ["PATH"] = os.pathsep.join([
+                os.path.join(qt_base, "bin"),
+                os.path.join(QGIS_APP, "bin"),
+                os.path.join(QGIS_ROOT, "bin"),
+                os.environ.get("PATH", ""),
+            ])
+            if hasattr(os, "add_dll_directory"):
+                os.add_dll_directory(os.path.join(qt_base, "bin"))
+                os.add_dll_directory(os.path.join(QGIS_APP, "bin"))
+                os.add_dll_directory(os.path.join(QGIS_ROOT, "bin"))
             sys.path.insert(0, os.path.join(QGIS_APP, "python"))
             sys.path.insert(0, os.path.join(QGIS_ROOT, "apps", PY_VER, "Lib", "site-packages"))
             from qgis.core import QgsApplication  # noqa: F401
