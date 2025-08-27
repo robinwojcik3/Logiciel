@@ -95,9 +95,9 @@ def _scrape_sections(driver: webdriver.Chrome) -> Dict[str, str]:
 def _normalize_query(s: str) -> str:
     s = s.strip()
     m = re.match(r"^(.*?)[\s,;_-]*\(?(\d{2})\)?$", s)
-    if m and m.group(2) in DEP:
+    if m:
         base = m.group(1).strip()
-        return f"{base} ({DEP[m.group(2)]})"
+        return f"{base} ({m.group(2)})"
     return s
 
 
@@ -119,7 +119,12 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
     box = wait.until(EC.element_to_be_clickable((By.ID, "searchInput")))
     box.clear()
     box.send_keys(query)
-    box.send_keys(Keys.ENTER)
+    try:
+        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, ".suggestions-results")))
+        box.send_keys(Keys.ARROW_DOWN)
+        box.send_keys(Keys.ENTER)
+    except TimeoutException:
+        box.send_keys(Keys.ENTER)
 
     try:
         wait.until(EC.presence_of_element_located((By.ID, "firstHeading")))
@@ -140,7 +145,7 @@ def fetch_wikipedia_info(commune_query: str) -> Tuple[Dict[str, str], webdriver.
     afin que l'utilisateur décide quand fermer la fenêtre du navigateur.
 
     ``commune_query`` peut être de la forme ``"Vizille 38"`` ou
-    ``"Vizille (Isère)``.
+    ``"Vizille (38)``.
     """
 
     query = _normalize_query(commune_query)
