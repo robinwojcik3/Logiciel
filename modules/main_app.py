@@ -39,6 +39,8 @@ import pillow_heif
 import zipfile
 import traceback
 
+# Import du worker QGIS isolé
+from .export_worker import worker_run
 # ==== Imports supplémentaires pour l'onglet Contexte éco ====
 import geopandas as gpd
 
@@ -280,199 +282,6 @@ def copy_and_rename_file(file_path, dest_folder, new_name, count):
     except Exception as e:
         print(f"Erreur lors de la copie du fichier : {e}")
 
-# =========================
-# Fonctions QGIS (onglet 1) — inchangées
-# =========================
-def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
-    projects, cfg = args
-
-    os.environ["OSGEO4W_ROOT"] = cfg["QGIS_ROOT"]
-    os.environ["QGIS_PREFIX_PATH"] = cfg["QGIS_APP"]
-    os.environ.setdefault("GDAL_DATA", os.path.join(cfg["QGIS_ROOT"], "share", "gdal"))
-    os.environ.setdefault("PROJ_LIB", os.path.join(cfg["QGIS_ROOT"], "share", "proj"))
-    os.environ.setdefault("QT_QPA_FONTDIR", r"C:\Windows\Fonts")
-
-    qt_base = None
-    for name in ("Qt6", "Qt5"):
-        base = os.path.join(cfg["QGIS_ROOT"], "apps", name)
-        if os.path.isdir(base):
-            qt_base = base
-            break
-    if qt_base is None:
-        raise RuntimeError("Qt introuvable")
-
-    platform_dir = os.path.join(qt_base, "plugins", "platforms")
-    os.environ["QT_PLUGIN_PATH"] = os.path.join(qt_base, "plugins")
-    os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = platform_dir
-    qpa = "windows" if os.path.isfile(os.path.join(platform_dir, "qwindows.dll")) \
-        else ("minimal" if os.path.isfile(os.path.join(platform_dir, "qminimal.dll")) else "offscreen")
-    os.environ["QT_QPA_PLATFORM"] = qpa
-
-    os.environ["PATH"] = os.pathsep.join([
-        os.path.join(qt_base, "bin"),
-        os.path.join(cfg["QGIS_APP"], "bin"),
-        os.path.join(cfg["QGIS_ROOT"], "bin"),
-        os.environ.get("PATH", ""),
-    ])
-
-    sys.path.insert(0, os.path.join(cfg["QGIS_APP"], "python"))
-    sys.path.insert(0, os.path.join(cfg["QGIS_ROOT"], "apps", cfg["PY_VER"], "Lib", "site-packages"))
-
-    from qgis.core import (
-        QgsApplication, QgsProject, QgsLayoutExporter, QgsLayoutItemMap, QgsRectangle,
-        QgsCoordinateTransform
-    )
-
-    qgs = QgsApplication([], False)
-    qgs.setPrefixPath(cfg["QGIS_APP"], True)
-    qgs.initQgis()
-
-    ok = 0
-    ko = 0
-
-    def adjust_extent_to_item_ratio(ext: 'QgsRectangle', target_ratio: float, margin: float) -> 'QgsRectangle':
-        if ext.width() <= 0 or ext.height() <= 0:
-            return ext
-        cx, cy = ext.center().x(), ext.center().y()
-        w, h = ext.width(), ext.height()
-        if (w / h) > target_ratio:
-            new_h = w / target_ratio
-            dh = (new_h - h) / 2.0
-            xmin, xmax = ext.xMinimum(), ext.xMaximum()
-            ymin, ymax = cy - h/2.0 - dh, cy + h/2.0 + dh
-        else:
-            new_w = h * target_ratio
-            dw = (new_w - w) / 2.0
-            ymin, ymax = ext.yMinimum(), ext.yMaximum()
-            xmin, xmax = cx - w/2.0 - dw, cx + w/2.0 + dw
-        cw, ch = (xmax - xmin), (ymax - ymin)
-        mx, my = (margin - 1.0) * cw / 2.0, (margin - 1.0) * ch / 2.0
-        return QgsRectangle(xmin - mx, ymin - my, xmax + mx, ymax + my)
-
-    def extent_in_project_crs(prj: 'QgsProject', lyr) -> Optional['QgsRectangle']:
-        ext = lyr.extent()
-        try:
-            if lyr.crs() != prj.crs():
-                ct = QgsCoordinateTransform(lyr.crs(), prj.crs(), prj)
-                ext = ct.transformBoundingBox(ext)
-        except Exception:
-            pass
-        return ext
-
-    def apply_extent_and_export(layout, lyr_extent: 'QgsRectangle', out_png: str) -> bool:
-        maps = [it for it in layout.items() if isinstance(it, QgsLayoutItemMap)]
-        if not maps: return False
-        for m in maps:
-            size = m.sizeWithUnits()
-            target_ratio = max(1e-9, float(size.width()) / float(size.height()))
-            adj_extent = adjust_extent_to_item_ratio(lyr_extent, target_ratio, cfg["MARGIN_FAC"])
-            m.setExtent(adj_extent); m.refresh()
-        img = QgsLayoutExporter.ImageExportSettings()
-        img.dpi = cfg["DPI"]
-        for attr in ("antialiasing", "antiAliasing"):
-            if hasattr(img, attr):
-                setattr(img, attr, True)
-        try:
-            flag_val = 0
-            for name in dir(img.__class__):
-                if "UseAdvancedEffects" in name:
-                    flag_val |= int(getattr(img.__class__, name))
-            if flag_val and hasattr(img, "flags"): img.flags = flag_val
-        except Exception:
-            pass
-        if hasattr(img, "generateWorldFile"): img.generateWorldFile = False
-        exp = QgsLayoutExporter(layout)
-        res = exp.exportToImage(out_png, img)
-        return res == QgsLayoutExporter.Success
-
-    def relink_layer(prj: 'QgsProject', layer_name: str, shp_path: str) -> Optional[object]:
-        layers = prj.mapLayersByName(layer_name)
-        if not layers: return None
-        lyr = layers[0]
-        try:
-            lyr.setDataSource(shp_path, lyr.name(), "ogr")
-            return lyr
-        except Exception:
-            return None
-
-    def export_views(projet_path: str) -> Tuple[int, int]:
-        okc = 0; koc = 0
-        nom = os.path.splitext(os.path.basename(projet_path))[0]
-        out_ae = os.path.join(cfg["OUT_DIR"], f"{nom}__AE.png")
-        out_ze = os.path.join(cfg["OUT_DIR"], f"{nom}__ZE.png")
-        out_proj = os.path.join(cfg["OUT_DIR"], f"{nom}{os.path.splitext(projet_path)[1]}")
-
-        mode = cfg.get("CADRAGE_MODE", "BOTH")
-        expected_exports = 0
-        if cfg.get("EXPORT_TYPE") in ("PNG", "BOTH"):
-            expected_exports += (2 if mode == "BOTH" else 1)
-        if cfg.get("EXPORT_TYPE") in ("QGS", "BOTH"):
-            expected_exports += 1
-
-        prj = QgsProject.instance(); prj.clear()
-
-        opened = False
-        for pth in (projet_path, to_long_unc(projet_path)):
-            try:
-                if prj.read(pth): opened = True; break
-            except Exception:
-                pass
-        if not opened:
-            return 0, expected_exports
-
-        lm = prj.layoutManager()
-        layouts = lm.layouts()
-        if not layouts:
-            prj.clear(); return 0, expected_exports
-        layout = layouts[0]
-
-        lyr_ae = relink_layer(prj, cfg["LAYER_AE_NAME"], cfg["AE_SHP"])
-        lyr_ze = relink_layer(prj, cfg["LAYER_ZE_NAME"], cfg["ZE_SHP"])
-
-        if cfg.get("EXPORT_TYPE") in ("PNG", "BOTH"):
-            if mode in ("AE", "BOTH"):
-                if (not cfg["OVERWRITE"]) and os.path.exists(out_ae):
-                    okc += 1
-                else:
-                    if lyr_ae:
-                        ext_ae = extent_in_project_crs(prj, lyr_ae)
-                        if ext_ae and apply_extent_and_export(layout, ext_ae, out_ae): okc += 1
-                        else: koc += 1
-                    else:
-                        koc += 1
-
-            if mode in ("ZE", "BOTH"):
-                if (not cfg["OVERWRITE"]) and os.path.exists(out_ze):
-                    okc += 1
-                else:
-                    if lyr_ze:
-                        ext_ze = extent_in_project_crs(prj, lyr_ze)
-                        if ext_ze and apply_extent_and_export(layout, ext_ze, out_ze): okc += 1
-                        else: koc += 1
-                    else:
-                        koc += 1
-
-        if cfg.get("EXPORT_TYPE") in ("QGS", "BOTH"):
-            if (not cfg["OVERWRITE"]) and os.path.exists(out_proj):
-                okc += 1
-            else:
-                try:
-                    if prj.write(out_proj):
-                        okc += 1
-                    else:
-                        koc += 1
-                except Exception:
-                    koc += 1
-
-        prj.clear()
-        return okc, koc
-
-    for p in projects:
-        ok_c, ko_c = export_views(p)
-        ok += ok_c; ko += ko_c
-
-    qgs.exitQgis()
-    return ok, ko
 
 def discover_projects() -> List[str]:
     partage = BASE_SHARE
@@ -784,15 +593,12 @@ class ExportCartesTab(ttk.Frame):
     def _test_qgis(self):
         try:
             log_with_time("Test QGIS : import…")
-            qt_base = None
-            for name in ("Qt6", "Qt5"):
-                base = os.path.join(QGIS_ROOT, "apps", name)
-                if os.path.isdir(base): qt_base = base; break
-            if not qt_base: raise RuntimeError("Répertoire Qt introuvable")
-            sys.path.insert(0, os.path.join(QGIS_APP, "python"))
-            sys.path.insert(0, os.path.join(QGIS_ROOT, "apps", PY_VER, "Lib", "site-packages"))
-            from qgis.core import QgsApplication  # noqa: F401
-            log_with_time("Test QGIS : OK")
+            from .export_worker import _prepare_qgis_env
+            cfg = {"QGIS_ROOT": QGIS_ROOT, "QGIS_APP": QGIS_APP, "PY_VER": PY_VER}
+            _prepare_qgis_env(cfg)
+            import importlib
+            importlib.import_module("qgis.core")
+            log_with_time(f"Test QGIS : OK (QPA={os.environ.get('QT_QPA_PLATFORM')})")
             messagebox.showinfo("QGIS", "Import QGIS OK.")
         except Exception as e:
             log_with_time(f"Échec import QGIS : {e}")
@@ -1112,9 +918,9 @@ class ContexteEcoTab(ttk.Frame):
         self.overwrite_var = tk.BooleanVar(value=self.prefs.get("OVERWRITE", OVERWRITE_DEFAULT))
         self.dpi_var       = tk.IntVar(value=int(self.prefs.get("DPI", DPI_DEFAULT)))
         self.workers_var   = tk.IntVar(value=int(self.prefs.get("N_WORKERS", N_WORKERS_DEFAULT)))
-        self.margin_var    = tk.DoubleVar(value=float(self.prefs.get("MARGIN_FAC", MARGIN_FAC_DEFAULT)))
+        self.margin_var    = tk.DoubleVar(value=float(self.prefs.get("MARGIN", MARGIN_FAC_DEFAULT)))
         self.buffer_var    = tk.DoubleVar(value=float(self.prefs.get("ID_TAMPON_KM", 5.0)))
-        self.out_dir_var   = tk.StringVar(value=self.prefs.get("OUT_DIR", OUT_IMG))
+        self.out_dir_var   = tk.StringVar(value=self.prefs.get("EXPORT_DIR", OUT_IMG))
         self.export_type_var = tk.StringVar(value=self.prefs.get("EXPORT_TYPE", "BOTH"))
 
         self.project_vars: dict[str, tk.IntVar] = {}
@@ -1713,8 +1519,8 @@ class ContexteEcoTab(ttk.Frame):
             "OVERWRITE": bool(self.overwrite_var.get()),
             "DPI": int(self.dpi_var.get()),
             "N_WORKERS": int(self.workers_var.get()),
-            "MARGIN_FAC": float(self.margin_var.get()),
-            "OUT_DIR": self.out_dir_var.get(),
+            "MARGIN": float(self.margin_var.get()),
+            "EXPORT_DIR": self.out_dir_var.get(),
             "EXPORT_TYPE": exp_type,
         }); save_prefs(self.prefs)
 
@@ -1730,31 +1536,55 @@ class ContexteEcoTab(ttk.Frame):
             os.makedirs(out_dir, exist_ok=True)
             log_with_time(f"{len(projets)} projets (attendu = calcul en cours)")
             log_with_time(f"Workers={self.workers_var.get()}, DPI={self.dpi_var.get()}, marge={self.margin_var.get():.2f}, overwrite={self.overwrite_var.get()}")
-            chunks = chunk_even(projets, self.workers_var.get())
+            workers = int(self.workers_var.get())
+            chunks = chunk_even(projets, workers)
             cfg = {
-                "QGIS_ROOT": QGIS_ROOT, "QGIS_APP": QGIS_APP, "PY_VER": PY_VER,
-                "OUT_DIR": out_dir, "DPI": int(self.dpi_var.get()),
-                "MARGIN_FAC": float(self.margin_var.get()),
-                "LAYER_AE_NAME": LAYER_AE_NAME, "LAYER_ZE_NAME": LAYER_ZE_NAME,
-                "AE_SHP": self.ae_shp_var.get(), "ZE_SHP": self.ze_shp_var.get(),
-                "CADRAGE_MODE": self.cadrage_var.get(), "OVERWRITE": bool(self.overwrite_var.get()),
+                "QGIS_ROOT": QGIS_ROOT,
+                "QGIS_APP": QGIS_APP,
+                "PY_VER": PY_VER,
+                "EXPORT_DIR": out_dir,
+                "DPI": int(self.dpi_var.get()),
+                "MARGIN": float(self.margin_var.get()),
+                "LAYER_AE_NAME": LAYER_AE_NAME,
+                "LAYER_ZE_NAME": LAYER_ZE_NAME,
+                "AE_SHP": self.ae_shp_var.get(),
+                "ZE_SHP": self.ze_shp_var.get(),
+                "CADRAGE_MODE": self.cadrage_var.get(),
+                "OVERWRITE": bool(self.overwrite_var.get()),
                 "EXPORT_TYPE": self.export_type_var.get(),
+                "WORKERS": workers,
             }
             ok_total = 0; ko_total = 0
             def ui_update_progress(done_inc):
                 self.progress_done += done_inc
                 self.progress["value"] = min(self.progress_done, self.total_expected)
                 self.status_label.config(text=f"Progression : {self.progress_done}/{self.total_expected}")
-            with ProcessPoolExecutor(max_workers=int(self.workers_var.get())) as ex:
-                futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
-                for fut in as_completed(futures):
-                    try:
-                        ok, ko = fut.result()
-                        ok_total += ok; ko_total += ko
-                        self.after(0, ui_update_progress, ok + ko)
-                        log_with_time(f"Lot terminé: {ok} OK, {ko} KO")
-                    except Exception as e:
-                        log_with_time(f"Erreur worker: {e}")
+
+            try:
+                import multiprocessing as mp
+                mp.set_start_method("spawn", force=True)
+            except Exception:
+                pass
+
+            if workers <= 1:
+                for chunk in chunks:
+                    if not chunk:
+                        continue
+                    ok, ko = worker_run((chunk, cfg))
+                    ok_total += ok; ko_total += ko
+                    self.after(0, ui_update_progress, ok + ko)
+                    log_with_time(f"Lot terminé: {ok} OK, {ko} KO")
+            else:
+                with ProcessPoolExecutor(max_workers=workers) as ex:
+                    futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
+                    for fut in as_completed(futures):
+                        try:
+                            ok, ko = fut.result()
+                            ok_total += ok; ko_total += ko
+                            self.after(0, ui_update_progress, ok + ko)
+                            log_with_time(f"Lot terminé: {ok} OK, {ko} KO")
+                        except Exception as e:
+                            log_with_time(f"Erreur worker: {e}")
             elapsed = datetime.datetime.now() - start
             log_with_time(f"FIN — OK={ok_total} | KO={ko_total} | Attendu={self.total_expected} | Durée={elapsed}")
             self.after(0, lambda: self.status_label.config(text=f"Terminé — OK={ok_total} / KO={ko_total}"))
