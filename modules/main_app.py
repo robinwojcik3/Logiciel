@@ -1491,6 +1491,10 @@ class ContexteEcoTab(ttk.Frame):
         self.out_dir_var   = tk.StringVar(value=self.prefs.get("OUT_DIR", OUT_IMG))
         self.export_type_var = tk.StringVar(value=self.prefs.get("EXPORT_TYPE", "BOTH"))
 
+        # Variables pour les extraits Wikipédia
+        self.wiki_climat_var = tk.StringVar()
+        self.wiki_clc_var = tk.StringVar()
+
         self.project_vars: dict[str, tk.IntVar] = {}
         self.all_projects: List[str] = []
         self.filtered_projects: List[str] = []
@@ -1580,6 +1584,17 @@ class ContexteEcoTab(ttk.Frame):
         self.wiki_button = ttk.Button(idf, text="Wikipedia", style="Accent.TButton", command=self.start_wiki_thread)
         self.wiki_button.grid(row=0, column=3, sticky="w", padx=(12,0))
 
+        # Résultats Wikipédia
+        wikif = ttk.Frame(self, style="Card.TFrame", padding=12)
+        wikif.pack(fill=tk.X, pady=(10,0))
+        ttk.Label(wikif, text="Climat", style="Card.TLabel").grid(row=0, column=0, sticky="nw")
+        ttk.Label(wikif, textvariable=self.wiki_climat_var, style="Card.TLabel", wraplength=600, justify="left")\
+            .grid(row=0, column=1, sticky="w")
+        ttk.Label(wikif, text="Corine Land Cover", style="Card.TLabel").grid(row=1, column=0, sticky="nw", pady=(6,0))
+        ttk.Label(wikif, textvariable=self.wiki_clc_var, style="Card.TLabel", wraplength=600, justify="left")\
+            .grid(row=1, column=1, sticky="w", pady=(6,0))
+        wikif.columnconfigure(1, weight=1)
+
         # Console + progression
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
         bottom.pack(fill=tk.BOTH, expand=True, pady=(10,0))
@@ -1660,6 +1675,8 @@ class ContexteEcoTab(ttk.Frame):
 
     def _run_wiki(self):
         try:
+            self.after(0, lambda: self.wiki_climat_var.set(""))
+            self.after(0, lambda: self.wiki_clc_var.set(""))
             ze_path = self.ze_shp_var.get()
             gdf = gpd.read_file(ze_path)
             if gdf.crs is None:
@@ -1674,15 +1691,15 @@ class ContexteEcoTab(ttk.Frame):
             if "error" in data:
                 print(f"[Wiki] {data['error']}", file=self.stdout_redirect)
             else:
+                self.after(0, lambda: self.wiki_climat_var.set(data.get("climat", "")))
+                self.after(0, lambda: self.wiki_clc_var.set(data.get("occupation", "")))
                 print(f"[Wiki] Page Wikipédia : {data['url']}", file=self.stdout_redirect)
                 print("[Wiki] CLIMAT :", file=self.stdout_redirect)
-                if data['climat_p1'] != 'Non trouvé':
-                    print(data['climat_p1'], file=self.stdout_redirect)
-                if data['climat_p2'] != 'Non trouvé':
-                    print(data['climat_p2'], file=self.stdout_redirect)
+                if data.get("climat") != "Non trouvé":
+                    print(data["climat"], file=self.stdout_redirect)
                 print("[Wiki] OCCUPATION DES SOLS :", file=self.stdout_redirect)
-                if data['occupation_p1'] != 'Non trouvé':
-                    print(data['occupation_p1'], file=self.stdout_redirect)
+                if data.get("occupation") != "Non trouvé":
+                    print(data["occupation"], file=self.stdout_redirect)
         except Exception as e:
             print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
         finally:

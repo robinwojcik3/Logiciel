@@ -61,33 +61,25 @@ def _find_section_heading(soup: BeautifulSoup, heading_text: str):
 
 def _scrape_sections(driver: webdriver.Chrome) -> Dict[str, str]:
     out = {
-        "climat_p1": "Non trouvé",
-        "climat_p2": "Non trouvé",
-        "occupation_p1": "Non trouvé",
+        "climat": "Non trouvé",
+        "occupation": "Non trouvé",
     }
     soup = BeautifulSoup(driver.page_source, "html.parser")
 
     h = _find_section_heading(soup, "Climat")
     if h:
-        start = None
         for p in h.find_all_next("p"):
             t = p.get_text(strip=True)
-            if t.startswith("En 2010, le climat de la commune est de type") or "climat de la commune est de type" in t:
-                start = p
+            if t.startswith("Pour la période 1971-2000, la température annuelle"):
+                out["climat"] = t
                 break
-        if start:
-            fol = start.find_next_siblings("p", limit=2)
-            if len(fol) >= 1:
-                out["climat_p1"] = fol[0].get_text(strip=True)
-            if len(fol) >= 2:
-                out["climat_p2"] = fol[1].get_text(strip=True)
 
     h = _find_section_heading(soup, "Occupation des sols")
     if h:
         for p in h.find_all_next("p"):
             t = p.get_text(strip=True)
             if t.startswith("L'occupation des sols de la commune, telle qu'elle") or "L'occupation des sols de la commune, telle qu'elle ressort" in t:
-                out["occupation_p1"] = t
+                out["occupation"] = t
                 break
     return out
 
@@ -116,7 +108,9 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
     except TimeoutException:
         pass
 
-    box = wait.until(EC.element_to_be_clickable((By.ID, "searchInput")))
+    box = WebDriverWait(driver, 0.5).until(
+        EC.element_to_be_clickable((By.ID, "searchInput"))
+    )
     box.clear()
     box.send_keys(query)
     box.send_keys(Keys.ENTER)
