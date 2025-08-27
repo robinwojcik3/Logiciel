@@ -1724,10 +1724,41 @@ class ContexteEcoTab(ttk.Frame):
                             (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
                         )
                     ).click()
-                    # 6) Activer la couche "Carte flore"
+                    # 6) Activer la couche "Carte de la végétation"
                     wait.until(
                         EC.element_to_be_clickable(
-                            (By.XPATH, "//*[contains(text(),'Carte flore')]")
+                            (By.XPATH, "//*[contains(text(),'Carte de la végétation')]")
+                        )
+                    ).click()
+
+                    # 7) Ouvrir un nouvel onglet et afficher la "Carte des sols"
+                    self.wiki_driver.execute_script(
+                        "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
+                    )
+                    self.wiki_driver.switch_to.window(self.wiki_driver.window_handles[-1])
+                    wait = WebDriverWait(self.wiki_driver, 0.5)
+                    # 8) Cliquer sur la barre de recherche
+                    addr = wait.until(
+                        EC.element_to_be_clickable((By.ID, "address-input"))
+                    )
+                    addr.click()
+                    # 9) Saisir les coordonnées du centroïde
+                    addr.clear()
+                    addr.send_keys(coords_dms)
+                    # 10) Valider la recherche
+                    wait.until(
+                        EC.element_to_be_clickable((By.ID, "search-address-btn"))
+                    ).click()
+                    # 11) Ouvrir le menu des couches
+                    wait.until(
+                        EC.element_to_be_clickable(
+                            (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
+                        )
+                    ).click()
+                    # 12) Activer la couche "Carte des sols"
+                    wait.until(
+                        EC.element_to_be_clickable(
+                            (By.XPATH, "//*[contains(text(),'Carte des sols')]")
                         )
                     ).click()
                 except Exception as fe:
