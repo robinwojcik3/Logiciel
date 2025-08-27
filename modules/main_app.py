@@ -296,6 +296,7 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
     os.environ["QGIS_PREFIX_PATH"] = cfg["QGIS_APP"]
     os.environ.setdefault("GDAL_DATA", os.path.join(cfg["QGIS_ROOT"], "share", "gdal"))
     os.environ.setdefault("PROJ_LIB", os.path.join(cfg["QGIS_ROOT"], "share", "proj"))
+    os.environ.setdefault("PROJ_DATA", os.path.join(cfg["QGIS_ROOT"], "share", "proj"))
     os.environ.setdefault("QT_QPA_FONTDIR", r"C:\Windows\Fonts")
 
     qt_base = None
@@ -314,12 +315,17 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
         else ("minimal" if os.path.isfile(os.path.join(platform_dir, "qminimal.dll")) else "offscreen")
     os.environ["QT_QPA_PLATFORM"] = qpa
 
-    os.environ["PATH"] = os.pathsep.join([
+    dll_paths = [
         os.path.join(qt_base, "bin"),
         os.path.join(cfg["QGIS_APP"], "bin"),
         os.path.join(cfg["QGIS_ROOT"], "bin"),
-        os.environ.get("PATH", ""),
-    ])
+    ]
+    for p in dll_paths:
+        try:
+            os.add_dll_directory(p)
+        except Exception:
+            pass
+    os.environ["PATH"] = os.pathsep.join(dll_paths + [os.environ.get("PATH", "")])
 
     sys.path.insert(0, os.path.join(cfg["QGIS_APP"], "python"))
     sys.path.insert(0, os.path.join(cfg["QGIS_ROOT"], "apps", cfg["PY_VER"], "Lib", "site-packages"))
