@@ -8,7 +8,7 @@ facilement réutilisable par l'application.
 from __future__ import annotations
 
 import re
-from typing import Dict
+from typing import Dict, Tuple
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -134,9 +134,10 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
         return False
 
 
-def fetch_wikipedia_info(commune_query: str) -> Dict[str, str]:
+def fetch_wikipedia_info(commune_query: str) -> Tuple[Dict[str, str], webdriver.Chrome]:
     """Ouvre la page Wikipédia correspondant à ``commune_query`` et en extrait
-    quelques sections utiles.
+    quelques sections utiles. La fonction renvoie également l'objet ``driver``
+    afin que l'utilisateur décide quand fermer la fenêtre du navigateur.
 
     ``commune_query`` peut être de la forme ``"Vizille 38"`` ou
     ``"Vizille (Isère)``.
@@ -154,21 +155,15 @@ def fetch_wikipedia_info(commune_query: str) -> Dict[str, str]:
     driver = webdriver.Chrome(options=options)
     driver.maximize_window()
     wait = WebDriverWait(driver, 10)
-    url = ""
-    try:
-        ok = _open_article(driver, query, wait)
-        if not ok:
-            alt = f"{query} (commune)"
-            ok = _open_article(driver, alt, wait)
-        if not ok:
-            return {"error": "Article introuvable"}
-        data = _scrape_sections(driver)
-        url = driver.current_url
-        data["url"] = url
-        return data
-    finally:
-        try:
-            driver.quit()
-        except Exception:
-            pass
+
+    ok = _open_article(driver, query, wait)
+    if not ok:
+        alt = f"{query} (commune)"
+        ok = _open_article(driver, alt, wait)
+    if not ok:
+        return {"error": "Article introuvable"}, driver
+
+    data = _scrape_sections(driver)
+    data["url"] = driver.current_url
+    return data, driver
 
