@@ -1579,7 +1579,8 @@ class ContexteEcoTab(ttk.Frame):
                                           initialdir=base if os.path.isdir(base) else os.path.expanduser("~"),
                                           filetypes=[("Shapefile ESRI", "*.shp")])
         if path:
-            self.ze_shp_var.set(path)
+            # Normaliser pour gérer les chemins réseau ou trop longs
+            self.ze_shp_var.set(to_long_unc(os.path.normpath(path)))
 
     def _select_ae(self):
         base = self.ae_shp_var.get() or os.path.expanduser("~")
@@ -1587,7 +1588,8 @@ class ContexteEcoTab(ttk.Frame):
                                           initialdir=base if os.path.isdir(base) else os.path.expanduser("~"),
                                           filetypes=[("Shapefile ESRI", "*.shp")])
         if path:
-            self.ae_shp_var.set(path)
+            # Normaliser pour gérer les chemins réseau ou trop longs
+            self.ae_shp_var.set(to_long_unc(os.path.normpath(path)))
 
     def _open_out_dir(self):
         try:
@@ -1715,8 +1717,8 @@ class ContexteEcoTab(ttk.Frame):
         if self.busy:
             print("Une action est déjà en cours.", file=self.stdout_redirect)
             return
-        ae = self.ae_shp_var.get().strip()
-        ze = self.ze_shp_var.get().strip()
+        ae = to_long_unc(os.path.normpath(self.ae_shp_var.get().strip()))
+        ze = to_long_unc(os.path.normpath(self.ze_shp_var.get().strip()))
         if not ae or not ze:
             messagebox.showerror("Erreur", "Sélectionnez les deux shapefiles."); return
         if not os.path.isfile(ae) or not os.path.isfile(ze):
