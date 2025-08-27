@@ -13,7 +13,6 @@ from typing import Dict, Tuple
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
@@ -102,7 +101,15 @@ def _normalize_query(s: str) -> str:
 
 
 def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> bool:
-    driver.get("https://fr.wikipedia.org/")
+    """Ouvre Wikipédia sur la page de recherche avancée, saisit ``query`` et
+    ouvre le premier résultat trouvé.
+    """
+
+    driver.get(
+        "https://fr.wikipedia.org/w/index.php?search=&title=Sp%C3%A9cial%3ARecherche&profile=advanced&fulltext=1&ns0=1"
+    )
+
+    # Bannière d'acceptation des cookies (si présente)
     try:
         btn = WebDriverWait(driver, 0.5).until(
             EC.element_to_be_clickable(
@@ -116,25 +123,38 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
     except TimeoutException:
         pass
 
+    # Saisie de la requête dans la barre de recherche
     box = WebDriverWait(driver, 0.5).until(
-        EC.element_to_be_clickable((By.ID, "searchInput"))
+        EC.element_to_be_clickable((By.CSS_SELECTOR, "input[name='search']"))
     )
     box.clear()
     box.send_keys(query)
-    box.send_keys(Keys.ARROW_DOWN)
-    box.send_keys(Keys.ENTER)
+
+    # Validation par clic sur le bouton "Rechercher"
+    search_btn = WebDriverWait(driver, 0.5).until(
+        EC.element_to_be_clickable(
+            (By.XPATH, "//button[.//span[contains(., 'Rechercher')]]")
+        )
+    )
+    search_btn.click()
 
     try:
-        wait.until(EC.presence_of_element_located((By.ID, "firstHeading")))
-        if "Spécial:Recherche" in driver.current_url or "Special:Search" in driver.current_url:
-            link = wait.until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "div.mw-search-result-heading a"))
+        # Les résultats de recherche s'affichent : on clique sur le premier lien
+        link = wait.until(
+            EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, "div.mw-search-result-heading a")
             )
-            link.click()
-            wait.until(EC.presence_of_element_located((By.ID, "firstHeading")))
+        )
+        link.click()
+        wait.until(EC.presence_of_element_located((By.ID, "firstHeading")))
         return True
     except TimeoutException:
-        return False
+        # Si aucun résultat n'est listé, on vérifie si un article a été ouvert directement
+        try:
+            wait.until(EC.presence_of_element_located((By.ID, "firstHeading")))
+            return True
+        except TimeoutException:
+            return False
 
 
 def fetch_wikipedia_info(commune_query: str) -> Tuple[Dict[str, str], webdriver.Chrome]:
