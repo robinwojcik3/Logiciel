@@ -1559,6 +1559,9 @@ class ContexteEcoTab(ttk.Frame):
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.stdout_redirect = TextRedirector(self.log_text)
 
+        obtn = ttk.Button(bottom, text="Ouvrire output", command=self._open_out_dir)
+        obtn.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8,0))
+
     # ---------- Helpers UI ----------
     def _file_row(self, parent, row: int, label: str, var: tk.StringVar, cmd):
         btn = ttk.Button(parent, text=label, command=cmd)
@@ -1585,6 +1588,13 @@ class ContexteEcoTab(ttk.Frame):
                                           filetypes=[("Shapefile ESRI", "*.shp")])
         if path:
             self.ae_shp_var.set(path)
+
+    def _open_out_dir(self):
+        try:
+            os.makedirs(OUT_IMG, exist_ok=True)
+            os.startfile(OUT_IMG)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
 
     # ---------- Gestion projets QGIS ----------
     def _populate_projects(self):
