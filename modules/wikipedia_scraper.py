@@ -102,7 +102,15 @@ def _normalize_query(s: str) -> str:
 
 
 def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> bool:
-    driver.get("https://fr.wikipedia.org/")
+    """Ouvre la page de recherche avancée puis l'article correspondant."""
+
+    search_url = (
+        "https://fr.wikipedia.org/w/index.php?search=&title=Sp%C3%A9cial%3ARecherche"
+        "&profile=advanced&fulltext=1&ns0=1"
+    )
+    driver.get(search_url)
+
+    # Gestion de la bannière cookies éventuelle
     try:
         btn = WebDriverWait(driver, 0.5).until(
             EC.element_to_be_clickable(
@@ -116,22 +124,37 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
     except TimeoutException:
         pass
 
-    box = WebDriverWait(driver, 0.5).until(
-        EC.element_to_be_clickable((By.ID, "searchInput"))
+    box = wait.until(
+        EC.element_to_be_clickable(
+            (By.CSS_SELECTOR, "input.oo-ui-inputWidget-input[name='search']")
+        )
     )
     box.clear()
     box.send_keys(query)
-    box.send_keys(Keys.ARROW_DOWN)
-    box.send_keys(Keys.ENTER)
 
+    # Cliquer sur le bouton "Rechercher" (fall back sur Entrée au besoin)
     try:
-        wait.until(EC.presence_of_element_located((By.ID, "firstHeading")))
-        if "Spécial:Recherche" in driver.current_url or "Special:Search" in driver.current_url:
-            link = wait.until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "div.mw-search-result-heading a"))
+        btn_search = wait.until(
+            EC.element_to_be_clickable(
+                (
+                    By.XPATH,
+                    "//span[@class='oo-ui-labelElement-label' and text()='Rechercher']/ancestor::button",
+                )
             )
-            link.click()
-            wait.until(EC.presence_of_element_located((By.ID, "firstHeading")))
+        )
+        btn_search.click()
+    except TimeoutException:
+        box.send_keys(Keys.ENTER)
+
+    # Ouvrir le premier résultat de la recherche
+    try:
+        link = wait.until(
+            EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, "div.mw-search-result-heading a")
+            )
+        )
+        link.click()
+        wait.until(EC.presence_of_element_located((By.ID, "firstHeading")))
         return True
     except TimeoutException:
         return False
