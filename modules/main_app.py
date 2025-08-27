@@ -35,12 +35,8 @@ from typing import List, Optional, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import requests
 from io import BytesIO
-import pillow_heif
 import zipfile
 import traceback
-
-# ==== Imports supplémentaires pour l'onglet Contexte éco ====
-import geopandas as gpd
 
 # Import du scraper Wikipédia
 from .wikipedia_scraper import DEP, fetch_wikipedia_info
@@ -49,25 +45,10 @@ from .wikipedia_scraper import DEP, fetch_wikipedia_info
 from .export_worker import worker_run
 
 
-# ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver import ActionChains
-
-from docx import Document
-from docx.shared import Cm
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.section import WD_ORIENT
-from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.oxml.ns import qn
-
-from PIL import Image
-
-# Enregistrer le décodeur HEIF
-pillow_heif.register_heif_opener()
+# ==== Imports lourds déplacés dans les fonctions pour accélérer le démarrage ====
+"""Les imports de bibliothèques volumineuses (geopandas, selenium, docx,
+pillow_heif, PIL...) sont réalisés à la demande dans les fonctions qui en ont
+besoin afin de limiter le temps d'initialisation de ce module."""
 
 # =========================
 # Paramètres globaux
@@ -107,7 +88,8 @@ LAYERS = [
 URL = ("https://remonterletemps.ign.fr/comparer/?lon={lon}&lat={lat}"
        "&z=17&layer1={layer}&layer2=19&mode=dub1")
 WAIT_TILES_DEFAULT = 1.5
-IMG_WIDTH = Cm(12.5 * 0.8)
+# Largeur de l'image dans le document Word (en centimètres)
+IMG_WIDTH_CM = 12.5 * 0.8
 WORD_FILENAME = "Comparaison_temporelle_Paysage.docx"
 OUTPUT_DIR_RLT = os.path.join(OUT_IMG, "Remonter le temps")
 COMMENT_TEMPLATE = (
@@ -119,6 +101,24 @@ COMMENT_TEMPLATE = (
     "Fais ta réponse en un seul court paragraphe. Intègre les éléments de contexte "
     "historique et territorial propres à la commune de {commune} pour interpréter ces évolutions."
 )
+
+# Flags de fonctionnalités
+LAZY_TABS = os.getenv("LAZY_TABS", "1") != "0"
+APP_SPLASH = os.getenv("APP_SPLASH", "0") == "1"
+
+
+def show_splash(root):
+    if APP_SPLASH:
+        win = tk.Toplevel(root)
+        win.overrideredirect(True)
+        tk.Label(win, text="Initialisation…").pack(padx=20, pady=20)
+        win.update_idletasks()
+        w, h = win.winfo_width(), win.winfo_height()
+        x = root.winfo_screenwidth() // 2 - w // 2
+        y = root.winfo_screenheight() // 2 - h // 2
+        win.geometry(f"+{x}+{y}")
+        return win
+    return None
 
 # Onglet 3 — Identification Pl@ntNet
 API_KEY = "2b10vfT6MvFC2lcAzqG1ZMKO"  # Votre clé API Pl@ntNet
@@ -211,6 +211,9 @@ def resize_image(image_path, max_size=(800, 800), quality=70):
     :return: BytesIO de l'image traitée ou None en cas d'erreur.
     """
     try:
+        from PIL import Image
+        import pillow_heif
+        pillow_heif.register_heif_opener()
         with Image.open(image_path) as img:
             img.thumbnail(max_size)
             buffer = BytesIO()
@@ -284,8 +287,15 @@ def copy_and_rename_file(file_path, dest_folder, new_name, count):
         print(f"Erreur lors de la copie du fichier : {e}")
 
 
+from utils.cache import load_json_cache, save_json_cache
+from utils.fs import share_available
+
+
 def discover_projects() -> List[str]:
     partage = BASE_SHARE
+    if not share_available(partage):
+        return []
+
     base_dir: Optional[str] = None
     try:
         if os.path.isdir(partage):
@@ -294,7 +304,8 @@ def discover_projects() -> List[str]:
                     base_espace = os.path.join(partage, e)
                     for s in os.listdir(base_espace):
                         if normalize_name(s) == normalize_name("CARTO ROBIN"):
-                            base_dir = os.path.join(base_espace, s); break
+                            base_dir = os.path.join(base_espace, s)
+                            break
                     break
     except Exception as e:
         log_with_time(f"Accès PARTAGE impossible via listdir: {e}")
@@ -304,7 +315,8 @@ def discover_projects() -> List[str]:
 
     for d in (base_dir, to_long_unc(base_dir)):
         try:
-            if not os.path.isdir(d): continue
+            if not os.path.isdir(d):
+                continue
             files = os.listdir(d)
             qgz = [f for f in files if f.lower().endswith(".qgz")]
             qgz = [f for f in qgz if normalize_name(f).startswith(normalize_name("Contexte éco -"))]
@@ -312,6 +324,16 @@ def discover_projects() -> List[str]:
         except Exception:
             continue
     return []
+
+
+def discover_projects_cached(max_age: int = 300) -> List[str]:
+    cache_path = os.path.join(os.path.expanduser("~"), ".app_cache", "projects.json")
+    cached = load_json_cache(cache_path, max_age)
+    if cached is not None:
+        return cached
+    projs = discover_projects()
+    save_json_cache(cache_path, projs)
+    return projs
 
 # =========================
 # Fonctions IGN (onglet 2) — identiques au script source
@@ -432,11 +454,11 @@ class ExportCartesTab(ttk.Frame):
         self.total_expected = 0
         self.progress_done  = 0
 
-        self._build_ui()
-        self._populate_projects()
-        self._update_counts()
+        self._build_header_light()
+        self._list_container = None
+        self.after(200, self._populate_projects_async)
 
-    def _build_ui(self):
+    def _build_header_light(self):
         header = ttk.Frame(self, style="Header.TFrame", padding=(14, 12))
         header.pack(fill=tk.X, pady=(0, 10))
         ttk.Label(header, text="Export cartes — QGIS → PNG", style="Card.TLabel", font=self.font_title)\
@@ -718,7 +740,7 @@ class PlantNetTab(ttk.Frame):
 
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_header_light(self):
         header = ttk.Frame(self, style="Header.TFrame", padding=(14, 12))
         header.pack(fill=tk.X, pady=(0, 10))
         ttk.Label(header, text="Identification Pl@ntNet", style="Card.TLabel", font=self.font_title)\
@@ -953,9 +975,9 @@ class ContexteEcoTab(ttk.Frame):
         self.progress_done  = 0
         self.busy = False
 
-        self._build_ui()
-        self._populate_projects()
-        self._update_counts()
+        self._build_header_light()
+        self._list_container = None
+        self.after(200, self._populate_projects_async)
 
     # ---------- Construction UI ----------
     def _build_ui(self):
@@ -1004,26 +1026,10 @@ class ContexteEcoTab(ttk.Frame):
         self.export_button = ttk.Button(opt, text="Lancer l’export cartes", style="Accent.TButton", command=self.start_export_thread)
         self.export_button.grid(row=8, column=0, columnspan=3, sticky="w", pady=(10,0))
 
-        proj = ttk.Frame(exp)
-        proj.grid(row=0, column=1, sticky="nsew", padx=(8,0))
-        ttk.Label(proj, text="Projets QGIS", style="Card.TLabel").grid(row=0, column=0, columnspan=4, sticky="w")
-        ttk.Label(proj, text="Filtrer", style="Card.TLabel").grid(row=1, column=0, sticky="w", pady=(6,6))
-        self.filter_var = tk.StringVar()
-        fe = ttk.Entry(proj, textvariable=self.filter_var, width=32)
-        fe.grid(row=1, column=1, sticky="w", pady=(6,6))
-        fe.bind("<KeyRelease>", lambda _e: self._apply_filter())
-        ttk.Button(proj, text="Tout", width=6, command=lambda: self._select_all(True)).grid(row=1, column=2, padx=(8,0))
-        ttk.Button(proj, text="Aucun", width=6, command=lambda: self._select_all(False)).grid(row=1, column=3, padx=(6,0))
-
-        canvas = tk.Canvas(proj, highlightthickness=0, borderwidth=0)
-        scrollbar = ttk.Scrollbar(proj, orient="vertical", command=canvas.yview)
-        self.scrollable_frame = ttk.Frame(canvas)
-        self.scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.grid(row=2, column=0, columnspan=4, sticky="nsew", pady=(6, 6))
-        scrollbar.grid(row=2, column=4, sticky="ns", padx=(6,0))
-        proj.rowconfigure(2, weight=1); proj.columnconfigure(1, weight=1)
+        # Conteneur placeholder pour la liste de projets (créé à la demande)
+        self._proj_parent = ttk.Frame(exp)
+        self._proj_parent.grid(row=0, column=1, sticky="nsew", padx=(8,0))
+        exp.rowconfigure(0, weight=1)
 
         # Encart ID contexte éco
         idf = ttk.Frame(self, style="Card.TFrame", padding=12)
@@ -1065,6 +1071,31 @@ class ContexteEcoTab(ttk.Frame):
 
         obtn = ttk.Button(bottom, text="Ouvrire output", command=self._open_out_dir)
         obtn.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8,0))
+
+    def _build_list_container(self):
+        proj = ttk.Frame(self._proj_parent)
+        proj.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(proj, text="Projets QGIS", style="Card.TLabel").grid(row=0, column=0, columnspan=3, sticky="w")
+        ttk.Button(proj, text="Actualiser", command=self._populate_projects_async).grid(row=0, column=3, sticky="e")
+        ttk.Label(proj, text="Filtrer", style="Card.TLabel").grid(row=1, column=0, sticky="w", pady=(6,6))
+        self.filter_var = tk.StringVar()
+        fe = ttk.Entry(proj, textvariable=self.filter_var, width=32)
+        fe.grid(row=1, column=1, sticky="w", pady=(6,6))
+        fe.bind("<KeyRelease>", lambda _e: self._apply_filter())
+        ttk.Button(proj, text="Tout", width=6, command=lambda: self._select_all(True)).grid(row=1, column=2, padx=(8,0))
+        ttk.Button(proj, text="Aucun", width=6, command=lambda: self._select_all(False)).grid(row=1, column=3, padx=(6,0))
+
+        canvas = tk.Canvas(proj, highlightthickness=0, borderwidth=0)
+        scrollbar = ttk.Scrollbar(proj, orient="vertical", command=canvas.yview)
+        self.scrollable_frame = ttk.Frame(canvas)
+        self.scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.grid(row=2, column=0, columnspan=4, sticky="nsew", pady=(6, 6))
+        scrollbar.grid(row=2, column=4, sticky="ns", padx=(6,0))
+        proj.rowconfigure(2, weight=1)
+        proj.columnconfigure(1, weight=1)
+        return proj
 
     # ---------- Helpers UI ----------
     def _file_row(self, parent, row: int, label: str, var: tk.StringVar, cmd):
@@ -1121,6 +1152,7 @@ class ContexteEcoTab(ttk.Frame):
 
     def _run_wiki(self):
         try:
+            import geopandas as gpd
             ze_path = self.ze_shp_var.get()
             gdf = gpd.read_file(ze_path)
             if gdf.crs is None:
@@ -1219,6 +1251,7 @@ class ContexteEcoTab(ttk.Frame):
             messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
             return
         try:
+            import geopandas as gpd
             gdf = gpd.read_file(self.ze_shp_var.get())
             if gdf.crs is None:
                 raise ValueError("CRS non défini")
@@ -1233,6 +1266,17 @@ class ContexteEcoTab(ttk.Frame):
 
     def _run_rlt(self):
         try:
+            import geopandas as gpd
+            from selenium import webdriver
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
+            from PIL import Image
+            from docx import Document
+            from docx.enum.text import WD_ALIGN_PARAGRAPH
+            from docx.enum.section import WD_ORIENT
+            from docx.enum.table import WD_TABLE_ALIGNMENT
+            from docx.oxml.ns import qn
             ze_path = self.ze_shp_var.get()
             gdf = gpd.read_file(ze_path)
             if gdf.crs is None:
@@ -1298,6 +1342,7 @@ class ContexteEcoTab(ttk.Frame):
             sec.orientation = WD_ORIENT.LANDSCAPE
             sec.page_width, sec.page_height = sec.page_height, sec.page_width
             for m in (sec.left_margin, sec.right_margin, sec.top_margin, sec.bottom_margin):
+                from docx.shared import Cm
                 m = Cm(1.5)
 
             cap_par = doc.add_paragraph()
@@ -1319,7 +1364,8 @@ class ContexteEcoTab(ttk.Frame):
                 cell.add_paragraph()
                 p_img = cell.add_paragraph()
                 if os.path.exists(path):
-                    p_img.add_run().add_picture(path, width=IMG_WIDTH)
+                    from docx.shared import Cm
+                    p_img.add_run().add_picture(path, width=Cm(IMG_WIDTH_CM))
                 else:
                     p_img.add_run(f"[image manquante : {title}]")
                 p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -1340,6 +1386,13 @@ class ContexteEcoTab(ttk.Frame):
 
     def _run_bassin(self):
         try:
+            import geopandas as gpd
+            from selenium import webdriver
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
+            from selenium.webdriver.common.keys import Keys
+            from selenium.webdriver import ActionChains
             ze_path = self.ze_shp_var.get()
             gdf = gpd.read_file(ze_path)
             if gdf.crs is None:
@@ -1473,17 +1526,31 @@ class ContexteEcoTab(ttk.Frame):
             return "Inconnue", ""
 
     # ---------- Gestion projets QGIS ----------
-    def _populate_projects(self):
-        for w in list(self.scrollable_frame.children.values()): w.destroy()
+    def _populate_projects_async(self):
+        self._set_status("Chargement des projets...")
+        def work():
+            projs = discover_projects_cached()
+            self.after(0, lambda: self._populate_projects_ui(projs))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _populate_projects_ui(self, projs: List[str]):
+        if self._list_container is None:
+            self._list_container = self._build_list_container()
+        for w in list(self.scrollable_frame.children.values()):
+            w.destroy()
         self.project_vars = {}
-        self.all_projects = discover_projects()
-        self.filtered_projects = list(self.all_projects)
-        if not self.all_projects:
+        self.all_projects = projs
+        self.filtered_projects = list(projs)
+        if not projs:
             ttk.Label(self.scrollable_frame, text="Aucun projet trouvé ou dossier inaccessible.", foreground="red").pack(anchor="w")
+            self._set_status("Aucun projet")
             return
         for proj_path in self.filtered_projects:
-            var = tk.IntVar(value=1); self.project_vars[proj_path] = var
+            var = tk.IntVar(value=1)
+            self.project_vars[proj_path] = var
             ttk.Checkbutton(self.scrollable_frame, text=os.path.basename(proj_path), variable=var, style="Card.TCheckbutton").pack(anchor='w', padx=4, pady=1)
+        self._update_counts()
+        self._set_status(f"{len(projs)} projets")
 
     def _apply_filter(self):
         term = normalize_name(self.filter_var.get())
@@ -1670,8 +1737,10 @@ class ContexteEcoTab(ttk.Frame):
 # App principale avec Notebook
 # =========================
 class MainApp:
-    def __init__(self, root):
+    def __init__(self, root, splash=None, start_time=None):
         self.root = root
+        self.splash = splash
+        self.start_time = start_time or time.perf_counter()
         self.root.title("Contexte éco — Outils")
         self.root.geometry("1060x760"); self.root.minsize(900, 640)
 
@@ -1693,12 +1762,22 @@ class MainApp:
         # Notebook
         nb = ttk.Notebook(root)
         nb.pack(fill=tk.BOTH, expand=True, padx=12, pady=10)
+        self.nb = nb
 
-        self.tab_ctx   = ContexteEcoTab(nb, self.style_helper, self.prefs)
-        self.tab_plant = PlantNetTab(nb, self.style_helper, self.prefs)
+        self._tabs = [
+            ("Contexte éco", lambda parent: ContexteEcoTab(parent, self.style_helper, self.prefs)),
+            ("Pl@ntNet",   lambda parent: PlantNetTab(parent, self.style_helper, self.prefs)),
+        ]
+        self._loaded: set[int] = set()
 
-        nb.add(self.tab_ctx, text="Contexte éco")
-        nb.add(self.tab_plant, text="Pl@ntNet")
+        if LAZY_TABS:
+            for title, _ in self._tabs:
+                nb.add(ttk.Frame(nb), text=title)
+            nb.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+            self.root.after(0, lambda: nb.select(0))
+        else:
+            for title, factory in self._tabs:
+                nb.add(factory(nb), text=title)
 
         # Raccourcis utiles
         root.bind("<Control-1>", lambda _e: nb.select(0))
@@ -1706,6 +1785,24 @@ class MainApp:
 
         # Sauvegarde prefs à la fermeture
         root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _on_tab_changed(self, _event):
+        idx = self.nb.index("current")
+        if idx in self._loaded:
+            return
+        title, factory = self._tabs[idx]
+        placeholder = self.nb.nametowidget(self.nb.select())
+        real = factory(self.nb)
+        self.nb.forget(idx)
+        self.nb.insert(idx, real, text=title)
+        self.nb.select(idx)
+        self._loaded.add(idx)
+        if self.splash:
+            self.splash.destroy()
+            self.splash = None
+        if not hasattr(self, "_first_loaded"):
+            self._first_loaded = True
+            log_with_time(f"Premier onglet prêt en {time.perf_counter() - self.start_time:.2f}s")
 
     def _toggle_theme(self):
         themes = ["light", "dark", "funky"]
@@ -1727,8 +1824,11 @@ class MainApp:
 # =========================
 def launch():
     """Lance l'interface principale."""
+    t0 = time.perf_counter()
     root = tk.Tk()
-    app = MainApp(root)
+    splash = show_splash(root)
+    app = MainApp(root, splash=splash, start_time=t0)
+    root.after(0, lambda: log_with_time(f"Fenêtre affichée en {time.perf_counter()-t0:.2f}s"))
     root.mainloop()
 
 
