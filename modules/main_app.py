@@ -1724,12 +1724,53 @@ class ContexteEcoTab(ttk.Frame):
                             (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
                         )
                     ).click()
-                    # 6) Activer la couche "Carte flore"
+                    # 6) Activer la couche "Carte flore" et s'assurer qu'elle est cochée
+                    try:
+                        chk_flore = wait.until(
+                            EC.element_to_be_clickable(
+                                (By.XPATH, "//label[contains(.,'Carte flore')]/preceding-sibling::input")
+                            )
+                        )
+                        if not chk_flore.is_selected():
+                            chk_flore.click()
+                    except Exception:
+                        wait.until(
+                            EC.element_to_be_clickable(
+                                (By.XPATH, "//*[contains(text(),'Carte flore')]")
+                            ),
+                        ).click()
+
+                    # 7) Ouvrir un troisième onglet et activer "Carte des sols"
+                    self.wiki_driver.execute_script(
+                        "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
+                    )
+                    self.wiki_driver.switch_to.window(self.wiki_driver.window_handles[-1])
+                    addr = wait.until(
+                        EC.element_to_be_clickable((By.ID, "address-input"))
+                    )
+                    addr.click(); addr.clear(); addr.send_keys(coords_dms)
+                    wait.until(
+                        EC.element_to_be_clickable((By.ID, "search-address-btn"))
+                    ).click()
                     wait.until(
                         EC.element_to_be_clickable(
-                            (By.XPATH, "//*[contains(text(),'Carte flore')]")
+                            (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
                         )
                     ).click()
+                    try:
+                        chk_sols = wait.until(
+                            EC.element_to_be_clickable(
+                                (By.XPATH, "//label[contains(.,'Carte des sols')]/preceding-sibling::input")
+                            )
+                        )
+                        if not chk_sols.is_selected():
+                            chk_sols.click()
+                    except Exception:
+                        wait.until(
+                            EC.element_to_be_clickable(
+                                (By.XPATH, "//*[contains(text(),'Carte des sols')]")
+                            ),
+                        ).click()
                 except Exception as fe:
                     print(
                         f"[Wiki] Étapes FloreApp échouées : {fe}",
