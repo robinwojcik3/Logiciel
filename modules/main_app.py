@@ -522,6 +522,21 @@ def dms_to_dd(text: str) -> float:
     dd = float(deg) + float(mn)/60 + float(sc)/3600
     return -dd if hemi.upper() in ("S", "W") else dd
 
+
+def dd_to_dms(lat: float, lon: float) -> str:
+    """Convertit des degrés décimaux en chaîne DMS avec décimales."""
+
+    def _convert(val: float, pos: str, neg: str) -> str:
+        hemi = pos if val >= 0 else neg
+        val = abs(val)
+        deg = int(val)
+        min_float = (val - deg) * 60
+        mn = int(min_float)
+        sec = round((min_float - mn) * 60, 1)
+        return f"{deg}°{mn:02d}'{sec:04.1f}\"{hemi}"
+
+    return f"{_convert(lat, 'N', 'S')} {_convert(lon, 'E', 'W')}"
+
 def add_hyperlink(paragraph, url: str, text: str, italic: bool = True):
     part = paragraph.part
     r_id = part.relate_to(
@@ -1686,7 +1701,7 @@ class ContexteEcoTab(ttk.Frame):
 
                 # Étapes supplémentaires : ouverture et interaction avec FloreApp
                 try:
-                    wait = WebDriverWait(self.wiki_driver, 10)
+                    wait = WebDriverWait(self.wiki_driver, 0.5)
                     # 1) Ouvrir l'URL dans un nouvel onglet
                     self.wiki_driver.execute_script(
                         "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
@@ -1697,9 +1712,9 @@ class ContexteEcoTab(ttk.Frame):
                         EC.element_to_be_clickable((By.ID, "address-input"))
                     )
                     addr.click()
-                    # 3) Saisir les coordonnées du centroïde
+                    # 3) Saisir les coordonnées DMS du centroïde
                     addr.clear()
-                    addr.send_keys(f"{lat}, {lon}")
+                    addr.send_keys(dd_to_dms(lat, lon))
                     # 4) Valider la recherche
                     wait.until(
                         EC.element_to_be_clickable((By.ID, "search-address-btn"))
@@ -1710,10 +1725,10 @@ class ContexteEcoTab(ttk.Frame):
                             (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
                         )
                     ).click()
-                    # 6) Activer la couche "Carte de la végétation"
+                    # 6) Activer la couche "Carte flore"
                     wait.until(
                         EC.element_to_be_clickable(
-                            (By.XPATH, "//*[contains(text(),'Carte de la végétation')]")
+                            (By.XPATH, "//*[contains(text(),'Carte flore')]")
                         )
                     ).click()
                 except Exception as fe:
