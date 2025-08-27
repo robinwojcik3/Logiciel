@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
@@ -120,10 +121,11 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
     box.clear()
     box.send_keys(query)
     try:
-        first = WebDriverWait(driver, 1).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, ".suggestions-results a"))
+        WebDriverWait(driver, 0.5).until(
+            EC.visibility_of_element_located((By.CSS_SELECTOR, ".suggestions-result"))
         )
-        first.click()
+        first = driver.find_element(By.CSS_SELECTOR, ".suggestions-result a")
+        ActionChains(driver).move_to_element(first).click().perform()
     except TimeoutException:
         box.send_keys(Keys.ENTER)
 
