@@ -40,6 +40,7 @@ from tkinter import font as tkfont
 from typing import List, Optional, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import requests
+import geopandas as gpd
 from io import BytesIO
 import pillow_heif
 import zipfile
@@ -1594,7 +1595,9 @@ class ContexteEcoTab(ttk.Frame):
         self.stdout_redirect = TextRedirector(self.log_text)
 
         obtn = ttk.Button(bottom, text="Ouvrire output", command=self._open_out_dir)
-        obtn.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8,0))
+        obtn.grid(row=2, column=0, sticky="w", pady=(8,0))
+        self.wiki_button = ttk.Button(bottom, text="Wikipedia", command=self.start_wikipedia_thread)
+        self.wiki_button.grid(row=2, column=1, sticky="e", pady=(8,0))
 
     # ---------- Helpers UI ----------
     def _file_row(self, parent, row: int, label: str, var: tk.StringVar, cmd):
@@ -1639,6 +1642,50 @@ class ContexteEcoTab(ttk.Frame):
             os.startfile(out_dir)
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
+
+    def start_wikipedia_thread(self):
+        if self.busy:
+            print("Une action est déjà en cours.", file=self.stdout_redirect)
+            return
+        ze = os.path.normpath(self.ze_shp_var.get().strip())
+        if not ze or not os.path.isfile(ze):
+            messagebox.showerror("Erreur", "Sélectionnez la zone d'étude.")
+            return
+        self.busy = True
+        self.export_button.config(state="disabled")
+        self.id_button.config(state="disabled")
+        self.wiki_button.config(state="disabled")
+        self.status_label.config(text="Recherche Wikipédia…")
+        t = threading.Thread(target=self._run_wikipedia, args=(ze,), daemon=True)
+        t.start()
+
+    def _run_wikipedia(self, ze: str):
+        old_stdout = sys.stdout
+        sys.stdout = self.stdout_redirect
+        try:
+            gdf = gpd.read_file(ze)
+            centroid = gdf.to_crs("EPSG:4326").geometry.unary_union.centroid
+            lat, lon = centroid.y, centroid.x
+            url = (
+                f"https://geo.api.gouv.fr/communes?lat={lat}&lon={lon}&fields=nom,codeDepartement&format=json"
+            )
+            resp = requests.get(url, timeout=10)
+            data = resp.json()
+            if not data:
+                raise ValueError("Commune introuvable")
+            nom = data[0]["nom"]
+            dep = data[0]["codeDepartement"]
+            query = f"{nom} ({dep})"
+            log_with_time(f"Commune détectée: {query}")
+            from .wikipedia_tool import fetch_wikipedia_info
+            fetch_wikipedia_info(query)
+            self.after(0, lambda: self.status_label.config(text="Terminé"))
+        except Exception as e:
+            log_with_time(f"Erreur: {e}")
+            self.after(0, lambda: messagebox.showerror("Erreur", str(e)))
+        finally:
+            sys.stdout = old_stdout
+            self.after(0, self._run_finished)
 
     # ---------- Gestion projets QGIS ----------
     def _populate_projects(self):
@@ -1809,6 +1856,7 @@ class ContexteEcoTab(ttk.Frame):
     def _run_finished(self):
         self.export_button.config(state="normal")
         self.id_button.config(state="normal")
+        self.wiki_button.config(state="normal")
         self.busy = False
 
 # =========================
