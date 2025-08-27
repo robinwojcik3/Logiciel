@@ -1670,7 +1670,7 @@ class ContexteEcoTab(ttk.Frame):
             commune, dep = self._detect_commune(lat, lon)
             query = f"{commune} {dep}".strip()
             print(f"[Wiki] Requête : {query}", file=self.stdout_redirect)
-            data = fetch_wikipedia_info(query)
+            data, self.wiki_driver = fetch_wikipedia_info(query)
             if "error" in data:
                 print(f"[Wiki] {data['error']}", file=self.stdout_redirect)
             else:
@@ -1897,6 +1897,8 @@ class MainApp:
         self.style_helper = StyleHelper(root, self.prefs)
         self.theme_var = tk.StringVar(value=self.prefs.get("theme", "light"))
         self.style_helper.apply(self.theme_var.get())
+
+        self.wiki_driver = None
 
         # Header global + bouton thème
         top = ttk.Frame(root, style="Header.TFrame", padding=(12, 8))
