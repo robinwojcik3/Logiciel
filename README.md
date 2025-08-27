@@ -22,3 +22,12 @@ L'application s'ouvrira avec plusieurs onglets proposant les fonctionnalités pr
 
 Les modules standard de Python suffisent pour lancer l'application de base. Certaines fonctionnalités peuvent requérir des bibliothèques supplémentaires, installables via `pip`.
 
+
+## Démarrage rapide
+
+La fenêtre principale s'affiche immédiatement. Les onglets sont construits uniquement lors du premier clic, évitant ainsi les imports lourds au démarrage.
+
+## Variables d'environnement
+
+- `LAZY_TABS` : vaut `1` par défaut. Mettre `0` pour recréer le comportement ancien où tous les onglets sont chargés dès l'ouverture.
+- `APP_SPLASH` : vaut `0` par défaut. Mettre `1` pour afficher un petit écran de démarrage « Initialisation… ».
