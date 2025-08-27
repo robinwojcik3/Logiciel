@@ -8,6 +8,7 @@ facilement réutilisable par l'application.
 from __future__ import annotations
 
 import re
+import time
 from typing import Dict, Tuple
 
 from bs4 import BeautifulSoup
@@ -117,6 +118,7 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
         pass
 
     box = wait.until(EC.element_to_be_clickable((By.ID, "searchInput")))
+    time.sleep(0.5)
     box.clear()
     box.send_keys(query)
     try:
