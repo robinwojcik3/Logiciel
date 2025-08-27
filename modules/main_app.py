@@ -1730,6 +1730,35 @@ class ContexteEcoTab(ttk.Frame):
                             (By.XPATH, "//*[contains(text(),'Carte flore')]")
                         )
                     ).click()
+                    # 7) Ouvrir un troisième onglet sans activer "Carte des sols"
+                    self.wiki_driver.execute_script(
+                        "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
+                    )
+                    self.wiki_driver.switch_to.window(self.wiki_driver.window_handles[-1])
+                    wait = WebDriverWait(self.wiki_driver, 0.5)
+                    # 7.1) Rechercher à nouveau les coordonnées
+                    addr = wait.until(
+                        EC.element_to_be_clickable((By.ID, "address-input"))
+                    )
+                    addr.click()
+                    addr.clear()
+                    addr.send_keys(coords_dms)
+                    wait.until(
+                        EC.element_to_be_clickable((By.ID, "search-address-btn"))
+                    ).click()
+                    # 7.2) Ouvrir le menu des couches et laisser "Carte des sols" décochée
+                    wait.until(
+                        EC.element_to_be_clickable(
+                            (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
+                        )
+                    ).click()
+                    # Intentionnellement, ne pas cliquer sur "Carte des sols"
+                    # 7.3) Activer la couche "Carte flore"
+                    wait.until(
+                        EC.element_to_be_clickable(
+                            (By.XPATH, "//*[contains(text(),'Carte flore')]")
+                        )
+                    ).click()
                 except Exception as fe:
                     print(
                         f"[Wiki] Étapes FloreApp échouées : {fe}",
