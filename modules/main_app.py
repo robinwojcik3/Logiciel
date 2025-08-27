@@ -1724,12 +1724,42 @@ class ContexteEcoTab(ttk.Frame):
                             (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
                         )
                     ).click()
-                    # 6) Activer la couche "Carte flore"
+                    # 6) Activer la couche "Carte flore" si non cochée
+                    flore_label = wait.until(
+                        EC.element_to_be_clickable(
+                            (By.XPATH, "//label[.//*[contains(text(),'Carte flore')]]")
+                        )
+                    )
+                    flore_checkbox = flore_label.find_element(By.XPATH, "./input")
+                    if not flore_checkbox.is_selected():
+                        flore_label.click()
+
+                    # 7) Ouvrir un troisième onglet et activer "Carte des sols"
+                    self.wiki_driver.execute_script(
+                        "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
+                    )
+                    self.wiki_driver.switch_to.window(self.wiki_driver.window_handles[-1])
+                    wait = WebDriverWait(self.wiki_driver, 0.5)
+                    addr = wait.until(
+                        EC.element_to_be_clickable((By.ID, "address-input"))
+                    )
+                    addr.click(); addr.clear(); addr.send_keys(coords_dms)
+                    wait.until(
+                        EC.element_to_be_clickable((By.ID, "search-address-btn"))
+                    ).click()
                     wait.until(
                         EC.element_to_be_clickable(
-                            (By.XPATH, "//*[contains(text(),'Carte flore')]")
+                            (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
                         )
                     ).click()
+                    sols_label = wait.until(
+                        EC.element_to_be_clickable(
+                            (By.XPATH, "//label[.//*[contains(text(),'Carte des sols')]]")
+                        )
+                    )
+                    sols_checkbox = sols_label.find_element(By.XPATH, "./input")
+                    if not sols_checkbox.is_selected():
+                        sols_label.click()
                 except Exception as fe:
                     print(
                         f"[Wiki] Étapes FloreApp échouées : {fe}",
