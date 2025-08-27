@@ -32,6 +32,7 @@ import shutil
 import tempfile
 import datetime
 import threading
+import multiprocessing as mp
 import urllib.request
 import webbrowser
 import tkinter as tk
@@ -841,6 +842,12 @@ class ExportCartesTab(ttk.Frame):
 
             log_with_time(f"{len(projets)} projets (attendu = calcul en cours)")
             log_with_time(f"Workers={self.workers_var.get()}, DPI={self.dpi_var.get()}, marge={self.margin_var.get():.2f}, overwrite={self.overwrite_var.get()}")
+            # Utiliser l'interpréteur Python fourni par QGIS pour les workers
+            qgis_python = os.path.join(QGIS_ROOT, "apps", PY_VER, "python.exe")
+            try:
+                mp.set_executable(qgis_python)
+            except Exception:
+                log_with_time(f"Impossible de définir l'interpréteur QGIS ({qgis_python})")
 
             chunks = chunk_even(projets, self.workers_var.get())
             cfg = {
@@ -1859,6 +1866,13 @@ class ContexteEcoTab(ttk.Frame):
             os.makedirs(out_dir, exist_ok=True)
             log_with_time(f"{len(projets)} projets (attendu = calcul en cours)")
             log_with_time(f"Workers={self.workers_var.get()}, DPI={self.dpi_var.get()}, marge={self.margin_var.get():.2f}, overwrite={self.overwrite_var.get()}")
+            # Forcer les processus enfants à utiliser Python de QGIS
+            qgis_python = os.path.join(QGIS_ROOT, "apps", PY_VER, "python.exe")
+            try:
+                mp.set_executable(qgis_python)
+            except Exception:
+                log_with_time(f"Impossible de définir l'interpréteur QGIS ({qgis_python})")
+
             chunks = chunk_even(projets, self.workers_var.get())
             cfg = {
                 "QGIS_ROOT": QGIS_ROOT, "QGIS_APP": QGIS_APP, "PY_VER": PY_VER,
