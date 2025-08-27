@@ -121,8 +121,17 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
     )
     box.clear()
     box.send_keys(query)
-    box.send_keys(Keys.ARROW_DOWN)
-    box.send_keys(Keys.ENTER)
+    try:
+        WebDriverWait(driver, 0.5).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".suggestions-results"))
+        )
+        suggestions = driver.find_elements(By.CSS_SELECTOR, ".suggestions-result a")
+        if suggestions:
+            suggestions[0].click()
+        else:
+            box.send_keys(Keys.ENTER)
+    except TimeoutException:
+        box.send_keys(Keys.ENTER)
 
     try:
         wait.until(EC.presence_of_element_located((By.ID, "firstHeading")))
