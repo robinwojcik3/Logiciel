@@ -33,6 +33,18 @@ def log_with_time(message):
     print(f"[{now}] {message}")
 
 
+def to_long_unc(path: str) -> str:
+    """Retourne un chemin UNC long sous Windows pour accepter n'importe quel nom."""
+    path = os.path.abspath(path)
+    if os.name == 'nt':
+        if path.startswith('\\\\?\\'):
+            return path
+        if path.startswith('\\\\'):
+            return r"\\\\?\\UNC" + path[1:]
+        return r"\\\\?\\" + path
+    return path
+
+
 def run_analysis(ae_shp: str, ze_shp: str, buffer_km: float = 5.0):
     """Lance l'analyse d'identification des zonages à partir des shapefiles.
 
@@ -41,6 +53,10 @@ def run_analysis(ae_shp: str, ze_shp: str, buffer_km: float = 5.0):
     :param buffer_km: distance du tampon autour de la ZE en kilomètres
     """
     log_with_time("Démarrage du script d'identification des zonages...")
+
+    # Normaliser les chemins pour supporter tous les noms et chemins réseau
+    ae_shp = to_long_unc(ae_shp)
+    ze_shp = to_long_unc(ze_shp)
 
     # Vérifier si les fichiers de référence existent
     if not os.path.exists(ae_shp):

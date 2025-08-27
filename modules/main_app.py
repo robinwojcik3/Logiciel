@@ -1431,11 +1431,15 @@ class IDContexteEcoTab(ttk.Frame):
             self.after(0, lambda: self.run_btn.config(state="normal"))
             return
 
+        # Normaliser les chemins pour éviter les erreurs liées aux noms ou à la longueur
+        ae_path = to_long_unc(ae)
+        ze_path = to_long_unc(ze)
+
         old_stdout = sys.stdout
         sys.stdout = self.stdout_redirect
         try:
             from .id_contexte_eco import run_analysis as run_id_context
-            run_id_context(ae, ze)
+            run_id_context(ae_path, ze_path)
             print("Analyse terminée.")
         except Exception as e:
             print(f"Erreur: {e}")
@@ -1739,11 +1743,15 @@ class ContexteEcoTab(ttk.Frame):
         t.start()
 
     def _run_id_logic(self, ae: str, ze: str, buffer_km: float):
+        # Normaliser les chemins avant de lancer l'analyse pour accepter tout nom de fichier
+        ae_path = to_long_unc(ae)
+        ze_path = to_long_unc(ze)
+
         old_stdout = sys.stdout
         sys.stdout = self.stdout_redirect
         try:
             from .id_contexte_eco import run_analysis as run_id_context
-            run_id_context(ae, ze, buffer_km)
+            run_id_context(ae_path, ze_path, buffer_km)
             log_with_time("Analyse terminée.")
             self.after(0, lambda: self.status_label.config(text="Terminé"))
         except Exception as e:
