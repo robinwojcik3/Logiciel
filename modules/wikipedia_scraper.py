@@ -116,16 +116,15 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
     except TimeoutException:
         pass
 
-    box = wait.until(EC.element_to_be_clickable((By.ID, "searchInput")))
+    # Le champ de recherche est attendu au maximum 0,5 s puis on
+    # reproduit les actions clavier : saisie, flèche bas et validation.
+    box = WebDriverWait(driver, 0.5).until(
+        EC.element_to_be_clickable((By.ID, "searchInput"))
+    )
     box.clear()
     box.send_keys(query)
-    try:
-        first = WebDriverWait(driver, 1).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, ".suggestions-results a"))
-        )
-        first.click()
-    except TimeoutException:
-        box.send_keys(Keys.ENTER)
+    box.send_keys(Keys.ARROW_DOWN)
+    box.send_keys(Keys.ENTER)
 
     try:
         wait.until(EC.presence_of_element_located((By.ID, "firstHeading")))
