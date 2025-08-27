@@ -104,7 +104,7 @@ def _normalize_query(s: str) -> str:
 def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> bool:
     driver.get("https://fr.wikipedia.org/")
     try:
-        btn = WebDriverWait(driver, 3).until(
+        btn = WebDriverWait(driver, 0.5).until(
             EC.element_to_be_clickable(
                 (
                     By.XPATH,
@@ -120,9 +120,10 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
     box.clear()
     box.send_keys(query)
     try:
-        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, ".suggestions-results")))
-        box.send_keys(Keys.ARROW_DOWN)
-        box.send_keys(Keys.ENTER)
+        first = WebDriverWait(driver, 1).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, ".suggestions-results a"))
+        )
+        first.click()
     except TimeoutException:
         box.send_keys(Keys.ENTER)
 
