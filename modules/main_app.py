@@ -1683,6 +1683,44 @@ class ContexteEcoTab(ttk.Frame):
                 print("[Wiki] OCCUPATION DES SOLS :", file=self.stdout_redirect)
                 if data['occupation_p1'] != 'Non trouvé':
                     print(data['occupation_p1'], file=self.stdout_redirect)
+
+                # Étapes supplémentaires : ouverture et interaction avec FloreApp
+                try:
+                    wait = WebDriverWait(self.wiki_driver, 10)
+                    # 1) Ouvrir l'URL dans un nouvel onglet
+                    self.wiki_driver.execute_script(
+                        "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
+                    )
+                    self.wiki_driver.switch_to.window(self.wiki_driver.window_handles[-1])
+                    # 2) Cliquer sur la barre de recherche
+                    addr = wait.until(
+                        EC.element_to_be_clickable((By.ID, "address-input"))
+                    )
+                    addr.click()
+                    # 3) Saisir les coordonnées du centroïde
+                    addr.clear()
+                    addr.send_keys(f"{lat}, {lon}")
+                    # 4) Valider la recherche
+                    wait.until(
+                        EC.element_to_be_clickable((By.ID, "search-address-btn"))
+                    ).click()
+                    # 5) Ouvrir le menu des couches
+                    wait.until(
+                        EC.element_to_be_clickable(
+                            (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
+                        )
+                    ).click()
+                    # 6) Activer la couche "Carte de la végétation"
+                    wait.until(
+                        EC.element_to_be_clickable(
+                            (By.XPATH, "//*[contains(text(),'Carte de la végétation')]")
+                        )
+                    ).click()
+                except Exception as fe:
+                    print(
+                        f"[Wiki] Étapes FloreApp échouées : {fe}",
+                        file=self.stdout_redirect,
+                    )
         except Exception as e:
             print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
         finally:
