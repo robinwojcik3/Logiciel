@@ -1874,16 +1874,17 @@ class ContexteEcoTab(ttk.Frame):
                 self.progress_done += done_inc
                 self.progress["value"] = min(self.progress_done, self.total_expected)
                 self.status_label.config(text=f"Progression : {self.progress_done}/{self.total_expected}")
-            with ProcessPoolExecutor(max_workers=int(self.workers_var.get())) as ex:
-                futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
-                for fut in as_completed(futures):
-                    try:
-                        ok, ko = fut.result()
-                        ok_total += ok; ko_total += ko
-                        self.after(0, ui_update_progress, ok + ko)
-                        log_with_time(f"Lot terminé: {ok} OK, {ko} KO")
-                    except Exception as e:
-                        log_with_time(f"Erreur worker: {e}")
+            for chunk in chunks:
+                if not chunk:
+                    continue
+                try:
+                    ok, ko = worker_run((chunk, cfg))
+                    ok_total += ok
+                    ko_total += ko
+                    self.after(0, ui_update_progress, ok + ko)
+                    log_with_time(f"Lot terminé: {ok} OK, {ko} KO")
+                except Exception as e:
+                    log_with_time(f"Erreur worker: {e}")
             elapsed = datetime.datetime.now() - start
             log_with_time(f"FIN — OK={ok_total} | KO={ko_total} | Attendu={self.total_expected} | Durée={elapsed}")
             self.after(0, lambda: self.status_label.config(text=f"Terminé — OK={ok_total} / KO={ko_total}"))
