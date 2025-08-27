@@ -742,6 +742,13 @@ class ExportCartesTab(ttk.Frame):
 
     def _open_out_dir(self):
         try:
+            os.makedirs(OUT_IMG, exist_ok=True)
+            os.startfile(OUT_IMG)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
+
+    def _open_out_dir(self):
+        try:
             os.makedirs(OUT_IMG, exist_ok=True); os.startfile(OUT_IMG)
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier de sortie : {e}")
@@ -1544,10 +1551,13 @@ class ContexteEcoTab(ttk.Frame):
         self.status_label.grid(row=0, column=0, sticky="w")
         self.progress = ttk.Progressbar(bottom, orient="horizontal", mode="determinate", length=220)
         self.progress.grid(row=0, column=1, sticky="e")
+        open_btn = ttk.Button(bottom, text="Ouvrire output", command=self._open_out_dir)
+        open_btn.grid(row=0, column=2, sticky="e", padx=(10,0))
+        ToolTip(open_btn, OUT_IMG)
         bottom.columnconfigure(0, weight=1)
 
         log_frame = ttk.Frame(bottom, style="Card.TFrame")
-        log_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(8,0))
+        log_frame.grid(row=1, column=0, columnspan=3, sticky="nsew", pady=(8,0))
         bottom.rowconfigure(1, weight=1)
         self.log_text = tk.Text(log_frame, height=10, wrap=tk.WORD, state='disabled',
                                 bg=self.style_helper.style.lookup("Card.TFrame", "background"),
@@ -1622,6 +1632,13 @@ class ContexteEcoTab(ttk.Frame):
     def _update_counts(self):
         selected = len(self._selected_projects()); total = len(self.filtered_projects)
         self.status_label.config(text=f"Projets sélectionnés : {selected} / {total}")
+
+    def _open_out_dir(self):
+        try:
+            os.makedirs(OUT_IMG, exist_ok=True)
+            os.startfile(OUT_IMG)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
 
     # ---------- Lancement export ----------
     def start_export_thread(self):
