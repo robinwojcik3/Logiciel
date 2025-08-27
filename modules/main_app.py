@@ -839,6 +839,19 @@ class ExportCartesTab(ttk.Frame):
             start = datetime.datetime.now()
             os.makedirs(OUT_IMG, exist_ok=True)
 
+            if not os.path.isdir(QGIS_ROOT):
+                log_with_time(f"Dossier QGIS introuvable: {QGIS_ROOT}")
+                self.after(0, lambda: messagebox.showerror(
+                    "Erreur", f"Dossier QGIS introuvable:\n{QGIS_ROOT}"))
+                return
+            try:
+                from qgis import core as _  # type: ignore
+            except Exception as e:
+                log_with_time(f"Import QGIS impossible: {e}")
+                self.after(0, lambda: messagebox.showerror(
+                    "Erreur", "Impossible de charger QGIS. Vérifiez son installation."))
+                return
+
             log_with_time(f"{len(projets)} projets (attendu = calcul en cours)")
             log_with_time(f"Workers={self.workers_var.get()}, DPI={self.dpi_var.get()}, marge={self.margin_var.get():.2f}, overwrite={self.overwrite_var.get()}")
 

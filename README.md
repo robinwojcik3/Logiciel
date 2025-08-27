@@ -22,3 +22,5 @@ L'application s'ouvrira avec plusieurs onglets proposant les fonctionnalités pr
 
 Les modules standard de Python suffisent pour lancer l'application de base. Certaines fonctionnalités peuvent requérir des bibliothèques supplémentaires, installables via `pip`.
 
+L'export des cartes de l'onglet « Contexte éco » nécessite une installation de QGIS. Le chemin d'accès est défini dans `modules/main_app.py` via la variable `QGIS_ROOT`; adaptez-le à votre installation.
+
