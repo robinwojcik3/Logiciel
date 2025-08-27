@@ -9,6 +9,7 @@ ils sont fournis par l'interface graphique principale.
 import os
 import sys
 import datetime
+from pathlib import Path
 
 # Configuration des variables d'environnement pour PROJ et GDAL
 qgis_base = r"C:\Program Files\QGIS 3.40.3"
@@ -33,6 +34,32 @@ def log_with_time(message):
     print(f"[{now}] {message}")
 
 
+def _resolve_shapefile(path: str) -> str:
+    """Retourne un chemin valide vers un shapefile.
+
+    Cette fonction accepte indifféremment un chemin complet, un dossier
+    contenant un unique fichier `.shp` ou encore un chemin sans extension.
+    Dans tous les cas elle renvoie le chemin du shapefile à utiliser ou
+    déclenche une ``FileNotFoundError`` si rien n'est trouvé.
+    """
+    p = Path(path).expanduser()
+
+    # Cas 1 : l'utilisateur a fourni directement le fichier .shp
+    if p.is_file():
+        return str(p)
+
+    # Cas 2 : l'utilisateur a omis l'extension
+    if p.suffix == "" and p.with_suffix(".shp").is_file():
+        return str(p.with_suffix(".shp"))
+
+    # Cas 3 : le chemin pointe vers un dossier, on cherche le premier .shp
+    if p.is_dir():
+        for candidate in p.glob("*.shp"):
+            return str(candidate)
+
+    raise FileNotFoundError(path)
+
+
 def run_analysis(ae_shp: str, ze_shp: str, buffer_km: float = 5.0):
     """Lance l'analyse d'identification des zonages à partir des shapefiles.
 
@@ -42,25 +69,29 @@ def run_analysis(ae_shp: str, ze_shp: str, buffer_km: float = 5.0):
     """
     log_with_time("Démarrage du script d'identification des zonages...")
 
-    # Vérifier si les fichiers de référence existent
-    if not os.path.exists(ae_shp):
+    # Résolution des chemins fournis par l'utilisateur
+    try:
+        ae_path = _resolve_shapefile(ae_shp)
+    except FileNotFoundError:
         log_with_time(f"Le fichier de la première couche de référence n'a pas été trouvé : {ae_shp}")
         return
 
-    if not os.path.exists(ze_shp):
+    try:
+        ze_path = _resolve_shapefile(ze_shp)
+    except FileNotFoundError:
         log_with_time(f"Le fichier de la deuxième couche de référence n'a pas été trouvé : {ze_shp}")
         return
 
     # Chargement des couches de référence
     try:
-        reference_gdf = gpd.read_file(ae_shp)
+        reference_gdf = gpd.read_file(ae_path)
         log_with_time("Première couche de référence chargée avec succès")
     except Exception as e:
         log_with_time(f"Erreur lors du chargement de la première couche de référence : {e}")
         return
 
     try:
-        reference2_gdf = gpd.read_file(ze_shp)
+        reference2_gdf = gpd.read_file(ze_path)
         log_with_time("Deuxième couche de référence chargée avec succès")
     except Exception as e:
         log_with_time(f"Erreur lors du chargement de la deuxième couche de référence : {e}")
