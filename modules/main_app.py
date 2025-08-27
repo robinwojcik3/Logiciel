@@ -1735,6 +1735,49 @@ class ContexteEcoTab(ttk.Frame):
                         f"[Wiki] Étapes FloreApp échouées : {fe}",
                         file=self.stdout_redirect,
                     )
+
+                # Troisième onglet : même procédure sans cocher « Carte des sols »
+                try:
+                    wait = WebDriverWait(self.wiki_driver, 0.5)
+                    # 1) Ouvrir l'URL dans un nouvel onglet
+                    self.wiki_driver.execute_script(
+                        "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
+                    )
+                    self.wiki_driver.switch_to.window(self.wiki_driver.window_handles[-1])
+                    # 2) Cliquer sur la barre de recherche
+                    addr = wait.until(
+                        EC.element_to_be_clickable((By.ID, "address-input"))
+                    )
+                    addr.click()
+                    # 3) Saisir les coordonnées du centroïde
+                    addr.clear()
+                    addr.send_keys(coords_dms)
+                    # 4) Valider la recherche
+                    wait.until(
+                        EC.element_to_be_clickable((By.ID, "search-address-btn"))
+                    ).click()
+                    # 5) Ouvrir le menu des couches
+                    wait.until(
+                        EC.element_to_be_clickable(
+                            (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
+                        )
+                    ).click()
+                    # 6) Laisser la couche « Carte des sols » décochée
+                    try:
+                        sol_cb = wait.until(
+                            EC.presence_of_element_located(
+                                (By.XPATH, "//*[contains(text(),'Carte des sols')]/preceding-sibling::input")
+                            )
+                        )
+                        if sol_cb.is_selected():
+                            sol_cb.click()
+                    except Exception:
+                        pass
+                except Exception as fe:
+                    print(
+                        f"[Wiki] Étapes FloreApp sans Carte des sols échouées : {fe}",
+                        file=self.stdout_redirect,
+                    )
         except Exception as e:
             print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
         finally:
