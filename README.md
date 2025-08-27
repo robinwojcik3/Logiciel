@@ -22,3 +22,20 @@ L'application s'ouvrira avec plusieurs onglets proposant les fonctionnalités pr
 
 Les modules standard de Python suffisent pour lancer l'application de base. Certaines fonctionnalités peuvent requérir des bibliothèques supplémentaires, installables via `pip`.
 
+## Export cartographique sous Windows
+
+Lors des exports de cartes, l'application utilise QGIS en tâche de fond.
+Depuis Python 3.8 sous Windows, le système ne cherche plus automatiquement les DLL de Qt/QGIS.
+Pour éviter l'erreur « DLL load failed », chaque processus ajoute maintenant explicitement
+les dossiers indiqués par les variables suivantes :
+
+- `QGIS_ROOT`
+- `QGIS_APP`
+- `QGIS_PREFIX_PATH`
+- `QT_DIR`
+- `QT_QPA_PLATFORM_PLUGIN_PATH`
+
+La fonction utilitaire `prepare_qgis_env` se charge de déclarer ces dossiers via
+`os.add_dll_directory`. Un test rapide de l'environnement est disponible avec
+`qgis_smoke_test` avant de lancer les exports.
+
