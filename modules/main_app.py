@@ -77,8 +77,14 @@ OVERWRITE_DEFAULT  = False
 LAYER_AE_NAME = "Aire d'étude élargie"
 LAYER_ZE_NAME = "Zone d'étude"
 
-BASE_SHARE = r"\\192.168.1.240\commun\PARTAGE"
-SUBPATH    = r"Espace_RWO\CARTO ROBIN"
+# Emplacement des projets QGIS "Contexte éco"
+# Désormais, les fichiers sont stockés directement dans le dépôt,
+# dans le dossier « Cartes contexte éco export ».
+# On construit donc un chemin absolu à partir de ce fichier.
+BASE_SHARE = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "Cartes contexte éco export")
+)
+SUBPATH    = ""  # Gardé pour compatibilité, non utilisé ici
 
 OUT_IMG    = r"C:\Users\utilisateur\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 3) BDD\PYTHON\2) Contexte éco\OUTPUT"
 
@@ -456,22 +462,18 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
     return ok, ko
 
 def discover_projects() -> List[str]:
-    partage = BASE_SHARE
-    base_dir: Optional[str] = None
-    try:
-        if os.path.isdir(partage):
-            for e in os.listdir(partage):
-                if normalize_name(e) == normalize_name("Espace_RWO"):
-                    base_espace = os.path.join(partage, e)
-                    for s in os.listdir(base_espace):
-                        if normalize_name(s) == normalize_name("CARTO ROBIN"):
-                            base_dir = os.path.join(base_espace, s); break
-                    break
-    except Exception as e:
-        log_with_time(f"Accès PARTAGE impossible via listdir: {e}")
+    """Détecte les projets QGIS présents dans le dépôt.
 
-    if not base_dir or not os.path.isdir(base_dir):
-        base_dir = os.path.join(BASE_SHARE, SUBPATH)
+    Les anciens accès réseau ont été supprimés : on travaille
+    désormais directement dans le dossier local fourni par BASE_SHARE.
+    """
+    base_dir = BASE_SHARE
+    if SUBPATH:
+        base_dir = os.path.join(base_dir, SUBPATH)
+
+    if not os.path.isdir(base_dir):
+        log_with_time(f"Dossier introuvable: {base_dir}")
+        return []
 
     for d in (base_dir, to_long_unc(base_dir)):
         try:
