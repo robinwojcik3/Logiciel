@@ -10,13 +10,6 @@ from __future__ import annotations
 import re
 from typing import Dict, Tuple
 
-from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
 
 # Départements courants (ajoutez si besoin)
 DEP: Dict[str, str] = {
@@ -59,7 +52,9 @@ def _find_section_heading(soup: BeautifulSoup, heading_text: str):
     return span.find_parent(["h2", "h3"]) if span else None
 
 
-def _scrape_sections(driver: webdriver.Chrome) -> Dict[str, str]:
+def _scrape_sections(driver: "webdriver.Chrome") -> Dict[str, str]:
+    from bs4 import BeautifulSoup
+
     out = {
         "climat_p1": "Non trouvé",
         "climat_p2": "Non trouvé",
@@ -101,8 +96,13 @@ def _normalize_query(s: str) -> str:
     return s
 
 
-def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> bool:
+def _open_article(driver: "webdriver.Chrome", query: str, wait: "WebDriverWait") -> bool:
     """Ouvre la page de recherche avancée puis l'article correspondant."""
+
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.common.exceptions import TimeoutException
 
     search_url = (
         "https://fr.wikipedia.org/w/index.php?search=&title=Sp%C3%A9cial%3ARecherche"
@@ -116,7 +116,7 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
             EC.element_to_be_clickable(
                 (
                     By.XPATH,
-                    "//button[contains(.,'Accepter') or contains(.,'Tout accepter') or contains(.,\"J'ai compris\") or contains(.,'J’ai compris')]",
+                    "//button[contains(.,'Accepter') or contains(.,'Tout accepter') or contains(.,\"J'ai compris\") or contains(.,'J\u2019ai compris')]",
                 )
             )
         )
@@ -160,7 +160,7 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
         return False
 
 
-def fetch_wikipedia_info(commune_query: str) -> Tuple[Dict[str, str], webdriver.Chrome]:
+def fetch_wikipedia_info(commune_query: str) -> Tuple[Dict[str, str], "webdriver.Chrome"]:
     """Ouvre la page Wikipédia correspondant à ``commune_query`` et en extrait
     quelques sections utiles. La fonction renvoie également l'objet ``driver``
     afin que l'utilisateur décide quand fermer la fenêtre du navigateur.
@@ -168,6 +168,9 @@ def fetch_wikipedia_info(commune_query: str) -> Tuple[Dict[str, str], webdriver.
     ``commune_query`` peut être de la forme ``"Vizille 38"`` ou
     ``"Vizille (38)``.
     """
+
+    from selenium import webdriver
+    from selenium.webdriver.support.ui import WebDriverWait
 
     query = _normalize_query(commune_query)
     options = webdriver.ChromeOptions()

@@ -20,11 +20,7 @@ print(f"PROJ_LIB défini à: {os.environ['PROJ_LIB']}")
 print(f"GDAL_DATA défini à: {os.environ['GDAL_DATA']}")
 
 # Maintenant importer les autres modules
-import geopandas as gpd
-import pandas as pd
 import math
-from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
-from openpyxl.utils import get_column_letter
 
 
 def log_with_time(message):
@@ -40,6 +36,11 @@ def run_analysis(ae_shp: str, ze_shp: str, buffer_km: float = 5.0):
     :param ze_shp: chemin vers la couche "Zone d'étude"
     :param buffer_km: distance du tampon autour de la ZE en kilomètres
     """
+    import geopandas as gpd
+    import pandas as pd
+    from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
+    from openpyxl.utils import get_column_letter
+
     log_with_time("Démarrage du script d'identification des zonages...")
 
     # Vérifier si les fichiers de référence existent
