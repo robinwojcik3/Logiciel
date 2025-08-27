@@ -145,6 +145,7 @@ def fetch_wikipedia_info(commune_query: str) -> Dict[str, str]:
     query = _normalize_query(commune_query)
     options = webdriver.ChromeOptions()
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
+    options.add_experimental_option("detach", True)
     options.add_argument("--log-level=3")
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-gpu")
@@ -166,9 +167,6 @@ def fetch_wikipedia_info(commune_query: str) -> Dict[str, str]:
         url = driver.current_url
         data["url"] = url
         return data
-    finally:
-        try:
-            driver.quit()
-        except Exception:
-            pass
+    except Exception as e:
+        return {"error": str(e)}
 
