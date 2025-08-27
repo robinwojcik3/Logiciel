@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
@@ -104,25 +105,24 @@ def _normalize_query(s: str) -> str:
 def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> bool:
     driver.get("https://fr.wikipedia.org/")
     try:
-        btn = WebDriverWait(driver, 3).until(
-            EC.element_to_be_clickable(
-                (
-                    By.XPATH,
-                    "//button[contains(.,'Accepter') or contains(.,'Tout accepter') or contains(.,\"J'ai compris\") or contains(.,'J’ai compris')]",
-                )
-            )
+        btn = driver.find_element(
+            By.XPATH,
+            "//button[contains(.,'Accepter') or contains(.,'Tout accepter') or contains(.,\"J'ai compris\") or contains(.,'J’ai compris')]",
         )
         btn.click()
-    except TimeoutException:
+    except Exception:
         pass
 
-    box = wait.until(EC.element_to_be_clickable((By.ID, "searchInput")))
+    short_wait = WebDriverWait(driver, 0.5)
+    try:
+        box = short_wait.until(EC.element_to_be_clickable((By.ID, "searchInput")))
+    except TimeoutException:
+        box = driver.find_element(By.ID, "searchInput")
     box.clear()
     box.send_keys(query)
     try:
-        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, ".suggestions-results")))
-        box.send_keys(Keys.ARROW_DOWN)
-        box.send_keys(Keys.ENTER)
+        short_wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, ".suggestions-results")))
+        ActionChains(driver).move_to_element_with_offset(box, 0, box.size["height"] + 5).click().perform()
     except TimeoutException:
         box.send_keys(Keys.ENTER)
 
