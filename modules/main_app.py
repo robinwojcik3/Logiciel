@@ -7,14 +7,8 @@ Onglet « Contexte éco » :
     - Export des mises en page QGIS en PNG.
     - Identification des zonages (ID Contexte éco) avec tampon configurable.
     - Sélection commune des shapefiles ZE/AE et console partagée.
-
-Onglet « Remonter le temps & Bassin versant » :
-    - Reprend le workflow IGN (capture + rapport Word) mais
-      DEMANDE à l’utilisateur :
-        • Coordonnées en DMS (LAT puis LON, ex : 45°09'30" N 5°43'12" E)
-      La commune est désormais détectée automatiquement au lieu d'être saisie.
-    - Options : dossier de sortie, headless, tempo de chargement.
-    - Produit un Word 2×2 avec les vues temporelles, + commentaire.
+    - Accès direct aux outils "Remonter le temps", "Bassin versant" et à
+      l'ouverture de Google Maps à partir du centroïde de la zone d'étude.
 
 Onglet « Identification Pl@ntNet » :
     - Reconnaissance de plantes via l'API Pl@ntNet.
@@ -631,6 +625,11 @@ class ExportCartesTab(ttk.Frame):
         self._build_ui()
         self._populate_projects()
         self._update_counts()
+
+        # Instance cachée de l'ancien onglet "Remonter le temps" pour réutiliser sa logique
+        self.rlt_helper = RemonterLeTempsTab(self, self.style_helper, self.prefs)
+        self.rlt_helper.stdout_redirect = self.stdout_redirect
+        self.rlt_helper.status_label = self.status_label
 
     def _build_ui(self):
         header = ttk.Frame(self, style="Header.TFrame", padding=(14, 12))
@@ -1592,6 +1591,12 @@ class ContexteEcoTab(ttk.Frame):
         self.id_button.grid(row=0, column=2, sticky="w", padx=(12,0))
         self.wiki_button = ttk.Button(idf, text="Scraping", style="Accent.TButton", command=self.start_wiki_thread)
         self.wiki_button.grid(row=0, column=3, sticky="w", padx=(12,0))
+        self.rlt_button = ttk.Button(idf, text="Remonter le temps", command=self.start_rlt_thread)
+        self.rlt_button.grid(row=0, column=4, sticky="w", padx=(12,0))
+        self.gmaps_button = ttk.Button(idf, text="Ouvrir Google Maps", command=self.open_gmaps)
+        self.gmaps_button.grid(row=0, column=5, sticky="w", padx=(12,0))
+        self.bassin_button = ttk.Button(idf, text="Bassin versant", command=self.start_bassin_thread)
+        self.bassin_button.grid(row=0, column=6, sticky="w", padx=(12,0))
 
         # Console + progression
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
@@ -1695,8 +1700,8 @@ class ContexteEcoTab(ttk.Frame):
                 if data['climat_p2'] != 'Non trouvé':
                     print(data['climat_p2'], file=self.stdout_redirect)
                 print("[Wiki] OCCUPATION DES SOLS :", file=self.stdout_redirect)
-                if data['occupation_p1'] != 'Non trouvé':
-                    print(data['occupation_p1'], file=self.stdout_redirect)
+            if data['occupation_p1'] != 'Non trouvé':
+                print(data['occupation_p1'], file=self.stdout_redirect)
 
                 # Étapes supplémentaires : ouverture des cartes et activation des couches
                 def _open_layer(layer_label: str) -> None:
@@ -1746,6 +1751,56 @@ class ContexteEcoTab(ttk.Frame):
             print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
         finally:
             self.after(0, lambda: self.wiki_button.config(state="normal"))
+
+    def _get_centroid_info(self) -> Optional[Tuple[str, float, float]]:
+        """Retourne les coordonnées du centroïde de la ZE en DMS et DD."""
+        ze_path = self.ze_shp_var.get().strip()
+        if not ze_path:
+            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
+            return None
+        try:
+            gdf = gpd.read_file(ze_path)
+            if gdf.crs is None:
+                raise ValueError("CRS non défini")
+            gdf = gdf.to_crs("EPSG:4326")
+            centroid = gdf.geometry.unary_union.centroid
+            lat, lon = centroid.y, centroid.x
+            return dd_to_dms(lat, lon), lat, lon
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible de calculer le centroïde : {e}")
+            return None
+
+    def start_rlt_thread(self):
+        info = self._get_centroid_info()
+        if not info:
+            return
+        coords_dms, _, _ = info
+        self.rlt_helper.coord_var.set(coords_dms)
+        self.rlt_helper.run_btn = self.rlt_button
+        self.rlt_button.config(state="disabled")
+        t = threading.Thread(target=self.rlt_helper._run_process)
+        t.daemon = True
+        t.start()
+
+    def open_gmaps(self):
+        info = self._get_centroid_info()
+        if not info:
+            return
+        _, lat, lon = info
+        url = f"https://www.google.com/maps/@{lat},{lon},17z"
+        webbrowser.open(url)
+
+    def start_bassin_thread(self):
+        info = self._get_centroid_info()
+        if not info:
+            return
+        coords_dms, _, _ = info
+        self.rlt_helper.coord_var.set(coords_dms)
+        self.rlt_helper.bassin_btn = self.bassin_button
+        self.bassin_button.config(state="disabled")
+        t = threading.Thread(target=self.rlt_helper._run_bassin)
+        t.daemon = True
+        t.start()
 
     def _detect_commune(self, lat: float, lon: float) -> Tuple[str, str]:
         try:
@@ -1972,17 +2027,14 @@ class MainApp:
         nb.pack(fill=tk.BOTH, expand=True, padx=12, pady=10)
 
         self.tab_ctx   = ContexteEcoTab(nb, self.style_helper, self.prefs)
-        self.tab_rlt   = RemonterLeTempsTab(nb, self.style_helper, self.prefs)
         self.tab_plant = PlantNetTab(nb, self.style_helper, self.prefs)
 
         nb.add(self.tab_ctx, text="Contexte éco")
-        nb.add(self.tab_rlt, text="Remonter le temps & Bassin versant")
         nb.add(self.tab_plant, text="Pl@ntNet")
 
         # Raccourcis utiles
         root.bind("<Control-1>", lambda _e: nb.select(0))
         root.bind("<Control-2>", lambda _e: nb.select(1))
-        root.bind("<Control-3>", lambda _e: nb.select(2))
 
         # Sauvegarde prefs à la fermeture
         root.protocol("WM_DELETE_WINDOW", self._on_close)
