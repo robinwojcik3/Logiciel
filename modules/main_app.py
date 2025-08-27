@@ -1580,6 +1580,17 @@ class ContexteEcoTab(ttk.Frame):
         self.wiki_button = ttk.Button(idf, text="Wikipedia", style="Accent.TButton", command=self.start_wiki_thread)
         self.wiki_button.grid(row=0, column=3, sticky="w", padx=(12,0))
 
+        # Résultats Wikipédia
+        self.wiki_frame = ttk.Frame(self, style="Card.TFrame", padding=12)
+        self.wiki_frame.pack(fill=tk.X, pady=(10,0))
+        ttk.Label(self.wiki_frame, text="Climat", style="Card.TLabel").grid(row=0, column=0, sticky="nw")
+        self.wiki_climat_lbl = ttk.Label(self.wiki_frame, text="", wraplength=400, justify="left")
+        self.wiki_climat_lbl.grid(row=0, column=1, sticky="w", padx=(8,0))
+        ttk.Label(self.wiki_frame, text="Corine Land Cover", style="Card.TLabel").grid(row=1, column=0, sticky="nw", pady=(4,0))
+        self.wiki_occ_lbl = ttk.Label(self.wiki_frame, text="", wraplength=400, justify="left")
+        self.wiki_occ_lbl.grid(row=1, column=1, sticky="w", padx=(8,0), pady=(4,0))
+        self.wiki_frame.columnconfigure(1, weight=1)
+
         # Console + progression
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
         bottom.pack(fill=tk.BOTH, expand=True, pady=(10,0))
@@ -1676,17 +1687,20 @@ class ContexteEcoTab(ttk.Frame):
             else:
                 print(f"[Wiki] Page Wikipédia : {data['url']}", file=self.stdout_redirect)
                 print("[Wiki] CLIMAT :", file=self.stdout_redirect)
-                if data['climat_p1'] != 'Non trouvé':
-                    print(data['climat_p1'], file=self.stdout_redirect)
-                if data['climat_p2'] != 'Non trouvé':
-                    print(data['climat_p2'], file=self.stdout_redirect)
+                if data['climat'] != 'Non trouvé':
+                    print(data['climat'], file=self.stdout_redirect)
                 print("[Wiki] OCCUPATION DES SOLS :", file=self.stdout_redirect)
                 if data['occupation_p1'] != 'Non trouvé':
                     print(data['occupation_p1'], file=self.stdout_redirect)
+                self.after(0, lambda: self._update_wiki_results(data))
         except Exception as e:
             print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
         finally:
             self.after(0, lambda: self.wiki_button.config(state="normal"))
+
+    def _update_wiki_results(self, data: dict) -> None:
+        self.wiki_climat_lbl.config(text=data.get('climat', 'Non trouvé'))
+        self.wiki_occ_lbl.config(text=data.get('occupation_p1', 'Non trouvé'))
 
     def _detect_commune(self, lat: float, lon: float) -> Tuple[str, str]:
         try:
