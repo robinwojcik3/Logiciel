@@ -1592,6 +1592,12 @@ class ContexteEcoTab(ttk.Frame):
         self.id_button.grid(row=0, column=2, sticky="w", padx=(12,0))
         self.wiki_button = ttk.Button(idf, text="Scraping", style="Accent.TButton", command=self.start_wiki_thread)
         self.wiki_button.grid(row=0, column=3, sticky="w", padx=(12,0))
+        self.rlt_button = ttk.Button(idf, text="Remonter le temps", style="Accent.TButton", command=self.start_rlt_thread)
+        self.rlt_button.grid(row=0, column=4, sticky="w", padx=(12,0))
+        self.gmaps_button = ttk.Button(idf, text="Google Maps", style="Accent.TButton", command=self.open_gmaps)
+        self.gmaps_button.grid(row=0, column=5, sticky="w", padx=(12,0))
+        self.bassin_button = ttk.Button(idf, text="Bassin versant", style="Accent.TButton", command=self.start_bassin_thread)
+        self.bassin_button.grid(row=0, column=6, sticky="w", padx=(12,0))
 
         # Console + progression
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
@@ -1746,6 +1752,251 @@ class ContexteEcoTab(ttk.Frame):
             print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
         finally:
             self.after(0, lambda: self.wiki_button.config(state="normal"))
+
+    def _get_centroid_coords(self) -> Optional[Tuple[float, float]]:
+        path = self.ze_shp_var.get().strip()
+        if not path:
+            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
+            return None
+        try:
+            gdf = gpd.read_file(path)
+            if gdf.crs is None:
+                raise ValueError("CRS non défini")
+            gdf = gdf.to_crs("EPSG:4326")
+            centroid = gdf.geometry.unary_union.centroid
+            return centroid.y, centroid.x
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible de lire le shapefile : {e}")
+            return None
+
+    def start_rlt_thread(self):
+        coords = self._get_centroid_coords()
+        if not coords:
+            return
+        self.rlt_button.config(state="disabled")
+        t = threading.Thread(target=self._run_rlt, args=coords)
+        t.daemon = True
+        t.start()
+
+    def _run_rlt(self, lat_dd: float, lon_dd: float):
+        try:
+            commune, _ = self._detect_commune(lat_dd, lon_dd)
+            wait_s = WAIT_TILES_DEFAULT
+            out_dir = OUTPUT_DIR_RLT
+            os.makedirs(out_dir, exist_ok=True)
+            comment_txt = COMMENT_TEMPLATE.format(commune=commune)
+
+            drv_opts = webdriver.ChromeOptions()
+            drv_opts.add_argument("--log-level=3")
+            drv_opts.add_experimental_option('excludeSwitches', ['enable-logging'])
+            drv_opts.add_argument("--disable-extensions")
+
+            print(f"[IGN] Lancement Chrome…", file=self.stdout_redirect)
+            driver = webdriver.Chrome(options=drv_opts)
+            try:
+                driver.maximize_window()
+            except Exception:
+                pass
+
+            images = []
+            viewport = (By.CSS_SELECTOR, "div.ol-viewport")
+
+            for title, layer_val in LAYERS:
+                url = URL.format(lon=f"{lon_dd:.6f}", lat=f"{lat_dd:.6f}", layer=layer_val)
+                print(f"[IGN] {title} → {url}", file=self.stdout_redirect)
+                driver.get(url)
+                WebDriverWait(driver, 20).until(EC.visibility_of_element_located(viewport))
+                time.sleep(wait_s)
+                tgt = driver.find_element(*viewport)
+                img_path = os.path.join(out_dir, f"{title}.png")
+                if tgt.screenshot(img_path):
+                    img = Image.open(img_path)
+                    w, h = img.size
+                    left, right = int(w * 0.05), int(w * 0.95)
+                    img.crop((left, 0, right, h)).save(img_path)
+                    images.append((title, img_path))
+                    print(f"[IGN] Capture OK : {img_path}", file=self.stdout_redirect)
+                else:
+                    print(f"[IGN] Capture échouée : {title}", file=self.stdout_redirect)
+
+            driver.quit()
+
+            if not images:
+                print("[IGN] Aucune image → pas de doc.", file=self.stdout_redirect)
+                messagebox.showwarning("IGN", "Aucune image capturée.")
+                return
+
+            print("[IGN] Génération du Word…", file=self.stdout_redirect)
+            doc = Document()
+            style_normal = doc.styles['Normal']
+            style_normal.font.name = 'Calibri'
+            style_normal._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
+            style_tbl = doc.styles['Table Grid']
+            style_tbl.font.name = 'Calibri'
+            style_tbl._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
+
+            sec = doc.sections[0]
+            sec.orientation = WD_ORIENT.LANDSCAPE
+            sec.page_width, sec.page_height = sec.page_height, sec.page_width
+            for m in (sec.left_margin, sec.right_margin, sec.top_margin, sec.bottom_margin):
+                m = Cm(1.5)
+
+            cap_par = doc.add_paragraph()
+            cap_par.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            add_hyperlink(cap_par, "https://remonterletemps.ign.fr/",
+                          f"Comparaison temporelle — {commune} (source : IGN – RemonterLeTemps)")
+
+            table = doc.add_table(rows=2, cols=2)
+            table.alignment = WD_TABLE_ALIGNMENT.CENTER
+            table.style = "Table Grid"
+            table.autofit = False
+
+            for idx, (title, path) in enumerate(images):
+                r, c = divmod(idx, 2)
+                cell = table.cell(r, c)
+                p_t = cell.paragraphs[0]
+                run_t = p_t.add_run(title); run_t.bold = True
+                p_t.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cell.add_paragraph()
+                p_img = cell.add_paragraph()
+                if os.path.exists(path):
+                    p_img.add_run().add_picture(path, width=IMG_WIDTH)
+                else:
+                    p_img.add_run(f"[image manquante : {title}]")
+                p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+            doc.add_paragraph()
+            p_comm = doc.add_paragraph(comment_txt)
+            p_comm.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+            doc_path = os.path.join(out_dir, WORD_FILENAME)
+            doc.save(doc_path)
+            print(f"[IGN] Document généré : {doc_path}", file=self.stdout_redirect)
+            self._set_status(f"Terminé — {doc_path}")
+        except Exception as e:
+            print(f"[IGN] Erreur : {e}", file=self.stdout_redirect)
+            self.after(0, lambda: messagebox.showerror("IGN", str(e)))
+        finally:
+            self.after(0, lambda: self.rlt_button.config(state="normal"))
+
+    def open_gmaps(self):
+        coords = self._get_centroid_coords()
+        if not coords:
+            return
+        lat, lon = coords
+        url = f"https://www.google.com/maps/@{lat},{lon},17z"
+        webbrowser.open(url)
+
+    def start_bassin_thread(self):
+        coords = self._get_centroid_coords()
+        if not coords:
+            return
+        self.bassin_button.config(state="disabled")
+        t = threading.Thread(target=self._run_bassin, args=coords)
+        t.daemon = True
+        t.start()
+
+    def _run_bassin(self, lat_dd: float, lon_dd: float):
+        try:
+            user_address = dd_to_dms(lat_dd, lon_dd)
+            download_dir = OUT_IMG
+            target_folder_name = "Bassin versant"
+            target_path = os.path.join(download_dir, target_folder_name)
+            os.makedirs(download_dir, exist_ok=True)
+            print(f"[BV] Coordonnées : {lat_dd:.6f}, {lon_dd:.6f}", file=self.stdout_redirect)
+
+            options = webdriver.ChromeOptions()
+            options.add_argument("--log-level=3")
+            options.add_experimental_option('excludeSwitches', ['enable-logging'])
+            options.add_argument("--disable-extensions")
+            prefs = {
+                "download.default_directory": download_dir,
+                "download.prompt_for_download": False,
+                "profile.default_content_settings.popups": 0,
+                "download.directory_upgrade": True
+            }
+            options.add_experimental_option("prefs", prefs)
+
+            print("[BV] Initialisation du navigateur...", file=self.stdout_redirect)
+            driver = webdriver.Chrome(options=options)
+            try:
+                driver.maximize_window()
+            except Exception:
+                pass
+
+            url = "https://mghydro.com/watersheds/"
+            print(f"[BV] Navigation vers {url}...", file=self.stdout_redirect)
+            driver.get(url)
+            wait = WebDriverWait(driver, 2)
+
+            opts_button = wait.until(EC.element_to_be_clickable((By.ID, "opts_click")))
+            opts_button.click(); time.sleep(1)
+            downloadable_checkbox = wait.until(EC.element_to_be_clickable((By.ID, "downloadable")))
+            if not downloadable_checkbox.is_selected():
+                downloadable_checkbox.click()
+
+            search_icon = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".leaflet-control-search .search-button")))
+            search_icon.click()
+            search_input = wait.until(EC.visibility_of_element_located((By.ID, "searchtext84")))
+            search_input.clear(); time.sleep(0.3)
+            search_input.send_keys(user_address); time.sleep(1.5)
+            search_input.send_keys(Keys.ARROW_DOWN); time.sleep(0.3)
+            search_input.send_keys(Keys.ENTER); time.sleep(1.5)
+
+            map_element = wait.until(EC.presence_of_element_located((By.ID, "map")))
+            ActionChains(driver).move_to_element(map_element).click().perform(); time.sleep(0.8)
+            wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "div.leaflet-popup")))
+            delineate_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".leaflet-popup .gobutton")))
+            delineate_button.click(); time.sleep(1.5)
+
+            downloads_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(@class, 'ui-selectmenu-text') and contains(text(), 'Watershed Boundary')]") ))
+            downloads_button.click(); time.sleep(0.8)
+            ActionChains(driver).send_keys(Keys.ARROW_DOWN).pause(0.3).send_keys(Keys.ARROW_DOWN).pause(0.3).send_keys(Keys.ENTER).perform()
+            time.sleep(1.5)
+
+        except Exception as e:
+            print(f"[BV] Erreur Selenium : {e}", file=self.stdout_redirect)
+        finally:
+            try:
+                driver.quit()
+            except Exception:
+                pass
+
+        try:
+            print("[BV] Attente du téléchargement du ZIP...", file=self.stdout_redirect)
+            zip_file_path = None
+            wait_time = 30
+            start_time = time.time()
+            while time.time() - start_time < wait_time:
+                zip_candidates = [f for f in os.listdir(download_dir) if f.lower().endswith('.zip') and not f.lower().endswith('.crdownload')]
+                if zip_candidates:
+                    zip_candidates_full = [os.path.join(download_dir, z) for z in zip_candidates]
+                    zip_file_path = max(zip_candidates_full, key=os.path.getmtime)
+                    size1 = os.path.getsize(zip_file_path); time.sleep(1); size2 = os.path.getsize(zip_file_path)
+                    if size1 == size2:
+                        print(f"[BV] ZIP détecté : {os.path.basename(zip_file_path)}", file=self.stdout_redirect)
+                        break
+                time.sleep(1)
+
+            if not zip_file_path:
+                print("[BV] Aucun fichier ZIP trouvé.", file=self.stdout_redirect)
+            else:
+                if os.path.exists(target_path):
+                    print(f"[BV] Remplacement du dossier '{target_folder_name}'", file=self.stdout_redirect)
+                    shutil.rmtree(target_path, ignore_errors=True)
+                os.makedirs(target_path, exist_ok=True)
+                with zipfile.ZipFile(zip_file_path, 'r') as zf:
+                    zf.extractall(path=target_path)
+                os.remove(zip_file_path)
+                print(f"[BV] Décompression terminée dans '{target_folder_name}'", file=self.stdout_redirect)
+                self._set_status(f"Bassin versant : {target_path}")
+        except Exception as e:
+            print(f"[BV] Erreur décompression : {e}", file=self.stdout_redirect)
+        finally:
+            self.after(0, lambda: self.bassin_button.config(state="normal"))
+
+    def _set_status(self, txt: str):
+        self.after(0, lambda: self.status_label.config(text=txt))
 
     def _detect_commune(self, lat: float, lon: float) -> Tuple[str, str]:
         try:
@@ -1972,17 +2223,14 @@ class MainApp:
         nb.pack(fill=tk.BOTH, expand=True, padx=12, pady=10)
 
         self.tab_ctx   = ContexteEcoTab(nb, self.style_helper, self.prefs)
-        self.tab_rlt   = RemonterLeTempsTab(nb, self.style_helper, self.prefs)
         self.tab_plant = PlantNetTab(nb, self.style_helper, self.prefs)
 
         nb.add(self.tab_ctx, text="Contexte éco")
-        nb.add(self.tab_rlt, text="Remonter le temps & Bassin versant")
         nb.add(self.tab_plant, text="Pl@ntNet")
 
         # Raccourcis utiles
         root.bind("<Control-1>", lambda _e: nb.select(0))
         root.bind("<Control-2>", lambda _e: nb.select(1))
-        root.bind("<Control-3>", lambda _e: nb.select(2))
 
         # Sauvegarde prefs à la fermeture
         root.protocol("WM_DELETE_WINDOW", self._on_close)
