@@ -314,12 +314,22 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
         else ("minimal" if os.path.isfile(os.path.join(platform_dir, "qminimal.dll")) else "offscreen")
     os.environ["QT_QPA_PLATFORM"] = qpa
 
-    os.environ["PATH"] = os.pathsep.join([
+    # Dossiers contenant les DLL nécessaires à QGIS
+    dll_dirs = [
         os.path.join(qt_base, "bin"),
         os.path.join(cfg["QGIS_APP"], "bin"),
         os.path.join(cfg["QGIS_ROOT"], "bin"),
-        os.environ.get("PATH", ""),
-    ])
+    ]
+    os.environ["PATH"] = os.pathsep.join(dll_dirs + [os.environ.get("PATH", "")])
+
+    # À partir de Python 3.8, il faut enregistrer explicitement les répertoires
+    # contenant des DLL pour que celles-ci soient chargées correctement.
+    if hasattr(os, "add_dll_directory"):
+        for d in dll_dirs:
+            try:
+                os.add_dll_directory(d)
+            except Exception:
+                pass
 
     sys.path.insert(0, os.path.join(cfg["QGIS_APP"], "python"))
     sys.path.insert(0, os.path.join(cfg["QGIS_ROOT"], "apps", cfg["PY_VER"], "Lib", "site-packages"))
