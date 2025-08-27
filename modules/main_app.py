@@ -629,6 +629,9 @@ class ExportCartesTab(ttk.Frame):
         self.progress_done  = 0
 
         self._build_ui()
+        self.rlt = RemonterLeTempsTab(self, self.style_helper, self.prefs)
+        self.rlt.stdout_redirect = self.stdout_redirect
+        self.rlt.status_label = self.status_label
         self._populate_projects()
         self._update_counts()
 
@@ -1592,6 +1595,12 @@ class ContexteEcoTab(ttk.Frame):
         self.id_button.grid(row=0, column=2, sticky="w", padx=(12,0))
         self.wiki_button = ttk.Button(idf, text="Scraping", style="Accent.TButton", command=self.start_wiki_thread)
         self.wiki_button.grid(row=0, column=3, sticky="w", padx=(12,0))
+        self.remonter_button = ttk.Button(idf, text="Remonter le temps", style="Accent.TButton", command=self.start_rlt_thread)
+        self.remonter_button.grid(row=0, column=4, sticky="w", padx=(12,0))
+        self.gmaps_button = ttk.Button(idf, text="Ouvrir Google Maps", style="Accent.TButton", command=self.open_gmaps_centroid)
+        self.gmaps_button.grid(row=0, column=5, sticky="w", padx=(12,0))
+        self.bassin_button = ttk.Button(idf, text="Bassin versant", style="Accent.TButton", command=self.start_bassin_thread)
+        self.bassin_button.grid(row=0, column=6, sticky="w", padx=(12,0))
 
         # Console + progression
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
@@ -1661,6 +1670,53 @@ class ContexteEcoTab(ttk.Frame):
             os.startfile(out_dir)
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
+
+    def _get_centroid(self) -> Optional[Tuple[float, float, str]]:
+        if not self.ze_shp_var.get().strip():
+            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
+            return None
+        try:
+            gdf = gpd.read_file(self.ze_shp_var.get())
+            if gdf.crs is None:
+                raise ValueError("CRS non défini")
+            gdf = gdf.to_crs("EPSG:4326")
+            centroid = gdf.geometry.unary_union.centroid
+            lat, lon = centroid.y, centroid.x
+            coords_dms = dd_to_dms(lat, lon)
+            return lat, lon, coords_dms
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible de lire le shapefile : {e}")
+            return None
+
+    def start_rlt_thread(self):
+        res = self._get_centroid()
+        if not res:
+            return
+        _, _, coords_dms = res
+        self.rlt.run_btn = self.remonter_button
+        self.rlt.coord_var.set(coords_dms)
+        self.rlt.stdout_redirect = self.stdout_redirect
+        self.rlt.status_label = self.status_label
+        self.rlt._start_thread()
+
+    def open_gmaps_centroid(self):
+        res = self._get_centroid()
+        if not res:
+            return
+        lat, lon, _ = res
+        url = f"https://www.google.com/maps/@{lat},{lon},9768m/data=!3m1!1e3"
+        webbrowser.open(url)
+
+    def start_bassin_thread(self):
+        res = self._get_centroid()
+        if not res:
+            return
+        _, _, coords_dms = res
+        self.rlt.bassin_btn = self.bassin_button
+        self.rlt.coord_var.set(coords_dms)
+        self.rlt.stdout_redirect = self.stdout_redirect
+        self.rlt.status_label = self.status_label
+        self.rlt._start_bassin_thread()
 
     def start_wiki_thread(self):
         if not self.ze_shp_var.get().strip():
@@ -1972,17 +2028,14 @@ class MainApp:
         nb.pack(fill=tk.BOTH, expand=True, padx=12, pady=10)
 
         self.tab_ctx   = ContexteEcoTab(nb, self.style_helper, self.prefs)
-        self.tab_rlt   = RemonterLeTempsTab(nb, self.style_helper, self.prefs)
         self.tab_plant = PlantNetTab(nb, self.style_helper, self.prefs)
 
         nb.add(self.tab_ctx, text="Contexte éco")
-        nb.add(self.tab_rlt, text="Remonter le temps & Bassin versant")
         nb.add(self.tab_plant, text="Pl@ntNet")
 
         # Raccourcis utiles
         root.bind("<Control-1>", lambda _e: nb.select(0))
         root.bind("<Control-2>", lambda _e: nb.select(1))
-        root.bind("<Control-3>", lambda _e: nb.select(2))
 
         # Sauvegarde prefs à la fermeture
         root.protocol("WM_DELETE_WINDOW", self._on_close)
