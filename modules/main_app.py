@@ -1577,7 +1577,7 @@ class ContexteEcoTab(ttk.Frame):
         ttk.Spinbox(idf, from_=0.0, to=50.0, increment=0.5, textvariable=self.buffer_var, width=6, justify="right").grid(row=0, column=1, sticky="w", padx=(8,0))
         self.id_button = ttk.Button(idf, text="Lancer l’ID Contexte éco", style="Accent.TButton", command=self.start_id_thread)
         self.id_button.grid(row=0, column=2, sticky="w", padx=(12,0))
-        self.wiki_button = ttk.Button(idf, text="Wikipedia", style="Accent.TButton", command=self.start_wiki_thread)
+        self.wiki_button = ttk.Button(idf, text="Scraping", style="Accent.TButton", command=self.start_wiki_thread)
         self.wiki_button.grid(row=0, column=3, sticky="w", padx=(12,0))
 
         # Console + progression
