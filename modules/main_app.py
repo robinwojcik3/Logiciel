@@ -397,11 +397,16 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
     def export_views(projet_path: str) -> Tuple[int, int]:
         okc = 0; koc = 0
         nom = os.path.splitext(os.path.basename(projet_path))[0]
-        out_ae = os.path.join(cfg["OUT_IMG"], f"{nom}__AE.png")
-        out_ze = os.path.join(cfg["OUT_IMG"], f"{nom}__ZE.png")
+        out_ae = os.path.join(cfg["OUT_DIR"], f"{nom}__AE.png")
+        out_ze = os.path.join(cfg["OUT_DIR"], f"{nom}__ZE.png")
+        out_proj = os.path.join(cfg["OUT_DIR"], f"{nom}{os.path.splitext(projet_path)[1]}")
 
         mode = cfg.get("CADRAGE_MODE", "BOTH")
-        expected_exports = (1 if mode in ("AE", "BOTH") else 0) + (1 if mode in ("ZE", "BOTH") else 0)
+        expected_exports = 0
+        if cfg.get("EXPORT_TYPE") in ("PNG", "BOTH"):
+            expected_exports += (2 if mode == "BOTH" else 1)
+        if cfg.get("EXPORT_TYPE") in ("QGS", "BOTH"):
+            expected_exports += 1
 
         prj = QgsProject.instance(); prj.clear()
 
@@ -423,26 +428,39 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
         lyr_ae = relink_layer(prj, cfg["LAYER_AE_NAME"], cfg["AE_SHP"])
         lyr_ze = relink_layer(prj, cfg["LAYER_ZE_NAME"], cfg["ZE_SHP"])
 
-        if mode in ("AE", "BOTH"):
-            if (not cfg["OVERWRITE"]) and os.path.exists(out_ae):
-                okc += 1
-            else:
-                if lyr_ae:
-                    ext_ae = extent_in_project_crs(prj, lyr_ae)
-                    if ext_ae and apply_extent_and_export(layout, ext_ae, out_ae): okc += 1
-                    else: koc += 1
+        if cfg.get("EXPORT_TYPE") in ("PNG", "BOTH"):
+            if mode in ("AE", "BOTH"):
+                if (not cfg["OVERWRITE"]) and os.path.exists(out_ae):
+                    okc += 1
                 else:
-                    koc += 1
+                    if lyr_ae:
+                        ext_ae = extent_in_project_crs(prj, lyr_ae)
+                        if ext_ae and apply_extent_and_export(layout, ext_ae, out_ae): okc += 1
+                        else: koc += 1
+                    else:
+                        koc += 1
 
-        if mode in ("ZE", "BOTH"):
-            if (not cfg["OVERWRITE"]) and os.path.exists(out_ze):
+            if mode in ("ZE", "BOTH"):
+                if (not cfg["OVERWRITE"]) and os.path.exists(out_ze):
+                    okc += 1
+                else:
+                    if lyr_ze:
+                        ext_ze = extent_in_project_crs(prj, lyr_ze)
+                        if ext_ze and apply_extent_and_export(layout, ext_ze, out_ze): okc += 1
+                        else: koc += 1
+                    else:
+                        koc += 1
+
+        if cfg.get("EXPORT_TYPE") in ("QGS", "BOTH"):
+            if (not cfg["OVERWRITE"]) and os.path.exists(out_proj):
                 okc += 1
             else:
-                if lyr_ze:
-                    ext_ze = extent_in_project_crs(prj, lyr_ze)
-                    if ext_ze and apply_extent_and_export(layout, ext_ze, out_ze): okc += 1
-                    else: koc += 1
-                else:
+                try:
+                    if prj.write(out_proj):
+                        okc += 1
+                    else:
+                        koc += 1
+                except Exception:
                     koc += 1
 
         prj.clear()
@@ -1457,12 +1475,14 @@ class ContexteEcoTab(ttk.Frame):
         # Variables partagées
         self.ze_shp_var   = tk.StringVar(value=self.prefs.get("ZE_SHP", ""))
         self.ae_shp_var   = tk.StringVar(value=self.prefs.get("AE_SHP", ""))
-        self.cadrage_var  = tk.StringVar(value=self.prefs.get("CADRAGE_MODE", "BOTH"))
-        self.overwrite_var= tk.BooleanVar(value=self.prefs.get("OVERWRITE", OVERWRITE_DEFAULT))
-        self.dpi_var      = tk.IntVar(value=int(self.prefs.get("DPI", DPI_DEFAULT)))
-        self.workers_var  = tk.IntVar(value=int(self.prefs.get("N_WORKERS", N_WORKERS_DEFAULT)))
-        self.margin_var   = tk.DoubleVar(value=float(self.prefs.get("MARGIN_FAC", MARGIN_FAC_DEFAULT)))
-        self.buffer_var   = tk.DoubleVar(value=float(self.prefs.get("ID_TAMPON_KM", 5.0)))
+        self.cadrage_var   = tk.StringVar(value=self.prefs.get("CADRAGE_MODE", "BOTH"))
+        self.overwrite_var = tk.BooleanVar(value=self.prefs.get("OVERWRITE", OVERWRITE_DEFAULT))
+        self.dpi_var       = tk.IntVar(value=int(self.prefs.get("DPI", DPI_DEFAULT)))
+        self.workers_var   = tk.IntVar(value=int(self.prefs.get("N_WORKERS", N_WORKERS_DEFAULT)))
+        self.margin_var    = tk.DoubleVar(value=float(self.prefs.get("MARGIN_FAC", MARGIN_FAC_DEFAULT)))
+        self.buffer_var    = tk.DoubleVar(value=float(self.prefs.get("ID_TAMPON_KM", 5.0)))
+        self.out_dir_var   = tk.StringVar(value=self.prefs.get("OUT_DIR", OUT_IMG))
+        self.export_type_var = tk.StringVar(value=self.prefs.get("EXPORT_TYPE", "BOTH"))
 
         self.project_vars: dict[str, tk.IntVar] = {}
         self.all_projects: List[str] = []
@@ -1505,8 +1525,22 @@ class ContexteEcoTab(ttk.Frame):
         ttk.Label(opt, text="Marge", style="Card.TLabel").grid(row=5, column=0, sticky="w", pady=(6,0))
         ttk.Spinbox(opt, from_=1.00, to=2.00, increment=0.05, textvariable=self.margin_var, width=6, justify="right").grid(row=5, column=1, sticky="w", pady=(6,0))
 
+        ttk.Label(opt, text="Dossier de sortie", style="Card.TLabel").grid(row=6, column=0, sticky="w", pady=(6,0))
+        out_row = ttk.Frame(opt)
+        out_row.grid(row=6, column=1, columnspan=2, sticky="ew")
+        out_row.columnconfigure(0, weight=1)
+        ttk.Entry(out_row, textvariable=self.out_dir_var).grid(row=0, column=0, sticky="ew")
+        ttk.Button(out_row, text="Parcourir…", command=self._select_out_dir).grid(row=0, column=1, padx=(6,0))
+
+        ttk.Label(opt, text="Exporter", style="Card.TLabel").grid(row=7, column=0, sticky="w", pady=(6,0))
+        exp_row = ttk.Frame(opt)
+        exp_row.grid(row=7, column=1, columnspan=2, sticky="w")
+        ttk.Radiobutton(exp_row, text="PNG + QGIS", variable=self.export_type_var, value="BOTH", style="Card.TRadiobutton").pack(side=tk.LEFT)
+        ttk.Radiobutton(exp_row, text="PNG uniquement", variable=self.export_type_var, value="PNG", style="Card.TRadiobutton").pack(side=tk.LEFT, padx=(8,0))
+        ttk.Radiobutton(exp_row, text="QGIS uniquement", variable=self.export_type_var, value="QGS", style="Card.TRadiobutton").pack(side=tk.LEFT, padx=(8,0))
+
         self.export_button = ttk.Button(opt, text="Lancer l’export cartes", style="Accent.TButton", command=self.start_export_thread)
-        self.export_button.grid(row=6, column=0, columnspan=3, sticky="w", pady=(10,0))
+        self.export_button.grid(row=8, column=0, columnspan=3, sticky="w", pady=(10,0))
 
         proj = ttk.Frame(exp)
         proj.grid(row=0, column=1, sticky="nsew", padx=(8,0))
@@ -1591,10 +1625,18 @@ class ContexteEcoTab(ttk.Frame):
             # Normaliser pour gérer les chemins réseau ou trop longs
             self.ae_shp_var.set(to_long_unc(os.path.normpath(path)))
 
+    def _select_out_dir(self):
+        base = self.out_dir_var.get() or OUT_IMG
+        d = filedialog.askdirectory(title="Choisir le dossier de sortie",
+                                    initialdir=base if os.path.isdir(base) else os.path.expanduser("~"))
+        if d:
+            self.out_dir_var.set(d)
+
     def _open_out_dir(self):
         try:
-            os.makedirs(OUT_IMG, exist_ok=True)
-            os.startfile(OUT_IMG)
+            out_dir = self.out_dir_var.get() or OUT_IMG
+            os.makedirs(out_dir, exist_ok=True)
+            os.startfile(out_dir)
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
 
@@ -1651,7 +1693,11 @@ class ContexteEcoTab(ttk.Frame):
         self.busy = True
         self.export_button.config(state="disabled")
         self.id_button.config(state="disabled")
-        mode = self.cadrage_var.get(); per_project = 2 if mode == "BOTH" else 1
+        mode = self.cadrage_var.get()
+        exp_type = self.export_type_var.get()
+        png_exports = 2 if (exp_type in ("PNG", "BOTH") and mode == "BOTH") else (1 if exp_type in ("PNG", "BOTH") else 0)
+        qgs_exports = 1 if exp_type in ("QGS", "BOTH") else 0
+        per_project = png_exports + qgs_exports
         self.total_expected = per_project * len(projets)
         self.progress_done = 0
         self.progress.config(mode="determinate", maximum=max(1, self.total_expected), value=0)
@@ -1665,6 +1711,8 @@ class ContexteEcoTab(ttk.Frame):
             "DPI": int(self.dpi_var.get()),
             "N_WORKERS": int(self.workers_var.get()),
             "MARGIN_FAC": float(self.margin_var.get()),
+            "OUT_DIR": self.out_dir_var.get(),
+            "EXPORT_TYPE": exp_type,
         }); save_prefs(self.prefs)
 
         t = threading.Thread(target=self._run_export_logic, args=(projets,), daemon=True)
@@ -1675,17 +1723,19 @@ class ContexteEcoTab(ttk.Frame):
         sys.stdout = self.stdout_redirect
         try:
             start = datetime.datetime.now()
-            os.makedirs(OUT_IMG, exist_ok=True)
+            out_dir = self.out_dir_var.get() or OUT_IMG
+            os.makedirs(out_dir, exist_ok=True)
             log_with_time(f"{len(projets)} projets (attendu = calcul en cours)")
             log_with_time(f"Workers={self.workers_var.get()}, DPI={self.dpi_var.get()}, marge={self.margin_var.get():.2f}, overwrite={self.overwrite_var.get()}")
             chunks = chunk_even(projets, self.workers_var.get())
             cfg = {
                 "QGIS_ROOT": QGIS_ROOT, "QGIS_APP": QGIS_APP, "PY_VER": PY_VER,
-                "OUT_IMG": OUT_IMG, "DPI": int(self.dpi_var.get()),
+                "OUT_DIR": out_dir, "DPI": int(self.dpi_var.get()),
                 "MARGIN_FAC": float(self.margin_var.get()),
                 "LAYER_AE_NAME": LAYER_AE_NAME, "LAYER_ZE_NAME": LAYER_ZE_NAME,
                 "AE_SHP": self.ae_shp_var.get(), "ZE_SHP": self.ze_shp_var.get(),
                 "CADRAGE_MODE": self.cadrage_var.get(), "OVERWRITE": bool(self.overwrite_var.get()),
+                "EXPORT_TYPE": self.export_type_var.get(),
             }
             ok_total = 0; ko_total = 0
             def ui_update_progress(done_inc):
