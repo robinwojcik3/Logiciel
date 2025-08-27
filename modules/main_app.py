@@ -45,6 +45,13 @@ import pillow_heif
 import zipfile
 import traceback
 
+# ==== Imports supplémentaires pour l'onglet Contexte éco ====
+import geopandas as gpd
+
+# Import du scraper Wikipédia
+from .wikipedia_scraper import DEP, fetch_wikipedia_info
+
+
 # ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -1570,6 +1577,8 @@ class ContexteEcoTab(ttk.Frame):
         ttk.Spinbox(idf, from_=0.0, to=50.0, increment=0.5, textvariable=self.buffer_var, width=6, justify="right").grid(row=0, column=1, sticky="w", padx=(8,0))
         self.id_button = ttk.Button(idf, text="Lancer l’ID Contexte éco", style="Accent.TButton", command=self.start_id_thread)
         self.id_button.grid(row=0, column=2, sticky="w", padx=(12,0))
+        self.wiki_button = ttk.Button(idf, text="Wikipedia", style="Accent.TButton", command=self.start_wiki_thread)
+        self.wiki_button.grid(row=0, column=3, sticky="w", padx=(12,0))
 
         # Console + progression
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
@@ -1639,6 +1648,70 @@ class ContexteEcoTab(ttk.Frame):
             os.startfile(out_dir)
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
+
+    def start_wiki_thread(self):
+        if not self.ze_shp_var.get().strip():
+            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
+            return
+        self.wiki_button.config(state="disabled")
+        t = threading.Thread(target=self._run_wiki)
+        t.daemon = True
+        t.start()
+
+    def _run_wiki(self):
+        try:
+            ze_path = self.ze_shp_var.get()
+            gdf = gpd.read_file(ze_path)
+            if gdf.crs is None:
+                raise ValueError("CRS non défini")
+            gdf = gdf.to_crs("EPSG:4326")
+            centroid = gdf.geometry.unary_union.centroid
+            lat, lon = centroid.y, centroid.x
+            commune, dep = self._detect_commune(lat, lon)
+            query = f"{commune} {dep}".strip()
+            print(f"[Wiki] Requête : {query}", file=self.stdout_redirect)
+            data = fetch_wikipedia_info(query)
+            if "error" in data:
+                print(f"[Wiki] {data['error']}", file=self.stdout_redirect)
+            else:
+                print(f"[Wiki] Page Wikipédia : {data['url']}", file=self.stdout_redirect)
+                print("[Wiki] CLIMAT :", file=self.stdout_redirect)
+                if data['climat_p1'] != 'Non trouvé':
+                    print(data['climat_p1'], file=self.stdout_redirect)
+                if data['climat_p2'] != 'Non trouvé':
+                    print(data['climat_p2'], file=self.stdout_redirect)
+                print("[Wiki] OCCUPATION DES SOLS :", file=self.stdout_redirect)
+                if data['occupation_p1'] != 'Non trouvé':
+                    print(data['occupation_p1'], file=self.stdout_redirect)
+        except Exception as e:
+            print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
+        finally:
+            self.after(0, lambda: self.wiki_button.config(state="normal"))
+
+    def _detect_commune(self, lat: float, lon: float) -> Tuple[str, str]:
+        try:
+            url = ("https://nominatim.openstreetmap.org/reverse?format=json"
+                   f"&lat={lat}&lon={lon}&zoom=10&addressdetails=1")
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.load(resp)
+            addr = data.get("address", {})
+            commune = "Inconnue"
+            for key in ("city", "town", "village", "municipality"):
+                if key in addr:
+                    commune = addr[key]
+                    break
+            dept_name = addr.get("county", "")
+            dep_rev = {v: k for k, v in DEP.items()}
+            dep = dep_rev.get(dept_name, "")
+            if not dep:
+                postcode = addr.get("postcode", "")
+                if len(postcode) >= 2:
+                    dep = postcode[:2]
+            return commune, dep
+        except Exception as e:
+            print(f"[Wiki] Détection commune échouée : {e}", file=self.stdout_redirect)
+            return "Inconnue", ""
 
     # ---------- Gestion projets QGIS ----------
     def _populate_projects(self):
