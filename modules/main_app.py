@@ -1570,6 +1570,8 @@ class ContexteEcoTab(ttk.Frame):
         ttk.Spinbox(idf, from_=0.0, to=50.0, increment=0.5, textvariable=self.buffer_var, width=6, justify="right").grid(row=0, column=1, sticky="w", padx=(8,0))
         self.id_button = ttk.Button(idf, text="Lancer l’ID Contexte éco", style="Accent.TButton", command=self.start_id_thread)
         self.id_button.grid(row=0, column=2, sticky="w", padx=(12,0))
+        self.wikipedia_button = ttk.Button(idf, text="Wikipedia", command=self.start_wikipedia_thread)
+        self.wikipedia_button.grid(row=0, column=3, sticky="w", padx=(12,0))
 
         # Console + progression
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
@@ -1640,6 +1642,58 @@ class ContexteEcoTab(ttk.Frame):
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
 
+    def _detect_commune(self, lat: float, lon: float) -> tuple[str, str]:
+        try:
+            url = ("https://nominatim.openstreetmap.org/reverse?format=json"
+                   f"&lat={lat}&lon={lon}&zoom=10&addressdetails=1")
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.load(resp)
+            addr = data.get("address", {})
+            commune = next((addr.get(k) for k in ("city", "town", "village", "municipality") if addr.get(k)), "Inconnue")
+            postcode = addr.get("postcode", "")
+            dept = postcode[:2] if postcode else ""
+            return commune, dept
+        except Exception as e:
+            print(f"[Wikipedia] Détection commune échouée : {e}", file=self.stdout_redirect)
+            return "Inconnue", ""
+
+    def start_wikipedia_thread(self):
+        if self.busy:
+            print("Une action est déjà en cours.", file=self.stdout_redirect)
+            return
+        ze = self.ze_shp_var.get().strip()
+        if not ze:
+            messagebox.showerror("Erreur", "Sélectionnez la zone d'étude."); return
+        if not os.path.isfile(ze):
+            messagebox.showerror("Erreur", "Shapefile ZE introuvable."); return
+        self.busy = True
+        self.export_button.config(state="disabled")
+        self.id_button.config(state="disabled")
+        self.wikipedia_button.config(state="disabled")
+        t = threading.Thread(target=self._run_wikipedia_logic, args=(ze,), daemon=True)
+        t.start()
+
+    def _run_wikipedia_logic(self, ze: str):
+        old_stdout = sys.stdout
+        sys.stdout = self.stdout_redirect
+        try:
+            import geopandas as gpd
+            gdf = gpd.read_file(ze)
+            centroid = gdf.to_crs("EPSG:4326").geometry.union_all().centroid
+            lat, lon = centroid.y, centroid.x
+            commune, dept = self._detect_commune(lat, lon)
+            query = f"{commune} ({dept})" if dept else commune
+            print(f"[Wikipedia] Requête : {query}")
+            from .wikipedia import run_wikipedia
+            run_wikipedia(query)
+        except Exception as e:
+            print(f"[Wikipedia] Erreur : {e}")
+            self.after(0, lambda: messagebox.showerror("Erreur", str(e)))
+        finally:
+            sys.stdout = old_stdout
+            self.after(0, self._run_finished)
+
     # ---------- Gestion projets QGIS ----------
     def _populate_projects(self):
         for w in list(self.scrollable_frame.children.values()): w.destroy()
@@ -1693,6 +1747,7 @@ class ContexteEcoTab(ttk.Frame):
         self.busy = True
         self.export_button.config(state="disabled")
         self.id_button.config(state="disabled")
+        self.wikipedia_button.config(state="disabled")
         mode = self.cadrage_var.get()
         exp_type = self.export_type_var.get()
         png_exports = 2 if (exp_type in ("PNG", "BOTH") and mode == "BOTH") else (1 if exp_type in ("PNG", "BOTH") else 0)
@@ -1777,6 +1832,7 @@ class ContexteEcoTab(ttk.Frame):
         self.busy = True
         self.export_button.config(state="disabled")
         self.id_button.config(state="disabled")
+        self.wikipedia_button.config(state="disabled")
         self.progress.config(mode="indeterminate")
         self.progress.start()
         self.status_label.config(text="Analyse en cours…")
@@ -1809,6 +1865,7 @@ class ContexteEcoTab(ttk.Frame):
     def _run_finished(self):
         self.export_button.config(state="normal")
         self.id_button.config(state="normal")
+        self.wikipedia_button.config(state="normal")
         self.busy = False
 
 # =========================
