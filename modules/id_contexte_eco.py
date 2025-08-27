@@ -33,6 +33,17 @@ def log_with_time(message):
     print(f"[{now}] {message}")
 
 
+def to_long_unc(path: str) -> str:
+    """Adapte le chemin pour Windows afin d'accepter les chemins longs."""
+    if os.name != "nt":
+        return path
+    if path.startswith("\\\\?\\"):
+        return path
+    if path.startswith("\\\\"):
+        return "\\\\?\\UNC" + path[1:]
+    return "\\\\?\\" + path
+
+
 def run_analysis(ae_shp: str, ze_shp: str, buffer_km: float = 5.0):
     """Lance l'analyse d'identification des zonages à partir des shapefiles.
 
@@ -42,13 +53,17 @@ def run_analysis(ae_shp: str, ze_shp: str, buffer_km: float = 5.0):
     """
     log_with_time("Démarrage du script d'identification des zonages...")
 
+    # Normaliser les chemins pour éviter les problèmes de longueur ou de réseau
+    ae_orig, ze_orig = ae_shp, ze_shp
+    ae_shp, ze_shp = to_long_unc(ae_shp), to_long_unc(ze_shp)
+
     # Vérifier si les fichiers de référence existent
     if not os.path.exists(ae_shp):
-        log_with_time(f"Le fichier de la première couche de référence n'a pas été trouvé : {ae_shp}")
+        log_with_time(f"Le fichier de la première couche de référence n'a pas été trouvé : {ae_orig}")
         return
 
     if not os.path.exists(ze_shp):
-        log_with_time(f"Le fichier de la deuxième couche de référence n'a pas été trouvé : {ze_shp}")
+        log_with_time(f"Le fichier de la deuxième couche de référence n'a pas été trouvé : {ze_orig}")
         return
 
     # Chargement des couches de référence

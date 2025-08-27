@@ -1719,7 +1719,9 @@ class ContexteEcoTab(ttk.Frame):
         ze = self.ze_shp_var.get().strip()
         if not ae or not ze:
             messagebox.showerror("Erreur", "Sélectionnez les deux shapefiles."); return
-        if not os.path.isfile(ae) or not os.path.isfile(ze):
+        def _exists(p):
+            return os.path.isfile(p) or (os.name == 'nt' and os.path.isfile(to_long_unc(p)))
+        if not _exists(ae) or not _exists(ze):
             messagebox.showerror("Erreur", "Un shapefile est introuvable."); return
 
         self.busy = True
