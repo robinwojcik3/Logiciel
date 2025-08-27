@@ -116,11 +116,16 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
     except TimeoutException:
         pass
 
+    # Attendre au plus 0,5s que le champ de recherche soit prêt
     box = WebDriverWait(driver, 0.5).until(
         EC.element_to_be_clickable((By.ID, "searchInput"))
     )
     box.clear()
     box.send_keys(query)
+    # Laisser un court délai pour l'apparition des suggestions
+    WebDriverWait(driver, 0.5).until(
+        EC.visibility_of_element_located((By.CSS_SELECTOR, "div.suggestions-results"))
+    )
     box.send_keys(Keys.ARROW_DOWN)
     box.send_keys(Keys.ENTER)
 
