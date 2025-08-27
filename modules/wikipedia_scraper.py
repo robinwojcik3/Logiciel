@@ -144,6 +144,8 @@ def fetch_wikipedia_info(commune_query: str) -> Dict[str, str]:
 
     query = _normalize_query(commune_query)
     options = webdriver.ChromeOptions()
+    # L'option "detach" permet de garder la fenêtre ouverte après exécution
+    options.add_experimental_option("detach", True)
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
     options.add_argument("--log-level=3")
     options.add_argument("--disable-extensions")
@@ -154,21 +156,14 @@ def fetch_wikipedia_info(commune_query: str) -> Dict[str, str]:
     driver = webdriver.Chrome(options=options)
     driver.maximize_window()
     wait = WebDriverWait(driver, 10)
-    url = ""
-    try:
-        ok = _open_article(driver, query, wait)
-        if not ok:
-            alt = f"{query} (commune)"
-            ok = _open_article(driver, alt, wait)
-        if not ok:
-            return {"error": "Article introuvable"}
-        data = _scrape_sections(driver)
-        url = driver.current_url
-        data["url"] = url
-        return data
-    finally:
-        try:
-            driver.quit()
-        except Exception:
-            pass
+    ok = _open_article(driver, query, wait)
+    if not ok:
+        alt = f"{query} (commune)"
+        ok = _open_article(driver, alt, wait)
+    if not ok:
+        return {"error": "Article introuvable"}
+    data = _scrape_sections(driver)
+    data["url"] = driver.current_url
+    # Aucun appel à ``driver.quit()`` pour que l'utilisateur ferme la fenêtre manuellement
+    return data
 
