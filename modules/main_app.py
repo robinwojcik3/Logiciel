@@ -1683,6 +1683,40 @@ class ContexteEcoTab(ttk.Frame):
                 print("[Wiki] OCCUPATION DES SOLS :", file=self.stdout_redirect)
                 if data['occupation_p1'] != 'Non trouvé':
                     print(data['occupation_p1'], file=self.stdout_redirect)
+                try:
+                    coords = f"{lat},{lon}"
+                    self.wiki_driver.execute_script(
+                        "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
+                    )
+                    self.wiki_driver.switch_to.window(self.wiki_driver.window_handles[-1])
+                    wait = WebDriverWait(self.wiki_driver, 10)
+                    addr_box = wait.until(
+                        EC.element_to_be_clickable((By.ID, "address-input"))
+                    )
+                    addr_box.click()
+                    addr_box.clear()
+                    addr_box.send_keys(coords)
+                    search_btn = wait.until(
+                        EC.element_to_be_clickable((By.ID, "search-address-btn"))
+                    )
+                    search_btn.click()
+                    layers_toggle = wait.until(
+                        EC.element_to_be_clickable(
+                            (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
+                        )
+                    )
+                    layers_toggle.click()
+                    veg_btn = wait.until(
+                        EC.element_to_be_clickable(
+                            (By.XPATH, "//label[contains(., 'Carte de la végétation')]")
+                        )
+                    )
+                    veg_btn.click()
+                except Exception as e2:
+                    print(
+                        f"[Wiki] Étapes supplémentaires échouées : {e2}",
+                        file=self.stdout_redirect,
+                    )
         except Exception as e:
             print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
         finally:
