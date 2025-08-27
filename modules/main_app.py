@@ -1490,6 +1490,8 @@ class ContexteEcoTab(ttk.Frame):
         self.buffer_var    = tk.DoubleVar(value=float(self.prefs.get("ID_TAMPON_KM", 5.0)))
         self.out_dir_var   = tk.StringVar(value=self.prefs.get("OUT_DIR", OUT_IMG))
         self.export_type_var = tk.StringVar(value=self.prefs.get("EXPORT_TYPE", "BOTH"))
+        self.climat_var = tk.StringVar(value="")
+        self.occupation_var = tk.StringVar(value="")
 
         self.project_vars: dict[str, tk.IntVar] = {}
         self.all_projects: List[str] = []
@@ -1577,8 +1579,17 @@ class ContexteEcoTab(ttk.Frame):
         ttk.Spinbox(idf, from_=0.0, to=50.0, increment=0.5, textvariable=self.buffer_var, width=6, justify="right").grid(row=0, column=1, sticky="w", padx=(8,0))
         self.id_button = ttk.Button(idf, text="Lancer l’ID Contexte éco", style="Accent.TButton", command=self.start_id_thread)
         self.id_button.grid(row=0, column=2, sticky="w", padx=(12,0))
-        self.wiki_button = ttk.Button(idf, text="Wikipedia", style="Accent.TButton", command=self.start_wiki_thread)
-        self.wiki_button.grid(row=0, column=3, sticky="w", padx=(12,0))
+
+        # Section Wikipédia
+        wikif = ttk.Frame(self, style="Card.TFrame", padding=12)
+        wikif.pack(fill=tk.X, pady=(10,0))
+        self.wiki_button = ttk.Button(wikif, text="Wikipedia", style="Accent.TButton", command=self.start_wiki_thread)
+        self.wiki_button.grid(row=0, column=0, sticky="w")
+        ttk.Label(wikif, text="Climat", style="Card.TLabel").grid(row=1, column=0, sticky="nw", pady=(8,0))
+        ttk.Label(wikif, text="Corine Land Cover", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
+        ttk.Label(wikif, textvariable=self.climat_var, style="Card.TLabel", wraplength=400).grid(row=1, column=1, sticky="w", padx=(8,0), pady=(8,0))
+        ttk.Label(wikif, textvariable=self.occupation_var, style="Card.TLabel", wraplength=400).grid(row=2, column=1, sticky="w", padx=(8,0))
+        wikif.columnconfigure(1, weight=1)
 
         # Console + progression
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
@@ -1673,16 +1684,16 @@ class ContexteEcoTab(ttk.Frame):
             data, self.wiki_driver = fetch_wikipedia_info(query)
             if "error" in data:
                 print(f"[Wiki] {data['error']}", file=self.stdout_redirect)
+                self.after(0, lambda: (self.climat_var.set("Non trouvé"), self.occupation_var.set("Non trouvé")))
             else:
                 print(f"[Wiki] Page Wikipédia : {data['url']}", file=self.stdout_redirect)
+                self.after(0, lambda: (self.climat_var.set(data['climat']), self.occupation_var.set(data['occupation'])))
                 print("[Wiki] CLIMAT :", file=self.stdout_redirect)
-                if data['climat_p1'] != 'Non trouvé':
-                    print(data['climat_p1'], file=self.stdout_redirect)
-                if data['climat_p2'] != 'Non trouvé':
-                    print(data['climat_p2'], file=self.stdout_redirect)
+                if data['climat'] != 'Non trouvé':
+                    print(data['climat'], file=self.stdout_redirect)
                 print("[Wiki] OCCUPATION DES SOLS :", file=self.stdout_redirect)
-                if data['occupation_p1'] != 'Non trouvé':
-                    print(data['occupation_p1'], file=self.stdout_redirect)
+                if data['occupation'] != 'Non trouvé':
+                    print(data['occupation'], file=self.stdout_redirect)
         except Exception as e:
             print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
         finally:
