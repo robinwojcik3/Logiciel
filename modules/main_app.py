@@ -1570,6 +1570,8 @@ class ContexteEcoTab(ttk.Frame):
         ttk.Spinbox(idf, from_=0.0, to=50.0, increment=0.5, textvariable=self.buffer_var, width=6, justify="right").grid(row=0, column=1, sticky="w", padx=(8,0))
         self.id_button = ttk.Button(idf, text="Lancer l’ID Contexte éco", style="Accent.TButton", command=self.start_id_thread)
         self.id_button.grid(row=0, column=2, sticky="w", padx=(12,0))
+        self.wiki_button = ttk.Button(idf, text="Wikipedia", style="Accent.TButton", command=self.start_wikipedia_thread)
+        self.wiki_button.grid(row=0, column=3, sticky="w", padx=(12,0))
 
         # Console + progression
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
@@ -1806,9 +1808,67 @@ class ContexteEcoTab(ttk.Frame):
             self.after(0, lambda: (self.progress.stop(), self.progress.config(mode="determinate", value=0)))
             self.after(0, self._run_finished)
 
+    
+    def start_wikipedia_thread(self):
+        if self.busy:
+            print("Une action est déjà en cours.", file=self.stdout_redirect)
+            return
+        ze = to_long_unc(os.path.normpath(self.ze_shp_var.get().strip()))
+        if not ze or not os.path.isfile(ze):
+            messagebox.showerror("Erreur", "Sélectionnez la zone d'étude.")
+            return
+        self.busy = True
+        self.export_button.config(state="disabled")
+        self.id_button.config(state="disabled")
+        self.wiki_button.config(state="disabled")
+        self.progress.config(mode="indeterminate")
+        self.progress.start()
+        self.status_label.config(text="Recherche Wikipédia…")
+        t = threading.Thread(target=self._run_wikipedia_logic, args=(ze,), daemon=True)
+        t.start()
+
+    def _run_wikipedia_logic(self, ze_path: str):
+        old_stdout = sys.stdout
+        sys.stdout = self.stdout_redirect
+        try:
+            import geopandas as gpd
+            import requests
+            from .wikipedia import fetch_commune_info
+            gdf = gpd.read_file(ze_path)
+            centroid = gdf.to_crs("EPSG:4326").geometry.unary_union.centroid
+            lat, lon = centroid.y, centroid.x
+            log_with_time(f"Centroïde ZE: lat={lat:.5f}, lon={lon:.5f}")
+            r = requests.get("https://api-adresse.data.gouv.fr/reverse/", params={"lon": lon, "lat": lat}, timeout=10)
+            props = r.json()["features"][0]["properties"]
+            city = props.get("city") or props.get("name")
+            context = props.get("context", "")
+            dept = context.split(",")[0].strip()
+            query = f"{city} ({dept})"
+            log_with_time(f"Commune détectée: {query}")
+            url, data = fetch_commune_info(query)
+            print(f"Page Wikipédia: {url}")
+            print("CLIMAT :")
+            if data.get("climat_p1") != "Non trouvé":
+                print(data["climat_p1"])
+            if data.get("climat_p2") != "Non trouvé":
+                print(data["climat_p2"])
+            print("OCCUPATION DES SOLS :")
+            if data.get("occupation_p1") != "Non trouvé":
+                print(data["occupation_p1"])
+            self.after(0, lambda: self.status_label.config(text="Terminé"))
+        except Exception as e:
+            log_with_time(f"Erreur: {e}")
+            self.after(0, lambda: messagebox.showerror("Erreur", str(e)))
+        finally:
+            sys.stdout = old_stdout
+            self.after(0, lambda: (self.progress.stop(), self.progress.config(mode="determinate", value=0)))
+            self.after(0, self._run_finished)
+
+
     def _run_finished(self):
         self.export_button.config(state="normal")
         self.id_button.config(state="normal")
+        self.wiki_button.config(state="normal")
         self.busy = False
 
 # =========================
