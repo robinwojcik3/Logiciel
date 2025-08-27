@@ -13,7 +13,6 @@ from typing import Dict, Tuple
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
@@ -102,7 +101,7 @@ def _normalize_query(s: str) -> str:
 
 
 def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> bool:
-    driver.get("https://fr.wikipedia.org/")
+    driver.get("https://fr.wikipedia.org/w/index.php?search=&title=Sp%C3%A9cial%3ARecherche&profile=advanced&fulltext=1&ns0=1")
     try:
         btn = WebDriverWait(driver, 0.5).until(
             EC.element_to_be_clickable(
@@ -116,22 +115,20 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
     except TimeoutException:
         pass
 
-    box = WebDriverWait(driver, 0.5).until(
-        EC.element_to_be_clickable((By.ID, "searchInput"))
+    box = WebDriverWait(driver, 5).until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, "input[name='search']"))
     )
     box.clear()
     box.send_keys(query)
-    box.send_keys(Keys.ARROW_DOWN)
-    box.send_keys(Keys.ENTER)
-
+    search_btn = WebDriverWait(driver, 5).until(
+        EC.element_to_be_clickable((By.XPATH, "//button[.//span[@class='oo-ui-labelElement-label' and text()='Rechercher']]"))
+    )
+    search_btn.click()
     try:
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.mw-search-result-heading a")))
+        link = driver.find_element(By.CSS_SELECTOR, "div.mw-search-result-heading a")
+        link.click()
         wait.until(EC.presence_of_element_located((By.ID, "firstHeading")))
-        if "Spécial:Recherche" in driver.current_url or "Special:Search" in driver.current_url:
-            link = wait.until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "div.mw-search-result-heading a"))
-            )
-            link.click()
-            wait.until(EC.presence_of_element_located((By.ID, "firstHeading")))
         return True
     except TimeoutException:
         return False
