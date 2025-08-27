@@ -7,8 +7,10 @@ traitements aux modules spécialisés.
 
 def main() -> None:
     """Lance l'interface principale."""
+    import time
+    t0 = time.time()
     from modules import main_app
-    main_app.launch()
+    main_app.launch(start_time=t0)
 
 
 if __name__ == "__main__":
