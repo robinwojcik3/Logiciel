@@ -22,3 +22,17 @@ L'application s'ouvrira avec plusieurs onglets proposant les fonctionnalités pr
 
 Les modules standard de Python suffisent pour lancer l'application de base. Certaines fonctionnalités peuvent requérir des bibliothèques supplémentaires, installables via `pip`.
 
+## Export cartes — Windows + Python 3.12
+
+Sur Windows avec Python 3.12, l'import de QGIS peut échouer avec « DLL load failed ». Le module `modules/qgis_env.py` prépare explicitement les répertoires de DLL grâce à `os.add_dll_directory` avant chaque `from qgis.core import ...`.
+
+Les chemins sont récupérés à partir de variables déjà présentes dans l'environnement ou la configuration :
+
+- `QGIS_ROOT`
+- `QGIS_APP`
+- `QGIS_PREFIX_PATH`
+- `QT_DIR`
+- `QT_QPA_PLATFORM_PLUGIN_PATH`
+
+Assurez-vous que ces variables pointent vers votre installation locale de QGIS/Qt lorsque vous utilisez l'export cartographique.
+
