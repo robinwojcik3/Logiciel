@@ -33,6 +33,8 @@ from tkinter import ttk, filedialog, messagebox
 from tkinter import font as tkfont
 from typing import List, Optional, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing as mp
+import platform
 import requests
 from io import BytesIO
 import pillow_heif
@@ -283,49 +285,36 @@ def copy_and_rename_file(file_path, dest_folder, new_name, count):
 # =========================
 # Fonctions QGIS (onglet 1) — inchangées
 # =========================
-def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
+def worker_run(args: Tuple[List[str], dict]) -> List[dict]:
+    """Fonction exécutée dans les sous-processus."""
     projects, cfg = args
 
+    from .qgis_env import prepare_qgis_env
+
+    prepare_qgis_env(cfg)
+
     os.environ["OSGEO4W_ROOT"] = cfg["QGIS_ROOT"]
-    os.environ["QGIS_PREFIX_PATH"] = cfg["QGIS_APP"]
     os.environ.setdefault("GDAL_DATA", os.path.join(cfg["QGIS_ROOT"], "share", "gdal"))
     os.environ.setdefault("PROJ_LIB", os.path.join(cfg["QGIS_ROOT"], "share", "proj"))
     os.environ.setdefault("QT_QPA_FONTDIR", r"C:\Windows\Fonts")
 
-    qt_base = None
-    for name in ("Qt6", "Qt5"):
-        base = os.path.join(cfg["QGIS_ROOT"], "apps", name)
-        if os.path.isdir(base):
-            qt_base = base
-            break
-    if qt_base is None:
-        raise RuntimeError("Qt introuvable")
-
-    platform_dir = os.path.join(qt_base, "plugins", "platforms")
-    os.environ["QT_PLUGIN_PATH"] = os.path.join(qt_base, "plugins")
-    os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = platform_dir
-    qpa = "windows" if os.path.isfile(os.path.join(platform_dir, "qwindows.dll")) \
-        else ("minimal" if os.path.isfile(os.path.join(platform_dir, "qminimal.dll")) else "offscreen")
-    os.environ["QT_QPA_PLATFORM"] = qpa
-
-    os.environ["PATH"] = os.pathsep.join([
-        os.path.join(qt_base, "bin"),
-        os.path.join(cfg["QGIS_APP"], "bin"),
-        os.path.join(cfg["QGIS_ROOT"], "bin"),
-        os.environ.get("PATH", ""),
-    ])
-
     sys.path.insert(0, os.path.join(cfg["QGIS_APP"], "python"))
     sys.path.insert(0, os.path.join(cfg["QGIS_ROOT"], "apps", cfg["PY_VER"], "Lib", "site-packages"))
 
-    from qgis.core import (
-        QgsApplication, QgsProject, QgsLayoutExporter, QgsLayoutItemMap, QgsRectangle,
-        QgsCoordinateTransform
-    )
-
-    qgs = QgsApplication([], False)
-    qgs.setPrefixPath(cfg["QGIS_APP"], True)
-    qgs.initQgis()
+    results: List[dict] = []
+    try:
+        from qgis.core import (
+            QgsApplication, QgsProject, QgsLayoutExporter, QgsLayoutItemMap, QgsRectangle,
+            QgsCoordinateTransform,
+        )
+        qgs = QgsApplication([], False)
+        qgs.setPrefixPath(cfg["QGIS_APP"], True)
+        qgs.initQgis()
+    except Exception as e:
+        err = f"{e}\n{traceback.format_exc()}"
+        for prj in projects:
+            results.append({"ok": False, "error": err, "project": prj})
+        return results
 
     ok = 0
     ko = 0
@@ -468,11 +457,19 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
         return okc, koc
 
     for p in projects:
-        ok_c, ko_c = export_views(p)
-        ok += ok_c; ko += ko_c
+        try:
+            ok_c, ko_c = export_views(p)
+            ok += ok_c; ko += ko_c
+            if ko_c == 0:
+                results.append({"ok": True, "error": None, "project": p})
+            else:
+                results.append({"ok": False, "error": f"{ko_c} échec(s)", "project": p})
+        except Exception as e:
+            ko += 1
+            results.append({"ok": False, "error": f"{e}\n{traceback.format_exc()}", "project": p})
 
     qgs.exitQgis()
-    return ok, ko
+    return results
 
 def discover_projects() -> List[str]:
     partage = BASE_SHARE
@@ -1730,31 +1727,88 @@ class ContexteEcoTab(ttk.Frame):
             os.makedirs(out_dir, exist_ok=True)
             log_with_time(f"{len(projets)} projets (attendu = calcul en cours)")
             log_with_time(f"Workers={self.workers_var.get()}, DPI={self.dpi_var.get()}, marge={self.margin_var.get():.2f}, overwrite={self.overwrite_var.get()}")
-            chunks = chunk_even(projets, self.workers_var.get())
+
+            if platform.system() == "Windows":
+                try:
+                    mp.set_start_method("spawn", force=True)
+                except RuntimeError:
+                    pass
+
+            qt_dir = None
+            for name in ("Qt6", "Qt5"):
+                base = os.path.join(QGIS_ROOT, "apps", name)
+                if os.path.isdir(base):
+                    qt_dir = base
+                    break
+
             cfg = {
-                "QGIS_ROOT": QGIS_ROOT, "QGIS_APP": QGIS_APP, "PY_VER": PY_VER,
-                "OUT_DIR": out_dir, "DPI": int(self.dpi_var.get()),
+                "QGIS_ROOT": QGIS_ROOT,
+                "QGIS_APP": QGIS_APP,
+                "QGIS_PREFIX_PATH": QGIS_APP,
+                "QT_DIR": qt_dir,
+                "PY_VER": PY_VER,
+                "OUT_DIR": out_dir,
+                "DPI": int(self.dpi_var.get()),
                 "MARGIN_FAC": float(self.margin_var.get()),
-                "LAYER_AE_NAME": LAYER_AE_NAME, "LAYER_ZE_NAME": LAYER_ZE_NAME,
-                "AE_SHP": self.ae_shp_var.get(), "ZE_SHP": self.ze_shp_var.get(),
-                "CADRAGE_MODE": self.cadrage_var.get(), "OVERWRITE": bool(self.overwrite_var.get()),
+                "LAYER_AE_NAME": LAYER_AE_NAME,
+                "LAYER_ZE_NAME": LAYER_ZE_NAME,
+                "AE_SHP": self.ae_shp_var.get(),
+                "ZE_SHP": self.ze_shp_var.get(),
+                "CADRAGE_MODE": self.cadrage_var.get(),
+                "OVERWRITE": bool(self.overwrite_var.get()),
                 "EXPORT_TYPE": self.export_type_var.get(),
             }
-            ok_total = 0; ko_total = 0
+
+            from .qgis_env import qgis_smoke_test
+            ok_smoke, msg = qgis_smoke_test(cfg)
+            if not ok_smoke:
+                log_with_time(msg)
+                self.after(0, lambda: messagebox.showerror("QGIS", msg))
+                return
+
+            workers = int(self.workers_var.get())
+            chunks = chunk_even(projets, workers)
+            ok_total = 0
+            ko_total = 0
+
             def ui_update_progress(done_inc):
                 self.progress_done += done_inc
                 self.progress["value"] = min(self.progress_done, self.total_expected)
                 self.status_label.config(text=f"Progression : {self.progress_done}/{self.total_expected}")
-            with ProcessPoolExecutor(max_workers=int(self.workers_var.get())) as ex:
-                futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
-                for fut in as_completed(futures):
-                    try:
-                        ok, ko = fut.result()
-                        ok_total += ok; ko_total += ko
-                        self.after(0, ui_update_progress, ok + ko)
-                        log_with_time(f"Lot terminé: {ok} OK, {ko} KO")
-                    except Exception as e:
-                        log_with_time(f"Erreur worker: {e}")
+
+            while True:
+                dll_error = False
+                with ProcessPoolExecutor(max_workers=workers) as ex:
+                    futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
+                    for fut in as_completed(futures):
+                        try:
+                            res_list = fut.result()
+                            for res in res_list:
+                                if res["ok"]:
+                                    ok_total += 1
+                                else:
+                                    ko_total += 1
+                                    if res.get("error") and "DLL load failed" in res["error"]:
+                                        dll_error = True
+                                    log_with_time(f"Erreur projet {os.path.basename(res['project'])}: {res.get('error')}")
+                                self.after(0, ui_update_progress, 1)
+                        except Exception as e:
+                            err_msg = str(e)
+                            ko_total += 1
+                            if "DLL load failed" in err_msg:
+                                dll_error = True
+                            log_with_time(f"Erreur worker: {err_msg}")
+                            self.after(0, ui_update_progress, 1)
+                if dll_error and workers > 1:
+                    log_with_time("Repli: relance avec Workers=1 à cause d'une erreur DLL")
+                    workers = 1
+                    chunks = chunk_even(projets, workers)
+                    ok_total = ko_total = 0
+                    self.progress_done = 0
+                    self.after(0, lambda: self.progress.config(value=0))
+                    continue
+                break
+
             elapsed = datetime.datetime.now() - start
             log_with_time(f"FIN — OK={ok_total} | KO={ko_total} | Attendu={self.total_expected} | Durée={elapsed}")
             self.after(0, lambda: self.status_label.config(text=f"Terminé — OK={ok_total} / KO={ko_total}"))
