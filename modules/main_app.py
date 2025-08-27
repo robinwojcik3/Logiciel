@@ -77,8 +77,11 @@ OVERWRITE_DEFAULT  = False
 LAYER_AE_NAME = "Aire d'étude élargie"
 LAYER_ZE_NAME = "Zone d'étude"
 
-BASE_SHARE = r"\\192.168.1.240\commun\PARTAGE"
-SUBPATH    = r"Espace_RWO\CARTO ROBIN"
+# Dossier des projets QGIS (cartes à exporter)
+CARTES_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "Cartes contexte éco export",
+)
 
 OUT_IMG    = r"C:\Users\utilisateur\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 3) BDD\PYTHON\2) Contexte éco\OUTPUT"
 
@@ -456,29 +459,18 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
     return ok, ko
 
 def discover_projects() -> List[str]:
-    partage = BASE_SHARE
-    base_dir: Optional[str] = None
-    try:
-        if os.path.isdir(partage):
-            for e in os.listdir(partage):
-                if normalize_name(e) == normalize_name("Espace_RWO"):
-                    base_espace = os.path.join(partage, e)
-                    for s in os.listdir(base_espace):
-                        if normalize_name(s) == normalize_name("CARTO ROBIN"):
-                            base_dir = os.path.join(base_espace, s); break
-                    break
-    except Exception as e:
-        log_with_time(f"Accès PARTAGE impossible via listdir: {e}")
-
-    if not base_dir or not os.path.isdir(base_dir):
-        base_dir = os.path.join(BASE_SHARE, SUBPATH)
-
+    base_dir = CARTES_DIR
     for d in (base_dir, to_long_unc(base_dir)):
         try:
-            if not os.path.isdir(d): continue
+            if not os.path.isdir(d):
+                continue
             files = os.listdir(d)
             qgz = [f for f in files if f.lower().endswith(".qgz")]
-            qgz = [f for f in qgz if normalize_name(f).startswith(normalize_name("Contexte éco -"))]
+            qgz = [
+                f
+                for f in qgz
+                if normalize_name(f).startswith(normalize_name("Contexte éco -"))
+            ]
             return [os.path.join(d, f) for f in sorted(qgz)]
         except Exception:
             continue
