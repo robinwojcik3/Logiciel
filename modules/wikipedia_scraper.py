@@ -119,6 +119,9 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
     box = wait.until(EC.element_to_be_clickable((By.ID, "searchInput")))
     box.clear()
     box.send_keys(query)
+    # Sélectionne la première suggestion de la liste déroulante pour
+    # s'assurer d'ouvrir directement la page de la commune
+    box.send_keys(Keys.ARROW_DOWN)
     box.send_keys(Keys.ENTER)
 
     try:
@@ -140,7 +143,8 @@ def fetch_wikipedia_info(commune_query: str) -> Tuple[Dict[str, str], webdriver.
     afin que l'utilisateur décide quand fermer la fenêtre du navigateur.
 
     ``commune_query`` peut être de la forme ``"Vizille 38"`` ou
-    ``"Vizille (Isère)``.
+    ``"Vizille (38)`` : le département doit être indiqué par son numéro,
+    pas par son nom.
     """
 
     query = _normalize_query(commune_query)
