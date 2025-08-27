@@ -116,16 +116,14 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
     except TimeoutException:
         pass
 
-    box = wait.until(EC.element_to_be_clickable((By.ID, "searchInput")))
+    box = WebDriverWait(driver, 0.5).until(
+        EC.element_to_be_clickable((By.ID, "searchInput"))
+    )
     box.clear()
     box.send_keys(query)
-    try:
-        first = WebDriverWait(driver, 1).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, ".suggestions-results a"))
-        )
-        first.click()
-    except TimeoutException:
-        box.send_keys(Keys.ENTER)
+    # Descendre dans les suggestions et valider l'entrée
+    box.send_keys(Keys.ARROW_DOWN)
+    box.send_keys(Keys.ENTER)
 
     try:
         wait.until(EC.presence_of_element_located((By.ID, "firstHeading")))
