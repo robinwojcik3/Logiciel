@@ -1724,12 +1724,45 @@ class ContexteEcoTab(ttk.Frame):
                             (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
                         )
                     ).click()
-                    # 6) Activer la couche "Carte flore"
+                    # 6) Activer la couche "Carte des sols"
                     wait.until(
                         EC.element_to_be_clickable(
-                            (By.XPATH, "//*[contains(text(),'Carte flore')]")
+                            (By.XPATH, "//*[contains(text(),'Carte des sols')]")
                         )
                     ).click()
+                    # 7) Ouvrir un troisième onglet sans la couche "Carte des sols"
+                    self.wiki_driver.execute_script(
+                        "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
+                    )
+                    self.wiki_driver.switch_to.window(self.wiki_driver.window_handles[-1])
+                    addr = wait.until(
+                        EC.element_to_be_clickable((By.ID, "address-input"))
+                    )
+                    addr.click()
+                    addr.clear()
+                    addr.send_keys(coords_dms)
+                    wait.until(
+                        EC.element_to_be_clickable((By.ID, "search-address-btn"))
+                    ).click()
+                    wait.until(
+                        EC.element_to_be_clickable(
+                            (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
+                        )
+                    ).click()
+                    # 8) Ne pas activer "Carte des sols" (la laisser décochée)
+                    try:
+                        layer_cb = wait.until(
+                            EC.element_to_be_clickable(
+                                (
+                                    By.XPATH,
+                                    "//label[contains(.,'Carte des sols')]/preceding-sibling::input",
+                                )
+                            )
+                        )
+                        if layer_cb.is_selected():
+                            layer_cb.click()
+                    except Exception:
+                        pass
                 except Exception as fe:
                     print(
                         f"[Wiki] Étapes FloreApp échouées : {fe}",
