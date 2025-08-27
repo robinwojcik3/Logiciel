@@ -399,9 +399,17 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
         nom = os.path.splitext(os.path.basename(projet_path))[0]
         out_ae = os.path.join(cfg["OUT_IMG"], f"{nom}__AE.png")
         out_ze = os.path.join(cfg["OUT_IMG"], f"{nom}__ZE.png")
+        out_proj = os.path.join(cfg["OUT_IMG"], os.path.basename(projet_path))
 
         mode = cfg.get("CADRAGE_MODE", "BOTH")
-        expected_exports = (1 if mode in ("AE", "BOTH") else 0) + (1 if mode in ("ZE", "BOTH") else 0)
+        export_mode = cfg.get("EXPORT_MODE", "PNG")
+        export_png = export_mode in ("PNG", "BOTH")
+        export_qgs = export_mode in ("QGS", "BOTH")
+        expected_exports = 0
+        if export_png:
+            expected_exports += (1 if mode in ("AE", "BOTH") else 0) + (1 if mode in ("ZE", "BOTH") else 0)
+        if export_qgs:
+            expected_exports += 1
 
         prj = QgsProject.instance(); prj.clear()
 
@@ -423,7 +431,7 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
         lyr_ae = relink_layer(prj, cfg["LAYER_AE_NAME"], cfg["AE_SHP"])
         lyr_ze = relink_layer(prj, cfg["LAYER_ZE_NAME"], cfg["ZE_SHP"])
 
-        if mode in ("AE", "BOTH"):
+        if export_png and mode in ("AE", "BOTH"):
             if (not cfg["OVERWRITE"]) and os.path.exists(out_ae):
                 okc += 1
             else:
@@ -434,7 +442,7 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
                 else:
                     koc += 1
 
-        if mode in ("ZE", "BOTH"):
+        if export_png and mode in ("ZE", "BOTH"):
             if (not cfg["OVERWRITE"]) and os.path.exists(out_ze):
                 okc += 1
             else:
@@ -444,6 +452,13 @@ def worker_run(args: Tuple[List[str], dict]) -> Tuple[int, int]:
                     else: koc += 1
                 else:
                     koc += 1
+
+        if export_qgs:
+            try:
+                prj.write(out_proj)
+                okc += 1
+            except Exception:
+                koc += 1
 
         prj.clear()
         return okc, koc
@@ -576,13 +591,15 @@ class ExportCartesTab(ttk.Frame):
         self.font_sub   = tkfont.Font(family="Segoe UI", size=10)
         self.font_mono  = tkfont.Font(family="Consolas", size=9)
 
-        self.ze_shp_var   = tk.StringVar(value=self.prefs.get("ZE_SHP", ""))
-        self.ae_shp_var   = tk.StringVar(value=self.prefs.get("AE_SHP", ""))
-        self.cadrage_var  = tk.StringVar(value=self.prefs.get("CADRAGE_MODE", "BOTH"))
-        self.overwrite_var= tk.BooleanVar(value=self.prefs.get("OVERWRITE", OVERWRITE_DEFAULT))
-        self.dpi_var      = tk.IntVar(value=int(self.prefs.get("DPI", DPI_DEFAULT)))
-        self.workers_var  = tk.IntVar(value=int(self.prefs.get("N_WORKERS", N_WORKERS_DEFAULT)))
-        self.margin_var   = tk.DoubleVar(value=float(self.prefs.get("MARGIN_FAC", MARGIN_FAC_DEFAULT)))
+        self.ze_shp_var    = tk.StringVar(value=self.prefs.get("ZE_SHP", ""))
+        self.ae_shp_var    = tk.StringVar(value=self.prefs.get("AE_SHP", ""))
+        self.cadrage_var   = tk.StringVar(value=self.prefs.get("CADRAGE_MODE", "BOTH"))
+        self.overwrite_var = tk.BooleanVar(value=self.prefs.get("OVERWRITE", OVERWRITE_DEFAULT))
+        self.dpi_var       = tk.IntVar(value=int(self.prefs.get("DPI", DPI_DEFAULT)))
+        self.workers_var   = tk.IntVar(value=int(self.prefs.get("N_WORKERS", N_WORKERS_DEFAULT)))
+        self.margin_var    = tk.DoubleVar(value=float(self.prefs.get("MARGIN_FAC", MARGIN_FAC_DEFAULT)))
+        self.out_dir_var   = tk.StringVar(value=self.prefs.get("OUT_IMG", OUT_IMG))
+        self.export_choice_var = tk.StringVar(value=self.prefs.get("EXPORT_MODE", "BOTH"))
 
         self.project_vars: dict[str, tk.IntVar] = {}
         self.all_projects: List[str] = []
@@ -630,18 +647,29 @@ class ExportCartesTab(ttk.Frame):
         ttk.Label(opt, text="Marge", style="Card.TLabel").grid(row=2, column=4, sticky="w", padx=(12,0), pady=(8,0))
         ttk.Spinbox(opt, from_=1.00, to=2.00, increment=0.05, textvariable=self.margin_var, width=6, justify="right").grid(row=2, column=5, sticky="w", pady=(8,0))
 
+        # Dossier de sortie et export
+        out = ttk.Frame(left, style="Card.TFrame", padding=12); out.pack(fill=tk.X, pady=(10,0))
+        ttk.Label(out, text="3. Dossier de sortie", style="Card.TLabel").grid(row=0, column=0, columnspan=4, sticky="w")
+        self._file_row(out, 1, "📁 Dossier de sortie…", self.out_dir_var, self._select_out_dir)
+        ttk.Label(out, text="Exporter", style="Card.TLabel").grid(row=2, column=0, sticky="w", pady=(6,0))
+        ttk.Radiobutton(out, text="PNG", variable=self.export_choice_var, value="PNG", style="Card.TRadiobutton").grid(row=2, column=1, sticky="w", padx=(8,0), pady=(6,0))
+        ttk.Radiobutton(out, text="QGIS", variable=self.export_choice_var, value="QGS", style="Card.TRadiobutton").grid(row=2, column=2, sticky="w", padx=(8,0), pady=(6,0))
+        ttk.Radiobutton(out, text="Les deux", variable=self.export_choice_var, value="BOTH", style="Card.TRadiobutton").grid(row=2, column=3, sticky="w", padx=(8,0), pady=(6,0))
+        out.columnconfigure(1, weight=1)
+
         # Actions
         act = ttk.Frame(left, style="Card.TFrame", padding=12); act.pack(fill=tk.X, pady=(10,0))
         self.export_button = ttk.Button(act, text="▶ Lancer l’export", style="Accent.TButton", command=self.start_export_thread)
         self.export_button.grid(row=0, column=0, sticky="w")
-        obtn = ttk.Button(act, text="📂 Ouvrir le dossier de sortie", command=self._open_out_dir)
-        obtn.grid(row=0, column=1, padx=(10,0)); ToolTip(obtn, OUT_IMG)
+        self.open_dir_btn = ttk.Button(act, text="📂 Ouvrir le dossier de sortie", command=self._open_out_dir)
+        self.open_dir_btn.grid(row=0, column=1, padx=(10,0))
+        self.out_dir_tip = ToolTip(self.open_dir_btn, self.out_dir_var.get())
         tbtn = ttk.Button(act, text="🧪 Tester QGIS", command=self._test_qgis_threaded)
         tbtn.grid(row=0, column=2, padx=(10,0)); ToolTip(tbtn, "Vérifier l’import QGIS/Qt")
 
         # Projets
         proj = ttk.Frame(right, style="Card.TFrame", padding=12); proj.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(proj, text="3. Projets QGIS", style="Card.TLabel").grid(row=0, column=0, columnspan=4, sticky="w")
+        ttk.Label(proj, text="4. Projets QGIS", style="Card.TLabel").grid(row=0, column=0, columnspan=4, sticky="w")
         ttk.Label(proj, text="Filtrer", style="Card.TLabel").grid(row=1, column=0, sticky="w", pady=(6,6))
         self.filter_var = tk.StringVar()
         fe = ttk.Entry(proj, textvariable=self.filter_var, width=32); fe.grid(row=1, column=1, sticky="w", pady=(6,6))
@@ -702,6 +730,13 @@ class ExportCartesTab(ttk.Frame):
             if shp_type == 'ZE': self.ze_shp_var.set(path)
             else: self.ae_shp_var.set(path)
 
+    def _select_out_dir(self):
+        init = self.out_dir_var.get() if os.path.isdir(self.out_dir_var.get()) else os.path.expanduser("~")
+        path = filedialog.askdirectory(title="Choisir le dossier de sortie", initialdir=init)
+        if path:
+            self.out_dir_var.set(path)
+            self.out_dir_tip.text = path
+
     def _populate_projects(self):
         for w in list(self.scrollable_frame.children.values()): w.destroy()
         self.project_vars.clear()
@@ -741,8 +776,9 @@ class ExportCartesTab(ttk.Frame):
         self.status_label.config(text=f"Projets sélectionnés : {selected} / {total}")
 
     def _open_out_dir(self):
+        path = self.out_dir_var.get()
         try:
-            os.makedirs(OUT_IMG, exist_ok=True); os.startfile(OUT_IMG)
+            os.makedirs(path, exist_ok=True); os.startfile(path)
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier de sortie : {e}")
 
@@ -779,7 +815,13 @@ class ExportCartesTab(ttk.Frame):
         self.export_button.config(state="disabled")
         self.progress_done = 0; self.progress["value"] = 0
 
-        mode = self.cadrage_var.get(); per_project = 2 if mode == "BOTH" else 1
+        mode = self.cadrage_var.get()
+        export_mode = self.export_choice_var.get()
+        per_project = 0
+        if export_mode in ("PNG", "BOTH"):
+            per_project += 2 if mode == "BOTH" else 1
+        if export_mode in ("QGS", "BOTH"):
+            per_project += 1
         self.total_expected = per_project * len(projets)
         self.progress["maximum"] = max(1, self.total_expected)
 
@@ -791,27 +833,31 @@ class ExportCartesTab(ttk.Frame):
             "DPI": int(self.dpi_var.get()),
             "N_WORKERS": int(self.workers_var.get()),
             "MARGIN_FAC": float(self.margin_var.get()),
+            "OUT_IMG": self.out_dir_var.get(),
+            "EXPORT_MODE": export_mode,
         }); save_prefs(self.prefs)
 
-        t = threading.Thread(target=self._run_export_logic, args=(projets,))
+        t = threading.Thread(target=self._run_export_logic, args=(projets, export_mode))
         t.daemon = True; t.start()
-
-    def _run_export_logic(self, projets: List[str]):
+    
+    def _run_export_logic(self, projets: List[str], export_mode: str):
         try:
             start = datetime.datetime.now()
-            os.makedirs(OUT_IMG, exist_ok=True)
+            out_dir = self.out_dir_var.get()
+            os.makedirs(out_dir, exist_ok=True)
 
             log_with_time(f"{len(projets)} projets (attendu = calcul en cours)")
-            log_with_time(f"Workers={self.workers_var.get()}, DPI={self.dpi_var.get()}, marge={self.margin_var.get():.2f}, overwrite={self.overwrite_var.get()}")
+            log_with_time(f"Workers={self.workers_var.get()}, DPI={self.dpi_var.get()}, marge={self.margin_var.get():.2f}, overwrite={self.overwrite_var.get()}, export={export_mode}")
 
             chunks = chunk_even(projets, self.workers_var.get())
             cfg = {
                 "QGIS_ROOT": QGIS_ROOT, "QGIS_APP": QGIS_APP, "PY_VER": PY_VER,
-                "OUT_IMG": OUT_IMG, "DPI": int(self.dpi_var.get()),
+                "OUT_IMG": out_dir, "DPI": int(self.dpi_var.get()),
                 "MARGIN_FAC": float(self.margin_var.get()),
                 "LAYER_AE_NAME": LAYER_AE_NAME, "LAYER_ZE_NAME": LAYER_ZE_NAME,
                 "AE_SHP": self.ae_shp_var.get(), "ZE_SHP": self.ze_shp_var.get(),
                 "CADRAGE_MODE": self.cadrage_var.get(), "OVERWRITE": bool(self.overwrite_var.get()),
+                "EXPORT_MODE": export_mode,
             }
 
             ok_total = 0; ko_total = 0
