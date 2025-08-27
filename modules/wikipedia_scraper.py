@@ -17,6 +17,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
+import time
 
 # Départements courants (ajoutez si besoin)
 DEP: Dict[str, str] = {
@@ -119,6 +120,9 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
     box = wait.until(EC.element_to_be_clickable((By.ID, "searchInput")))
     box.clear()
     box.send_keys(query)
+    # Sélectionne la première suggestion pour garantir l'ouverture de la bonne page
+    time.sleep(1)
+    box.send_keys(Keys.ARROW_DOWN)
     box.send_keys(Keys.ENTER)
 
     try:
