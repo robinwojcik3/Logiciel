@@ -44,6 +44,7 @@ from io import BytesIO
 import pillow_heif
 import zipfile
 import traceback
+from bs4 import BeautifulSoup
 
 # ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
 from selenium import webdriver
@@ -52,6 +53,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver import ActionChains
+from selenium.common.exceptions import TimeoutException
 
 from docx import Document
 from docx.shared import Cm
@@ -120,6 +122,15 @@ COMMENT_TEMPLATE = (
 API_KEY = "2b10vfT6MvFC2lcAzqG1ZMKO"  # Votre clé API Pl@ntNet
 PROJECT = "all"
 API_URL = f"https://my-api.plantnet.org/v2/identify/{PROJECT}?api-key={API_KEY}"
+
+# Départements courants (pour la recherche Wikipédia)
+DEP = {
+    "01":"Ain","03":"Allier","04":"Alpes-de-Haute-Provence","05":"Hautes-Alpes","06":"Alpes-Maritimes",
+    "07":"Ardèche","09":"Ariège","11":"Aude","13":"Bouches-du-Rhône","15":"Cantal","21":"Côte-d'Or",
+    "26":"Drôme","30":"Gard","31":"Haute-Garonne","34":"Hérault","38":"Isère","39":"Jura",
+    "42":"Loire","43":"Haute-Loire","63":"Puy-de-Dôme","69":"Rhône","73":"Savoie","74":"Haute-Savoie",
+    "75":"Paris","83":"Var","84":"Vaucluse","90":"Territoire de Belfort"
+}
 
 # =========================
 # Utils communs
@@ -193,6 +204,95 @@ class ToolTip:
     def _hide(self, _=None):
         self._cancel()
         if self.tipwindow: self.tipwindow.destroy(); self.tipwindow = None
+
+# =========================
+# Helpers Wikipédia
+# =========================
+def find_section_heading(soup, heading_text):
+    span = soup.find('span', class_='mw-headline',
+                    string=lambda t: t and heading_text.lower() in t.lower())
+    return span.find_parent(['h2', 'h3']) if span else None
+
+def scrape_wikipedia_sections(driver):
+    out = {"climat_p1":"Non trouvé","climat_p2":"Non trouvé","occupation_p1":"Non trouvé"}
+    soup = BeautifulSoup(driver.page_source, 'html.parser')
+
+    h = find_section_heading(soup, "Climat")
+    if h:
+        start = None
+        for p in h.find_all_next('p'):
+            t = p.get_text(strip=True)
+            if t.startswith("En 2010, le climat de la commune est de type") or "climat de la commune est de type" in t:
+                start = p; break
+        if start:
+            fol = start.find_next_siblings('p', limit=2)
+            if len(fol) >= 1: out["climat_p1"] = fol[0].get_text(strip=True)
+            if len(fol) >= 2: out["climat_p2"] = fol[1].get_text(strip=True)
+
+    h = find_section_heading(soup, "Occupation des sols")
+    if h:
+        for p in h.find_all_next('p'):
+            t = p.get_text(strip=True)
+            if t.startswith("L'occupation des sols de la commune, telle qu'elle") or "L'occupation des sols de la commune, telle qu'elle ressort" in t:
+                out["occupation_p1"] = t; break
+    return out
+
+def normalize_query(s: str) -> str:
+    s = s.strip()
+    m = re.match(r"^(.*?)[\s,;_-]*\(?(\d{2})\)?$", s)
+    if m and m.group(2) in DEP:
+        base = m.group(1).strip()
+        return f"{base} ({DEP[m.group(2)]})"
+    return s
+
+def open_wikipedia_article(driver, query: str, wait: WebDriverWait) -> bool:
+    driver.get("https://fr.wikipedia.org/")
+    try:
+        btn = WebDriverWait(driver, 3).until(EC.element_to_be_clickable(
+            (By.XPATH, "//button[contains(.,'Accepter') or contains(.,'Tout accepter') or contains(.,\"J'ai compris\") or contains(.,'J’ai compris')]")
+        ))
+        btn.click()
+    except TimeoutException:
+        pass
+
+    box = wait.until(EC.element_to_be_clickable((By.ID, "searchInput")))
+    box.clear(); box.send_keys(query); box.send_keys(Keys.ENTER)
+    try:
+        wait.until(EC.presence_of_element_located((By.ID, "firstHeading")))
+        if "Spécial:Recherche" in driver.current_url or "Special:Search" in driver.current_url:
+            link = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div.mw-search-result-heading a")))
+            link.click(); wait.until(EC.presence_of_element_located((By.ID, "firstHeading")))
+        return True
+    except TimeoutException:
+        return False
+
+def fetch_wikipedia_info(query: str) -> dict:
+    options = webdriver.ChromeOptions()
+    options.add_experimental_option('excludeSwitches', ['enable-logging'])
+    options.add_argument("--log-level=3")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--headless")
+    driver = webdriver.Chrome(options=options)
+    wait = WebDriverWait(driver, 10)
+    try:
+        q = normalize_query(query)
+        ok = open_wikipedia_article(driver, q, wait)
+        if not ok:
+            alt = f"{q} (commune)"
+            ok = open_wikipedia_article(driver, alt, wait)
+            if not ok:
+                raise RuntimeError("Article Wikipédia introuvable")
+        data = scrape_wikipedia_sections(driver)
+        data["url"] = driver.current_url
+        return data
+    finally:
+        try:
+            driver.quit()
+        except Exception:
+            pass
 
 # =========================
 # Fonctions Pl@ntNet
@@ -1570,6 +1670,8 @@ class ContexteEcoTab(ttk.Frame):
         ttk.Spinbox(idf, from_=0.0, to=50.0, increment=0.5, textvariable=self.buffer_var, width=6, justify="right").grid(row=0, column=1, sticky="w", padx=(8,0))
         self.id_button = ttk.Button(idf, text="Lancer l’ID Contexte éco", style="Accent.TButton", command=self.start_id_thread)
         self.id_button.grid(row=0, column=2, sticky="w", padx=(12,0))
+        self.wiki_button = ttk.Button(idf, text="Wikipédia", command=self.start_wikipedia_thread)
+        self.wiki_button.grid(row=0, column=3, sticky="w", padx=(12,0))
 
         # Console + progression
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
@@ -1640,6 +1742,64 @@ class ContexteEcoTab(ttk.Frame):
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
 
+    def start_wikipedia_thread(self):
+        if self.busy:
+            print("Une action est déjà en cours.", file=self.stdout_redirect)
+            return
+        if not self.ze_shp_var.get():
+            messagebox.showerror("Erreur", "Sélectionnez la zone d'étude."); return
+        self.busy = True
+        self.export_button.config(state="disabled")
+        self.id_button.config(state="disabled")
+        self.wiki_button.config(state="disabled")
+        self.progress.config(mode="indeterminate")
+        self.progress.start()
+        self.status_label.config(text="Recherche Wikipédia…")
+        t = threading.Thread(target=self._run_wikipedia_logic, daemon=True)
+        t.start()
+
+    def _run_wikipedia_logic(self):
+        old_stdout = sys.stdout
+        sys.stdout = self.stdout_redirect
+        try:
+            query = self._compute_commune_query()
+            if not query:
+                log_with_time("Commune introuvable")
+                self.after(0, lambda: messagebox.showerror("Erreur", "Impossible de déterminer la commune."))
+                return
+            data = fetch_wikipedia_info(query)
+            lines = [f"Page Wikipédia: {data['url']}", "", "CLIMAT:", data['climat_p1'], data['climat_p2'], "", "OCCUPATION DES SOLS:", data['occupation_p1']]
+            msg = "\n".join([l for l in lines if l and l != "Non trouvé"])
+            log_with_time(msg)
+            self.after(0, lambda: messagebox.showinfo("Wikipédia", msg))
+        except Exception as e:
+            log_with_time(f"Erreur: {e}")
+            self.after(0, lambda: messagebox.showerror("Erreur", str(e)))
+        finally:
+            sys.stdout = old_stdout
+            self.after(0, lambda: (self.progress.stop(), self.progress.config(mode="determinate", value=0)))
+            self.after(0, self._run_finished)
+
+    def _compute_commune_query(self) -> Optional[str]:
+        try:
+            import geopandas as gpd
+            ze = self.ze_shp_var.get()
+            gdf = gpd.read_file(ze)
+            centroid = gdf.to_crs("EPSG:4326").geometry.unary_union.centroid
+            lat, lon = centroid.y, centroid.x
+            resp = requests.get(
+                "https://geo.api.gouv.fr/communes",
+                params={"lat": lat, "lon": lon, "fields": "nom,codeDepartement", "format": "json", "geometry": "centre"},
+                timeout=10,
+            )
+            data = resp.json()
+            if not data:
+                return None
+            return f"{data[0]['nom']} ({data[0]['codeDepartement']})"
+        except Exception as e:
+            log_with_time(f"Erreur commune: {e}")
+            return None
+
     # ---------- Gestion projets QGIS ----------
     def _populate_projects(self):
         for w in list(self.scrollable_frame.children.values()): w.destroy()
@@ -1693,6 +1853,7 @@ class ContexteEcoTab(ttk.Frame):
         self.busy = True
         self.export_button.config(state="disabled")
         self.id_button.config(state="disabled")
+        self.wiki_button.config(state="disabled")
         mode = self.cadrage_var.get()
         exp_type = self.export_type_var.get()
         png_exports = 2 if (exp_type in ("PNG", "BOTH") and mode == "BOTH") else (1 if exp_type in ("PNG", "BOTH") else 0)
@@ -1777,6 +1938,7 @@ class ContexteEcoTab(ttk.Frame):
         self.busy = True
         self.export_button.config(state="disabled")
         self.id_button.config(state="disabled")
+        self.wiki_button.config(state="disabled")
         self.progress.config(mode="indeterminate")
         self.progress.start()
         self.status_label.config(text="Analyse en cours…")
@@ -1809,6 +1971,7 @@ class ContexteEcoTab(ttk.Frame):
     def _run_finished(self):
         self.export_button.config(state="normal")
         self.id_button.config(state="normal")
+        self.wiki_button.config(state="normal")
         self.busy = False
 
 # =========================
