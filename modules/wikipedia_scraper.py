@@ -49,6 +49,11 @@ DEP: Dict[str, str] = {
     "90": "Territoire de Belfort",
 }
 
+# Conserver une référence globale au dernier driver pour éviter sa
+# fermeture automatique. L'utilisateur pourra fermer la fenêtre de
+# navigation manuellement quand il le souhaite.
+LAST_DRIVER: webdriver.Chrome | None = None
+
 
 def _find_section_heading(soup: BeautifulSoup, heading_text: str):
     span = soup.find(
@@ -154,21 +159,20 @@ def fetch_wikipedia_info(commune_query: str) -> Dict[str, str]:
     driver = webdriver.Chrome(options=options)
     driver.maximize_window()
     wait = WebDriverWait(driver, 10)
-    url = ""
-    try:
-        ok = _open_article(driver, query, wait)
-        if not ok:
-            alt = f"{query} (commune)"
-            ok = _open_article(driver, alt, wait)
-        if not ok:
-            return {"error": "Article introuvable"}
-        data = _scrape_sections(driver)
-        url = driver.current_url
-        data["url"] = url
-        return data
-    finally:
-        try:
-            driver.quit()
-        except Exception:
-            pass
+
+    # Conserver une référence globale pour éviter que Selenium ne ferme
+    # automatiquement la fenêtre en fin de fonction.
+    global LAST_DRIVER
+    LAST_DRIVER = driver
+
+    ok = _open_article(driver, query, wait)
+    if not ok:
+        alt = f"{query} (commune)"
+        ok = _open_article(driver, alt, wait)
+    if not ok:
+        return {"error": "Article introuvable"}
+    data = _scrape_sections(driver)
+    url = driver.current_url
+    data["url"] = url
+    return data
 
