@@ -909,7 +909,8 @@ class ExportCartesTab(ttk.Frame):
             self.after(0, lambda: self.status_label.config(text=f"Terminé — OK={ok_total} / KO={ko_total}"))
         except Exception as e:
             log_with_time(f"Erreur critique: {e}")
-            self.after(0, lambda: messagebox.showerror("Erreur", str(e)))
+            _err = str(e)
+            self.after(0, lambda msg=_err: messagebox.showerror("Erreur", msg))
         finally:
             self.after(0, lambda: self.export_button.config(state="normal"))
 
@@ -1941,7 +1942,8 @@ class ContexteEcoTab(ttk.Frame):
             self.after(0, lambda: self.status_label.config(text=f"Terminé — OK={ok_total} / KO={ko_total}"))
         except Exception as e:
             log_with_time(f"Erreur critique: {e}")
-            self.after(0, lambda: messagebox.showerror("Erreur", str(e)))
+            _err = str(e)
+            self.after(0, lambda msg=_err: messagebox.showerror("Erreur", msg))
         finally:
             sys.stdout = old_stdout
             self.after(0, self._run_finished)
@@ -1984,7 +1986,8 @@ class ContexteEcoTab(ttk.Frame):
             self.after(0, lambda: self.status_label.config(text="Terminé"))
         except Exception as e:
             log_with_time(f"Erreur: {e}")
-            self.after(0, lambda: messagebox.showerror("Erreur", str(e)))
+            _err = str(e)
+            self.after(0, lambda msg=_err: messagebox.showerror("Erreur", msg))
         finally:
             sys.stdout = old_stdout
             self.after(0, lambda: (self.progress.stop(), self.progress.config(mode="determinate", value=0)))
