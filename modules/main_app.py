@@ -43,7 +43,7 @@ import traceback
 import geopandas as gpd
 
 # Import du scraper Wikipédia
-from .wikipedia_scraper import DEP, fetch_wikipedia_info
+from .wikipedia_scraper import DEP, run_wikipedia_scrape
 
 # Import du worker QGIS externalisé
 from .export_worker import worker_run
@@ -1032,7 +1032,7 @@ class ContexteEcoTab(ttk.Frame):
         ttk.Spinbox(idf, from_=0.0, to=50.0, increment=0.5, textvariable=self.buffer_var, width=6, justify="right").grid(row=0, column=1, sticky="w", padx=(8,0))
         self.id_button = ttk.Button(idf, text="Lancer l’ID Contexte éco", style="Accent.TButton", command=self.start_id_thread)
         self.id_button.grid(row=0, column=2, sticky="w", padx=(12,0))
-        self.wiki_button = ttk.Button(idf, text="Scraping", style="Accent.TButton", command=self.start_wiki_thread)
+        self.wiki_button = ttk.Button(idf, text="Wikipedia", style="Accent.TButton", command=self.start_wiki_thread)
         self.wiki_button.grid(row=0, column=3, sticky="w", padx=(12,0))
         self.rlt_button = ttk.Button(idf, text="Remonter le temps", style="Accent.TButton", command=self.start_rlt_thread)
         self.rlt_button.grid(row=0, column=4, sticky="w", padx=(12,0))
@@ -1040,6 +1040,22 @@ class ContexteEcoTab(ttk.Frame):
         self.maps_button.grid(row=0, column=5, sticky="w", padx=(12,0))
         self.bassin_button = ttk.Button(idf, text="Bassin versant", style="Accent.TButton", command=self.start_bassin_thread)
         self.bassin_button.grid(row=0, column=6, sticky="w", padx=(12,0))
+        # Section Wikipedia
+        wiki = ttk.Frame(self, style="Card.TFrame", padding=12)
+        wiki.pack(fill=tk.BOTH, expand=True, pady=(10,0))
+        header = ttk.Frame(wiki)
+        header.pack(fill=tk.X)
+        self.wiki_visible = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            header,
+            text="Wikipedia",
+            variable=self.wiki_visible,
+            command=self._toggle_wiki_section,
+            style="Card.TCheckbutton",
+        ).pack(anchor="w")
+        self.wiki_content = ttk.Frame(wiki)
+        self.wiki_content.pack(fill=tk.BOTH, expand=True, pady=(8,0))
+        self._init_wiki_table(self.wiki_content)
 
         # Console + progression
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
@@ -1110,6 +1126,44 @@ class ContexteEcoTab(ttk.Frame):
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
 
+    # ---------- Section Wikipedia ----------
+    def _init_wiki_table(self, parent: ttk.Frame) -> None:
+        tbl = ttk.Frame(parent)
+        tbl.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(tbl, text="Climat", style="Card.TLabel").grid(row=0, column=0, sticky="nw")
+        self.wiki_climat_text = tk.Text(tbl, height=5, wrap=tk.WORD, state="disabled")
+        clim_scroll = ttk.Scrollbar(tbl, orient="vertical", command=self.wiki_climat_text.yview)
+        self.wiki_climat_text.configure(yscrollcommand=clim_scroll.set)
+        self.wiki_climat_text.grid(row=0, column=1, sticky="nsew")
+        clim_scroll.grid(row=0, column=2, sticky="ns")
+
+        ttk.Label(tbl, text="Corine Land Cover", style="Card.TLabel").grid(row=1, column=0, sticky="nw", pady=(6,0))
+        self.wiki_corine_text = tk.Text(tbl, height=5, wrap=tk.WORD, state="disabled")
+        cor_scroll = ttk.Scrollbar(tbl, orient="vertical", command=self.wiki_corine_text.yview)
+        self.wiki_corine_text.configure(yscrollcommand=cor_scroll.set)
+        self.wiki_corine_text.grid(row=1, column=1, sticky="nsew", pady=(6,0))
+        cor_scroll.grid(row=1, column=2, sticky="ns", pady=(6,0))
+
+        tbl.columnconfigure(1, weight=1)
+
+    def _toggle_wiki_section(self):
+        if self.wiki_visible.get():
+            self.wiki_content.pack(fill=tk.BOTH, expand=True, pady=(8,0))
+        else:
+            self.wiki_content.forget()
+
+    def render_wikipedia_section(self, data: dict) -> None:
+        self.wiki_climat_text.config(state="normal")
+        self.wiki_climat_text.delete("1.0", tk.END)
+        self.wiki_climat_text.insert(tk.END, data.get("climat", ""))
+        self.wiki_climat_text.config(state="disabled")
+
+        self.wiki_corine_text.config(state="normal")
+        self.wiki_corine_text.delete("1.0", tk.END)
+        self.wiki_corine_text.insert(tk.END, data.get("corine", ""))
+        self.wiki_corine_text.config(state="disabled")
+
     def start_wiki_thread(self):
         if not self.ze_shp_var.get().strip():
             messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
@@ -1128,68 +1182,16 @@ class ContexteEcoTab(ttk.Frame):
             gdf = gdf.to_crs("EPSG:4326")
             centroid = gdf.geometry.unary_union.centroid
             lat, lon = centroid.y, centroid.x
-            coords_dms = dd_to_dms(lat, lon)
             commune, dep = self._detect_commune(lat, lon)
-            query = f"{commune} {dep}".strip()
-            print(f"[Wiki] Requête : {query}", file=self.stdout_redirect)
-            data, self.wiki_driver = fetch_wikipedia_info(query)
-            if "error" in data:
-                print(f"[Wiki] {data['error']}", file=self.stdout_redirect)
-            else:
-                print(f"[Wiki] Page Wikipédia : {data['url']}", file=self.stdout_redirect)
-                print("[Wiki] CLIMAT :", file=self.stdout_redirect)
-                if data['climat_p1'] != 'Non trouvé':
-                    print(data['climat_p1'], file=self.stdout_redirect)
-                if data['climat_p2'] != 'Non trouvé':
-                    print(data['climat_p2'], file=self.stdout_redirect)
-                print("[Wiki] OCCUPATION DES SOLS :", file=self.stdout_redirect)
-                if data['occupation_p1'] != 'Non trouvé':
-                    print(data['occupation_p1'], file=self.stdout_redirect)
-
-                # Étapes supplémentaires : ouverture des cartes et activation des couches
-                def _open_layer(layer_label: str) -> None:
-                    """Ouvre FloreApp dans un nouvel onglet et coche ``layer_label``."""
-                    try:
-                        wait = WebDriverWait(self.wiki_driver, 0.5)
-                        # 1) Ouvrir l'URL dans un nouvel onglet
-                        self.wiki_driver.execute_script(
-                            "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
-                        )
-                        self.wiki_driver.switch_to.window(self.wiki_driver.window_handles[-1])
-                        # 2) Cliquer sur la barre de recherche
-                        addr = wait.until(
-                            EC.element_to_be_clickable((By.ID, "address-input"))
-                        )
-                        addr.click()
-                        # 3) Saisir les coordonnées du centroïde
-                        addr.clear()
-                        addr.send_keys(coords_dms)
-                        # 4) Valider la recherche
-                        wait.until(
-                            EC.element_to_be_clickable((By.ID, "search-address-btn"))
-                        ).click()
-                        # 5) Ouvrir le menu des couches
-                        wait.until(
-                            EC.element_to_be_clickable(
-                                (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
-                            )
-                        ).click()
-                        # 6) Cocher la couche demandée
-                        checkbox = wait.until(
-                            EC.element_to_be_clickable(
-                                (By.XPATH, f"//label[contains(.,'{layer_label}')]/input")
-                            )
-                        )
-                        if not checkbox.is_selected():
-                            checkbox.click()
-                    except Exception as fe:
-                        print(
-                            f"[Wiki] Étapes {layer_label} échouées : {fe}",
-                            file=self.stdout_redirect,
-                        )
-
-                _open_layer("Carte de la végétation")
-                _open_layer("Carte des sols")
+            commune_label = f"{commune} ({dep})"
+            print(f"[Wiki] Requête : {commune_label}", file=self.stdout_redirect)
+            data = run_wikipedia_scrape(commune_label)
+            print(f"[Wiki] Page Wikipédia : {data['url']}", file=self.stdout_redirect)
+            print("[Wiki] CLIMAT :", file=self.stdout_redirect)
+            print(data.get("climat", "Donnée non disponible"), file=self.stdout_redirect)
+            print("[Wiki] OCCUPATION DES SOLS :", file=self.stdout_redirect)
+            print(data.get("corine", "Donnée non disponible"), file=self.stdout_redirect)
+            self.after(0, lambda d=data: self.render_wikipedia_section(d))
         except Exception as e:
             print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
         finally:
