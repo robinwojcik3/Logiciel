@@ -43,7 +43,7 @@ import traceback
 import geopandas as gpd
 
 # Import du scraper Wikipédia
-from .wikipedia_scraper import DEP, fetch_wikipedia_info
+from .wikipedia_scraper import DEP, get_shared_driver, run_wikipedia_scrape
 
 # Import du worker QGIS externalisé
 from .export_worker import worker_run
@@ -197,6 +197,30 @@ class ToolTip:
     def _hide(self, _=None):
         self._cancel()
         if self.tipwindow: self.tipwindow.destroy(); self.tipwindow = None
+
+
+class CollapsibleFrame(ttk.Frame):
+    def __init__(self, master, title: str, *args, **kwargs):
+        super().__init__(master, *args, **kwargs)
+        self.columnconfigure(0, weight=1)
+        self._shown = tk.BooleanVar(value=False)
+        header = ttk.Checkbutton(
+            self,
+            text=title,
+            variable=self._shown,
+            command=self._toggle,
+            style="Card.TCheckbutton",
+        )
+        header.grid(row=0, column=0, sticky="w")
+        self.body = ttk.Frame(self, style="Card.TFrame")
+        self.body.grid(row=1, column=0, sticky="nsew")
+        self.body.grid_remove()
+
+    def _toggle(self):
+        if self._shown.get():
+            self.body.grid()
+        else:
+            self.body.grid_remove()
 
 # =========================
 # Fonctions Pl@ntNet
@@ -1128,72 +1152,41 @@ class ContexteEcoTab(ttk.Frame):
             gdf = gdf.to_crs("EPSG:4326")
             centroid = gdf.geometry.unary_union.centroid
             lat, lon = centroid.y, centroid.x
-            coords_dms = dd_to_dms(lat, lon)
             commune, dep = self._detect_commune(lat, lon)
-            query = f"{commune} {dep}".strip()
+            query = f"{commune} ({dep})"
             print(f"[Wiki] Requête : {query}", file=self.stdout_redirect)
-            data, self.wiki_driver = fetch_wikipedia_info(query)
-            if "error" in data:
-                print(f"[Wiki] {data['error']}", file=self.stdout_redirect)
-            else:
-                print(f"[Wiki] Page Wikipédia : {data['url']}", file=self.stdout_redirect)
-                print("[Wiki] CLIMAT :", file=self.stdout_redirect)
-                if data['climat_p1'] != 'Non trouvé':
-                    print(data['climat_p1'], file=self.stdout_redirect)
-                if data['climat_p2'] != 'Non trouvé':
-                    print(data['climat_p2'], file=self.stdout_redirect)
-                print("[Wiki] OCCUPATION DES SOLS :", file=self.stdout_redirect)
-                if data['occupation_p1'] != 'Non trouvé':
-                    print(data['occupation_p1'], file=self.stdout_redirect)
-
-                # Étapes supplémentaires : ouverture des cartes et activation des couches
-                def _open_layer(layer_label: str) -> None:
-                    """Ouvre FloreApp dans un nouvel onglet et coche ``layer_label``."""
-                    try:
-                        wait = WebDriverWait(self.wiki_driver, 0.5)
-                        # 1) Ouvrir l'URL dans un nouvel onglet
-                        self.wiki_driver.execute_script(
-                            "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
-                        )
-                        self.wiki_driver.switch_to.window(self.wiki_driver.window_handles[-1])
-                        # 2) Cliquer sur la barre de recherche
-                        addr = wait.until(
-                            EC.element_to_be_clickable((By.ID, "address-input"))
-                        )
-                        addr.click()
-                        # 3) Saisir les coordonnées du centroïde
-                        addr.clear()
-                        addr.send_keys(coords_dms)
-                        # 4) Valider la recherche
-                        wait.until(
-                            EC.element_to_be_clickable((By.ID, "search-address-btn"))
-                        ).click()
-                        # 5) Ouvrir le menu des couches
-                        wait.until(
-                            EC.element_to_be_clickable(
-                                (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
-                            )
-                        ).click()
-                        # 6) Cocher la couche demandée
-                        checkbox = wait.until(
-                            EC.element_to_be_clickable(
-                                (By.XPATH, f"//label[contains(.,'{layer_label}')]/input")
-                            )
-                        )
-                        if not checkbox.is_selected():
-                            checkbox.click()
-                    except Exception as fe:
-                        print(
-                            f"[Wiki] Étapes {layer_label} échouées : {fe}",
-                            file=self.stdout_redirect,
-                        )
-
-                _open_layer("Carte de la végétation")
-                _open_layer("Carte des sols")
+            data = run_wikipedia_scrape(query)
+            self.wiki_driver = get_shared_driver()
+            print(f"[Wiki] Page Wikipédia : {data.get('url', '')}", file=self.stdout_redirect)
+            self.after(0, lambda: self.render_wikipedia_section(data))
         except Exception as e:
             print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
         finally:
             self.after(0, lambda: self.wiki_button.config(state="normal"))
+
+    def render_wikipedia_section(self, data: dict) -> None:
+        if not hasattr(self, "wiki_section"):
+            self.wiki_section = CollapsibleFrame(self, "Wikipedia")
+            self.wiki_section.pack(fill=tk.X, pady=(10, 0))
+        body = self.wiki_section.body
+        for child in body.winfo_children():
+            child.destroy()
+        table = ttk.Frame(body)
+        table.grid(row=0, column=0, sticky="nsew")
+        rows = [
+            ("Climat", data.get("climat", "Donnée non disponible")),
+            ("Corine Land Cover", data.get("corine", "Donnée non disponible")),
+        ]
+        for i, (label, text) in enumerate(rows):
+            ttk.Label(table, text=label, style="Card.TLabel").grid(row=i, column=0, sticky="nw", padx=(0, 6), pady=3)
+            txt = tk.Text(table, height=4, wrap=tk.WORD)
+            txt.insert("1.0", text)
+            txt.configure(state="disabled")
+            txt.grid(row=i, column=1, sticky="nsew")
+            scroll = ttk.Scrollbar(table, orient="vertical", command=txt.yview)
+            txt.configure(yscrollcommand=scroll.set)
+            scroll.grid(row=i, column=2, sticky="ns")
+        table.columnconfigure(1, weight=1)
 
     # --- Boutons ajoutés ---
     def start_rlt_thread(self):
