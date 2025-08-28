@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from typing import Dict, Tuple
+import time
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -70,18 +71,30 @@ def _scrape_sections(driver: webdriver.Chrome) -> Dict[str, str]:
 
     h = _find_section_heading(soup, "Climat")
     if h:
-        start = None
+        # Recherche prioritaire du paragraphe commençant par
+        # "Pour la période 1971-2000, la température annuelle ..."
+        target = None
         for p in h.find_all_next("p"):
             t = p.get_text(strip=True)
-            if t.startswith("En 2010, le climat de la commune est de type") or "climat de la commune est de type" in t:
-                start = p
+            if t.startswith("Pour la période 1971-2000"):
+                target = t
                 break
-        if start:
-            fol = start.find_next_siblings("p", limit=2)
-            if len(fol) >= 1:
-                out["climat_p1"] = fol[0].get_text(strip=True)
-            if len(fol) >= 2:
-                out["climat_p2"] = fol[1].get_text(strip=True)
+        if target:
+            out["climat_p1"] = target
+        else:
+            # Fallback: même logique qu'avant (paragraphe(s) suivant(s) l'explication du type de climat)
+            start = None
+            for p in h.find_all_next("p"):
+                t = p.get_text(strip=True)
+                if t.startswith("En 2010, le climat de la commune est de type") or "climat de la commune est de type" in t:
+                    start = p
+                    break
+            if start:
+                fol = start.find_next_siblings("p", limit=2)
+                if len(fol) >= 1:
+                    out["climat_p1"] = fol[0].get_text(strip=True)
+                if len(fol) >= 2:
+                    out["climat_p2"] = fol[1].get_text(strip=True)
 
     h = _find_section_heading(soup, "Occupation des sols")
     if h:
@@ -131,6 +144,8 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
         )
     )
     box.clear()
+    # Réduction du délai d'attente avant saisie: 0.5 s
+    time.sleep(0.5)
     box.send_keys(query)
 
     # Cliquer sur le bouton "Rechercher" (fall back sur Entrée au besoin)

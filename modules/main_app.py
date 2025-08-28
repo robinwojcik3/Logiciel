@@ -1131,6 +1131,9 @@ class ContexteEcoTab(ttk.Frame):
         self.buffer_var    = tk.DoubleVar(value=float(self.prefs.get("ID_TAMPON_KM", 5.0)))
         self.out_dir_var   = tk.StringVar(value=self.prefs.get("OUT_DIR", OUT_IMG))
         self.export_type_var = tk.StringVar(value=self.prefs.get("EXPORT_TYPE", "BOTH"))
+        # Resultats Wikipedia (affichage sous forme de tableau)
+        self.wiki_climat_var = tk.StringVar(value="")
+        self.wiki_occ_var = tk.StringVar(value="")
 
         self.project_vars: dict[str, tk.IntVar] = {}
         self.all_projects: List[str] = []
@@ -1242,6 +1245,16 @@ class ContexteEcoTab(ttk.Frame):
         self.bassin_button = ttk.Button(idf, text="Bassin versant", style="Accent.TButton", command=self.start_bassin_thread)
         self.bassin_button.grid(row=0, column=7, sticky="w", padx=(12,0))
 
+        # Tableau Wikipedia (2 lignes, 2 colonnes)
+        wiki_res = ttk.Frame(self, style="Card.TFrame", padding=12)
+        wiki_res.pack(fill=tk.X, pady=(8,0))
+        ttk.Label(wiki_res, text="Wikipedia", style="Card.TLabel").grid(row=0, column=0, columnspan=2, sticky="w", pady=(0,6))
+        ttk.Label(wiki_res, text="Climat", style="Card.TLabel").grid(row=1, column=0, sticky="nw")
+        ttk.Label(wiki_res, text="Corine Land Cover", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
+        ttk.Label(wiki_res, textvariable=self.wiki_climat_var, wraplength=900, style="Card.TLabel").grid(row=1, column=1, sticky="w")
+        ttk.Label(wiki_res, textvariable=self.wiki_occ_var, wraplength=900, style="Card.TLabel").grid(row=2, column=1, sticky="w")
+        wiki_res.columnconfigure(1, weight=1)
+
         # Console + progression
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
         bottom.pack(fill=tk.BOTH, expand=True, pady=(10,0))
@@ -1335,6 +1348,8 @@ class ContexteEcoTab(ttk.Frame):
             query = f"{commune} {dep}".strip()
             print(f"[Wiki] Requête : {query}", file=self.stdout_redirect)
             data, self.wiki_driver = fetch_wikipedia_info(query)
+            # Mettre à jour le tableau Wikipedia (dès que les données sont disponibles)
+            self._update_wiki_table(data)
             if "error" in data:
                 print(f"[Wiki] {data['error']}", file=self.stdout_redirect)
             else:
@@ -1352,6 +1367,20 @@ class ContexteEcoTab(ttk.Frame):
             print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
         finally:
             self.after(0, lambda: self.wiki_button.config(state="normal"))
+
+    def _update_wiki_table(self, data: dict) -> None:
+        try:
+            clim_txt = data.get('climat_p1', '')
+            occ_txt = data.get('occupation_p1', '')
+            def _norm(s):
+                try:
+                    return s if (isinstance(s, str) and not s.lower().startswith('non trouv')) else '—'
+                except Exception:
+                    return '—'
+            self.after(0, lambda: self.wiki_climat_var.set(_norm(clim_txt)))
+            self.after(0, lambda: self.wiki_occ_var.set(_norm(occ_txt)))
+        except Exception:
+            pass
 
     def start_vegsol_thread(self):
         if not self.ze_shp_var.get().strip():
