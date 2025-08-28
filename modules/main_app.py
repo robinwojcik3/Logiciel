@@ -38,6 +38,7 @@ from io import BytesIO
 import pillow_heif
 import zipfile
 import traceback
+import subprocess
 
 # ==== Imports supplémentaires pour l'onglet Contexte éco ====
 # Note: geopandas n'est pas utilisé directement dans ce module.
@@ -157,6 +158,29 @@ def chunk_even(lst: List[str], k: int) -> List[List[str]]:
         out.append(lst[start:start+size])
         start += size
     return out
+
+def qgis_multiprocessing_ok() -> bool:
+    """Quick check: can QGIS's Python import _multiprocessing? Avoids noisy spawn failures."""
+    try:
+        qgis_py = os.path.join(QGIS_ROOT, "apps", PY_VER, "python.exe")
+        if not os.path.isfile(qgis_py):
+            return False
+        env = os.environ.copy()
+        # Prefer clean env and explicit paths
+        qgis_py_root = os.path.join(QGIS_ROOT, "apps", PY_VER)
+        qgis_lib = os.path.join(qgis_py_root, "Lib")
+        qgis_dlls = os.path.join(qgis_py_root, "DLLs")
+        qgis_site = os.path.join(qgis_lib, "site-packages")
+        qgis_app_py = os.path.join(QGIS_APP, "python")
+        env.pop("PYTHONHOME", None); env.pop("PYTHONPATH", None); env["PYTHONNOUSERSITE"] = "1"
+        env["PYTHONHOME"] = qgis_py_root
+        env["PYTHONPATH"] = os.pathsep.join([qgis_py_root, qgis_lib, qgis_dlls, qgis_site, qgis_app_py])
+        code = "import multiprocessing, multiprocessing.connection, _multiprocessing; print('OK')"
+        r = subprocess.run([qgis_py, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           text=True, timeout=6, env=env, cwd=os.path.dirname(__file__))
+        return r.returncode == 0 and (r.stdout or "").strip().endswith("OK")
+    except Exception:
+        return False
 
 def load_prefs() -> dict:
     if os.path.isfile(PREFS_PATH):
@@ -673,6 +697,22 @@ class ExportCartesTab(ttk.Frame):
                 self.progress_done += done_inc
                 self.progress["value"] = min(self.progress_done, self.total_expected)
                 self.status_label.config(text=f"Progression : {self.progress_done}/{self.total_expected}")
+
+            # Preflight: avoid noisy spawn failures if QGIS Python lacks _multiprocessing
+            try:
+                if workers > 1 and not qgis_multiprocessing_ok():
+                    log_with_time("Multiprocessing QGIS indisponible -> execution sequentielle")
+                    workers = 1
+            except Exception:
+                pass
+
+            # Preflight: avoid noisy spawn failures if QGIS Python lacks _multiprocessing
+            try:
+                if workers > 1 and not qgis_multiprocessing_ok():
+                    log_with_time("Multiprocessing QGIS indisponible -> execution sequentielle")
+                    workers = 1
+            except Exception:
+                pass
 
             if workers <= 1:
                 for chunk in chunks:
