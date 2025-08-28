@@ -43,7 +43,7 @@ import traceback
 import geopandas as gpd
 
 # Import du scraper Wikipédia
-from .wikipedia_scraper import DEP, fetch_wikipedia_info
+from .wikipedia_scraper import DEP, run_wikipedia_scrape
 
 # Import du worker QGIS externalisé
 from .export_worker import worker_run
@@ -953,6 +953,10 @@ class ContexteEcoTab(ttk.Frame):
         self.progress_done  = 0
         self.busy = False
 
+        self.wiki_section = None
+        self.climat_text = None
+        self.corine_text = None
+
         self._build_ui()
         self._populate_projects()
         self._update_counts()
@@ -1032,7 +1036,7 @@ class ContexteEcoTab(ttk.Frame):
         ttk.Spinbox(idf, from_=0.0, to=50.0, increment=0.5, textvariable=self.buffer_var, width=6, justify="right").grid(row=0, column=1, sticky="w", padx=(8,0))
         self.id_button = ttk.Button(idf, text="Lancer l’ID Contexte éco", style="Accent.TButton", command=self.start_id_thread)
         self.id_button.grid(row=0, column=2, sticky="w", padx=(12,0))
-        self.wiki_button = ttk.Button(idf, text="Scraping", style="Accent.TButton", command=self.start_wiki_thread)
+        self.wiki_button = ttk.Button(idf, text="Wikipedia", style="Accent.TButton", command=self.start_wiki_thread)
         self.wiki_button.grid(row=0, column=3, sticky="w", padx=(12,0))
         self.rlt_button = ttk.Button(idf, text="Remonter le temps", style="Accent.TButton", command=self.start_rlt_thread)
         self.rlt_button.grid(row=0, column=4, sticky="w", padx=(12,0))
@@ -1120,6 +1124,12 @@ class ContexteEcoTab(ttk.Frame):
         t.start()
 
     def _run_wiki(self):
+        data = {
+            "climat": "Donnée non disponible",
+            "corine": "Donnée non disponible",
+            "url": "",
+            "commune": "",
+        }
         try:
             ze_path = self.ze_shp_var.get()
             gdf = gpd.read_file(ze_path)
@@ -1128,72 +1138,43 @@ class ContexteEcoTab(ttk.Frame):
             gdf = gdf.to_crs("EPSG:4326")
             centroid = gdf.geometry.unary_union.centroid
             lat, lon = centroid.y, centroid.x
-            coords_dms = dd_to_dms(lat, lon)
             commune, dep = self._detect_commune(lat, lon)
-            query = f"{commune} {dep}".strip()
-            print(f"[Wiki] Requête : {query}", file=self.stdout_redirect)
-            data, self.wiki_driver = fetch_wikipedia_info(query)
-            if "error" in data:
-                print(f"[Wiki] {data['error']}", file=self.stdout_redirect)
-            else:
-                print(f"[Wiki] Page Wikipédia : {data['url']}", file=self.stdout_redirect)
-                print("[Wiki] CLIMAT :", file=self.stdout_redirect)
-                if data['climat_p1'] != 'Non trouvé':
-                    print(data['climat_p1'], file=self.stdout_redirect)
-                if data['climat_p2'] != 'Non trouvé':
-                    print(data['climat_p2'], file=self.stdout_redirect)
-                print("[Wiki] OCCUPATION DES SOLS :", file=self.stdout_redirect)
-                if data['occupation_p1'] != 'Non trouvé':
-                    print(data['occupation_p1'], file=self.stdout_redirect)
 
-                # Étapes supplémentaires : ouverture des cartes et activation des couches
-                def _open_layer(layer_label: str) -> None:
-                    """Ouvre FloreApp dans un nouvel onglet et coche ``layer_label``."""
-                    try:
-                        wait = WebDriverWait(self.wiki_driver, 0.5)
-                        # 1) Ouvrir l'URL dans un nouvel onglet
-                        self.wiki_driver.execute_script(
-                            "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
-                        )
-                        self.wiki_driver.switch_to.window(self.wiki_driver.window_handles[-1])
-                        # 2) Cliquer sur la barre de recherche
-                        addr = wait.until(
-                            EC.element_to_be_clickable((By.ID, "address-input"))
-                        )
-                        addr.click()
-                        # 3) Saisir les coordonnées du centroïde
-                        addr.clear()
-                        addr.send_keys(coords_dms)
-                        # 4) Valider la recherche
-                        wait.until(
-                            EC.element_to_be_clickable((By.ID, "search-address-btn"))
-                        ).click()
-                        # 5) Ouvrir le menu des couches
-                        wait.until(
-                            EC.element_to_be_clickable(
-                                (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
-                            )
-                        ).click()
-                        # 6) Cocher la couche demandée
-                        checkbox = wait.until(
-                            EC.element_to_be_clickable(
-                                (By.XPATH, f"//label[contains(.,'{layer_label}')]/input")
-                            )
-                        )
-                        if not checkbox.is_selected():
-                            checkbox.click()
-                    except Exception as fe:
-                        print(
-                            f"[Wiki] Étapes {layer_label} échouées : {fe}",
-                            file=self.stdout_redirect,
-                        )
-
-                _open_layer("Carte de la végétation")
-                _open_layer("Carte des sols")
+            label = f"{commune} ({dep})"
+            print(f"[Wiki] Requête : {label}", file=self.stdout_redirect)
+            data = run_wikipedia_scrape(label)
+            print(f"[Wiki] Page Wikipédia : {data.get('url','')}", file=self.stdout_redirect)
         except Exception as e:
             print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
         finally:
-            self.after(0, lambda: self.wiki_button.config(state="normal"))
+            self.after(0, lambda: (self.wiki_button.config(state="normal"), self.render_wikipedia_section(data)))
+
+    def render_wikipedia_section(self, data: dict) -> None:
+        if self.wiki_section is None:
+            self.wiki_section = ttk.Frame(self, style="Card.TFrame", padding=12)
+            self.wiki_section.pack(fill=tk.BOTH, expand=True, pady=(10,0))
+            ttk.Label(self.wiki_section, text="Wikipedia", style="Card.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
+            ttk.Label(self.wiki_section, text="Climat", style="Card.TLabel").grid(row=1, column=0, sticky="nw")
+            self.climat_text = tk.Text(self.wiki_section, height=5, wrap=tk.WORD)
+            self.climat_text.grid(row=1, column=1, sticky="nsew")
+            clim_scroll = ttk.Scrollbar(self.wiki_section, orient="vertical", command=self.climat_text.yview)
+            self.climat_text.configure(yscrollcommand=clim_scroll.set)
+            clim_scroll.grid(row=1, column=2, sticky="ns")
+            ttk.Label(self.wiki_section, text="Corine Land Cover", style="Card.TLabel").grid(row=2, column=0, sticky="nw", pady=(6,0))
+            self.corine_text = tk.Text(self.wiki_section, height=5, wrap=tk.WORD)
+            self.corine_text.grid(row=2, column=1, sticky="nsew", pady=(6,0))
+            cor_scroll = ttk.Scrollbar(self.wiki_section, orient="vertical", command=self.corine_text.yview)
+            self.corine_text.configure(yscrollcommand=cor_scroll.set)
+            cor_scroll.grid(row=2, column=2, sticky="ns", pady=(6,0))
+            self.wiki_section.columnconfigure(1, weight=1)
+            self.wiki_section.rowconfigure(1, weight=1)
+            self.wiki_section.rowconfigure(2, weight=1)
+        for widget, key in [(self.climat_text, "climat"), (self.corine_text, "corine")]:
+            widget.config(state="normal")
+            widget.delete("1.0", tk.END)
+            widget.insert(tk.END, data.get(key, "Donnée non disponible"))
+            widget.config(state="disabled")
+
 
     # --- Boutons ajoutés ---
     def start_rlt_thread(self):
@@ -1680,7 +1661,6 @@ class MainApp:
         self.theme_var = tk.StringVar(value=self.prefs.get("theme", "light"))
         self.style_helper.apply(self.theme_var.get())
 
-        self.wiki_driver = None
 
         # Header global + bouton thème
         top = ttk.Frame(root, style="Header.TFrame", padding=(12, 8))
