@@ -642,6 +642,9 @@ class ExportCartesTab(ttk.Frame):
 
             workers = int(self.workers_var.get())
             chunks = chunk_even(projets, workers)
+            # Forcer au moins 2 workers pour utiliser ProcessPoolExecutor
+            # (et donc le Python de QGIS configuré ci-dessous)
+            workers = max(2, workers)
             cfg = {
                 "QGIS_ROOT": QGIS_ROOT,
                 "QGIS_APP": QGIS_APP,
@@ -677,12 +680,12 @@ class ExportCartesTab(ttk.Frame):
             else:
                 try:
                     import multiprocessing as mp
-                    mp.set_start_method("spawn", force=True)
+                    ctx = mp.get_context("spawn")
                     # Forcer l'utilisation du Python de QGIS pour les sous-processus (compat CPython/Qt)
                     try:
                         qgis_py = os.path.join(QGIS_ROOT, "apps", PY_VER, "python.exe")
                         if os.path.isfile(qgis_py):
-                            mp.set_executable(qgis_py)
+                            ctx.set_executable(qgis_py)
                             log_with_time(f"MP exe: {qgis_py}")
                         else:
                             log_with_time(f"Python QGIS introuvable: {qgis_py}")
@@ -690,7 +693,7 @@ class ExportCartesTab(ttk.Frame):
                         log_with_time(f"set_executable �chec: {e}")
                 except Exception:
                     pass
-                with ProcessPoolExecutor(max_workers=workers) as ex:
+                with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as ex:
                     futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
                     for fut in as_completed(futures):
                         try:
@@ -702,6 +705,30 @@ class ExportCartesTab(ttk.Frame):
                         except Exception as e:
                             log_with_time(f"Erreur worker: {e}")
 
+            # Si aucun résultat n'a été produit (workers plantés), on retente en séquentiel
+            if (ok_total + ko_total) == 0 and chunks:
+                log_with_time("Tous les workers ont échoué — bascule en mode séquentiel…")
+                for chunk in chunks:
+                    try:
+                        ok, ko = worker_run((chunk, cfg))
+                        ok_total += ok
+                        ko_total += ko
+                        self.after(0, ui_update_progress, ok + ko)
+                        log_with_time(f"Lot terminé (fallback): {ok} OK, {ko} KO")
+                    except Exception as e:
+                        log_with_time(f"Erreur fallback: {e}")
+            # Si aucun résultat n'a été produit (workers plantés), on retente en séquentiel
+            if (ok_total + ko_total) == 0 and chunks:
+                log_with_time("Tous les workers ont échoué — bascule en mode séquentiel…")
+                for chunk in chunks:
+                    try:
+                        ok, ko = worker_run((chunk, cfg))
+                        ok_total += ok
+                        ko_total += ko
+                        self.after(0, ui_update_progress, ok + ko)
+                        log_with_time(f"Lot terminé (fallback): {ok} OK, {ko} KO")
+                    except Exception as e:
+                        log_with_time(f"Erreur fallback: {e}")
             elapsed = datetime.datetime.now() - start
             log_with_time(f"FIN — OK={ok_total} | KO={ko_total} | Attendu={self.total_expected} | Durée={elapsed}")
             self.after(0, lambda: self.status_label.config(text=f"Terminé — OK={ok_total} / KO={ko_total}"))
@@ -1613,6 +1640,9 @@ class ContexteEcoTab(ttk.Frame):
             log_with_time(f"Workers={self.workers_var.get()}, DPI={self.dpi_var.get()}, marge={self.margin_var.get():.2f}, overwrite={self.overwrite_var.get()}")
             workers = int(self.workers_var.get())
             chunks = chunk_even(projets, workers)
+            # Forcer au moins 2 workers pour utiliser ProcessPoolExecutor
+            # (et donc le Python de QGIS configuré ci-dessous)
+            workers = max(2, workers)
             cfg = {
                 "QGIS_ROOT": QGIS_ROOT,
                 "QGIS_APP": QGIS_APP,
@@ -1645,10 +1675,19 @@ class ContexteEcoTab(ttk.Frame):
             else:
                 try:
                     import multiprocessing as mp
-                    mp.set_start_method("spawn", force=True)
-                except Exception:
-                    pass
-                with ProcessPoolExecutor(max_workers=workers) as ex:
+                    ctx = mp.get_context("spawn")
+                    try:
+                        qgis_py = os.path.join(QGIS_ROOT, "apps", PY_VER, "python.exe")
+                        if os.path.isfile(qgis_py):
+                            ctx.set_executable(qgis_py)
+                            log_with_time(f"MP exe: {qgis_py}")
+                        else:
+                            log_with_time(f"Python QGIS introuvable: {qgis_py}")
+                    except Exception as e:
+                        log_with_time(f"set_executable échec: {e}")
+                except Exception as e:
+                    log_with_time(f"init multiprocessing: {e}")
+                with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as ex:
                     futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
                     for fut in as_completed(futures):
                         try:
