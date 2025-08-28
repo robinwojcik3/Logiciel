@@ -1,24 +1,33 @@
 # -*- coding: utf-8 -*-
-"""Utilitaire pour extraire quelques sections des pages Wikipédia de communes françaises.
+"""Outils de scraping Wikipédia pour l'application.
 
-Ce module reprend le script fourni et l'adapte sous forme de fonction
-facilement réutilisable par l'application.
+Ce module expose une fonction principale : :func:`run_wikipedia_scrape` qui
+récupère deux paragraphes normalisés (climat et occupation des sols) depuis
+la page Wikipédia d'une commune française. Le même ``webdriver`` est partagé
+entre les appels afin de laisser la fenêtre ouverte après usage.
 """
 
 from __future__ import annotations
 
+import logging
 import re
-from typing import Dict, Tuple
+import time
+import unicodedata
+from typing import Dict, Iterable, Tuple, Union
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    StaleElementReferenceException,
+    TimeoutException,
+)
 
-# Départements courants (ajoutez si besoin)
+# ---------------------- Constantes & paramètres ----------------------
 DEP: Dict[str, str] = {
     "01": "Ain",
     "03": "Allier",
@@ -49,147 +58,202 @@ DEP: Dict[str, str] = {
     "90": "Territoire de Belfort",
 }
 
+TIMEOUT = 15
+RETRIES = 2
+TYPE_DELAY = 0.5
 
-def _find_section_heading(soup: BeautifulSoup, heading_text: str):
-    span = soup.find(
-        "span",
-        class_="mw-headline",
-        string=lambda t: t and heading_text.lower() in t.lower(),
-    )
-    return span.find_parent(["h2", "h3"]) if span else None
+CLIMAT_PREFIXES = [
+    r"^Pour la période 1971-2000, la température annuelle",
+    r"^Pour la période 1981-2010, la température annuelle",
+]
+CLIMAT_FALLBACK_CONTAINS = [r"température annuelle", r"précipitations"]
 
+OCCUP_PREFIXES = [r"^L'occupation des sols de la commune, telle qu'elle"]
+OCCUP_FALLBACK_CONTAINS = [r"Corine Land Cover", r"occupation des sols"]
 
-def _scrape_sections(driver: webdriver.Chrome) -> Dict[str, str]:
-    out = {
-        "climat_p1": "Non trouvé",
-        "climat_p2": "Non trouvé",
-        "occupation_p1": "Non trouvé",
-    }
-    soup = BeautifulSoup(driver.page_source, "html.parser")
+logger = logging.getLogger(__name__)
 
-    h = _find_section_heading(soup, "Climat")
-    if h:
-        start = None
-        for p in h.find_all_next("p"):
-            t = p.get_text(strip=True)
-            if t.startswith("En 2010, le climat de la commune est de type") or "climat de la commune est de type" in t:
-                start = p
-                break
-        if start:
-            fol = start.find_next_siblings("p", limit=2)
-            if len(fol) >= 1:
-                out["climat_p1"] = fol[0].get_text(strip=True)
-            if len(fol) >= 2:
-                out["climat_p2"] = fol[1].get_text(strip=True)
+_driver: webdriver.Chrome | None = None
 
-    h = _find_section_heading(soup, "Occupation des sols")
-    if h:
-        for p in h.find_all_next("p"):
-            t = p.get_text(strip=True)
-            if t.startswith("L'occupation des sols de la commune, telle qu'elle") or "L'occupation des sols de la commune, telle qu'elle ressort" in t:
-                out["occupation_p1"] = t
-                break
-    return out
+# ---------------------- Helpers Selenium ----------------------
+
+def get_shared_driver() -> webdriver.Chrome:
+    """Retourne une unique instance de ``webdriver.Chrome``."""
+    global _driver
+    if _driver is None:
+        options = webdriver.ChromeOptions()
+        options.add_experimental_option("excludeSwitches", ["enable-logging"])
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        _driver = webdriver.Chrome(options=options)
+        _driver.maximize_window()
+    return _driver
 
 
-def _normalize_query(s: str) -> str:
-    s = s.strip()
-    m = re.match(r"^(.*?)[\s,;_-]*\(?(\d{2})\)?$", s)
-    if m:
-        base = m.group(1).strip()
-        return f"{base} ({m.group(2)})"
-    return s
-
-
-def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> bool:
-    """Ouvre la page de recherche avancée puis l'article correspondant."""
-
-    search_url = (
-        "https://fr.wikipedia.org/w/index.php?search=&title=Sp%C3%A9cial%3ARecherche"
-        "&profile=advanced&fulltext=1&ns0=1"
-    )
-    driver.get(search_url)
-
-    # Gestion de la bannière cookies éventuelle
+def ensure_fr_wikipedia_home(driver: webdriver.Chrome):
+    """Ouvre la page d'accueil fr.wikipedia.org et renvoie l'input de recherche."""
+    if "fr.wikipedia.org" not in driver.current_url:
+        driver.get("https://fr.wikipedia.org")
     try:
-        btn = WebDriverWait(driver, 0.5).until(
-            EC.element_to_be_clickable(
-                (
-                    By.XPATH,
-                    "//button[contains(.,'Accepter') or contains(.,'Tout accepter') or contains(.,\"J'ai compris\") or contains(.,'J’ai compris')]",
-                )
-            )
+        return WebDriverWait(driver, TIMEOUT).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "#searchInput"))
         )
-        btn.click()
     except TimeoutException:
-        pass
-
-    box = wait.until(
-        EC.element_to_be_clickable(
-            (By.CSS_SELECTOR, "input.oo-ui-inputWidget-input[name='search']")
+        driver.get("https://fr.wikipedia.org")
+        return WebDriverWait(driver, TIMEOUT).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "#searchInput"))
         )
-    )
-    box.clear()
-    box.send_keys(query)
-
-    # Cliquer sur le bouton "Rechercher" (fall back sur Entrée au besoin)
-    try:
-        btn_search = wait.until(
-            EC.element_to_be_clickable(
-                (
-                    By.XPATH,
-                    "//span[@class='oo-ui-labelElement-label' and text()='Rechercher']/ancestor::button",
-                )
-            )
-        )
-        btn_search.click()
-    except TimeoutException:
-        box.send_keys(Keys.ENTER)
-
-    # Ouvrir le premier résultat de la recherche
-    try:
-        link = wait.until(
-            EC.element_to_be_clickable(
-                (By.CSS_SELECTOR, "div.mw-search-result-heading a")
-            )
-        )
-        link.click()
-        wait.until(EC.presence_of_element_located((By.ID, "firstHeading")))
-        return True
-    except TimeoutException:
-        return False
 
 
-def fetch_wikipedia_info(commune_query: str) -> Tuple[Dict[str, str], webdriver.Chrome]:
-    """Ouvre la page Wikipédia correspondant à ``commune_query`` et en extrait
-    quelques sections utiles. La fonction renvoie également l'objet ``driver``
-    afin que l'utilisateur décide quand fermer la fenêtre du navigateur.
-
-    ``commune_query`` peut être de la forme ``"Vizille 38"`` ou
-    ``"Vizille (38)``.
-    """
-
-    query = _normalize_query(commune_query)
-    options = webdriver.ChromeOptions()
-    options.add_experimental_option("excludeSwitches", ["enable-logging"])
-    options.add_argument("--log-level=3")
-    options.add_argument("--disable-extensions")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-
-    driver = webdriver.Chrome(options=options)
-    driver.maximize_window()
+def resolve_search_results_if_needed(driver: webdriver.Chrome, commune_label: str) -> None:
+    """Gère la page de résultats ou d'homonymie si nécessaire."""
     wait = WebDriverWait(driver, 10)
+    try:
+        results = driver.find_elements(By.CSS_SELECTOR, "div.mw-search-result-heading a")
+        if not results:
+            return
+        commune_lower = commune_label.lower()
+        target = None
+        for a in results:
+            title = (a.text or "").lower()
+            if commune_lower in title:
+                target = a
+                break
+        if target:
+            target.click()
+            return
+        # Fallback : ouvrir chaque résultat et vérifier la présence d'une infobox de commune
+        for a in results:
+            href = a.get_attribute("href")
+            if not href:
+                continue
+            driver.get(href)
+            try:
+                infobox = wait.until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "table.infobox"))
+                )
+                if "Commune" in infobox.text:
+                    return
+            except TimeoutException:
+                driver.back()
+                continue
+        # Dernier recours : premier résultat
+        results[0].click()
+    except Exception as e:  # pragma: no cover - protection large
+        logger.warning("Résolution page de résultats échouée: %s", e)
 
-    ok = _open_article(driver, query, wait)
-    if not ok:
-        alt = f"{query} (commune)"
-        ok = _open_article(driver, alt, wait)
-    if not ok:
-        return {"error": "Article introuvable"}, driver
 
-    data = _scrape_sections(driver)
-    data["url"] = driver.current_url
-    return data, driver
+# ---------------------- Extraction HTML ----------------------
+
+def extract_paragraph_by_prefixes(
+    soup: BeautifulSoup,
+    section_hint: Union[str, Tuple[str, str]],
+    prefixes: Iterable[str],
+    contains_all: Iterable[str],
+) -> str:
+    """Retourne un paragraphe selon différents critères."""
+    node = None
+    if isinstance(section_hint, str):
+        span = soup.find(
+            "span", class_="mw-headline", string=re.compile(section_hint, re.I)
+        )
+        node = span.find_parent("h2") if span else None
+    else:
+        span = soup.find(
+            "span", class_="mw-headline", string=re.compile(section_hint[0], re.I)
+        )
+        if span:
+            h2 = span.find_parent("h2")
+            for sib in h2.find_all_next(["h2", "h3"]):
+                if sib.name == "h2":
+                    break
+                if sib.name == "h3" and re.search(section_hint[1], sib.get_text(), re.I):
+                    node = sib
+                    break
+    paragraphs: list[str] = []
+    if node:
+        for sib in node.find_all_next():
+            if sib.name in ["h2", "h3"] and sib.name == node.name:
+                break
+            if sib.name == "p":
+                paragraphs.append(sib.get_text(" ", strip=True))
+    else:
+        paragraphs = [p.get_text(" ", strip=True) for p in soup.find_all("p")]
+    for p in paragraphs:
+        for pref in prefixes:
+            if re.match(pref, p, flags=re.I):
+                return p
+    for p in paragraphs:
+        if all(re.search(tok, p, flags=re.I) for tok in contains_all):
+            logger.warning("Paragraphe fallback utilisé pour %s", section_hint)
+            return p
+    return ""
+
+
+def clean_text(txt: str) -> str:
+    if not txt:
+        return ""
+    txt = unicodedata.normalize("NFC", txt)
+    txt = re.sub(r"\[\d+\]", "", txt)
+    txt = re.sub(r"\s+", " ", txt).strip()
+    return txt
+
+
+# ---------------------- API principale ----------------------
+
+def run_wikipedia_scrape(commune_label: str) -> Dict[str, str]:
+    """Scrape la page Wikipédia de ``commune_label``.
+
+    Retourne un dictionnaire : ``{'climat': str, 'corine': str, 'url': str, 'commune': str}``.
+    En cas d'échec, les valeurs textuelles vaudront « Donnée non disponible ».
+    """
+    driver = get_shared_driver()
+    for attempt in range(1, RETRIES + 1):
+        try:
+            logger.info("Scraping %s (tentative %s)", commune_label, attempt)
+            box = ensure_fr_wikipedia_home(driver)
+            box.clear()
+            time.sleep(TYPE_DELAY)
+            box.send_keys(commune_label)
+            box.send_keys(Keys.ENTER)
+
+            resolve_search_results_if_needed(driver, commune_label)
+
+            WebDriverWait(driver, TIMEOUT).until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "h1#firstHeading, h1 .mw-page-title-main")
+                )
+            )
+            url = driver.current_url
+            soup = BeautifulSoup(driver.page_source, "lxml")
+            climat = extract_paragraph_by_prefixes(
+                soup,
+                "Climat",
+                CLIMAT_PREFIXES,
+                CLIMAT_FALLBACK_CONTAINS,
+            )
+            corine = extract_paragraph_by_prefixes(
+                soup,
+                ("Urbanisme", "Occupation des sols"),
+                OCCUP_PREFIXES,
+                OCCUP_FALLBACK_CONTAINS,
+            )
+            climat = clean_text(climat) or "Donnée non disponible"
+            corine = clean_text(corine) or "Donnée non disponible"
+            return {"climat": climat, "corine": corine, "url": url, "commune": commune_label}
+        except (
+            TimeoutException,
+            NoSuchElementException,
+            StaleElementReferenceException,
+        ) as e:
+            logger.error("Erreur scraping: %s", e)
+    logger.error("Échec du scraping pour %s", commune_label)
+    return {
+        "climat": "Donnée non disponible",
+        "corine": "Donnée non disponible",
+        "url": "",
+        "commune": commune_label,
+    }
 
