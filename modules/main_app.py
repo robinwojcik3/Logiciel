@@ -722,7 +722,7 @@ class ExportCartesTab(ttk.Frame):
 
             workers = int(self.workers_var.get())
             # Désactive provisoirement le multiprocessing pour éviter les erreurs _multiprocessing
-            workers = 1
+            # keep configured workers
             chunks = chunk_even(projets, workers)
             # Forcer au moins 2 workers pour utiliser ProcessPoolExecutor
             # (et donc le Python de QGIS configuré ci-dessous)
@@ -752,21 +752,7 @@ class ExportCartesTab(ttk.Frame):
                 self.progress["value"] = min(self.progress_done, self.total_expected)
                 self.status_label.config(text=f"Progression : {self.progress_done}/{self.total_expected}")
 
-            # Preflight: avoid noisy spawn failures if QGIS Python lacks _multiprocessing
-            try:
-                if workers > 1 and not qgis_multiprocessing_ok():
-                    log_with_time("Multiprocessing QGIS indisponible -> execution sequentielle")
-                    workers = 1
-            except Exception:
-                pass
-
-            # Preflight: avoid noisy spawn failures if QGIS Python lacks _multiprocessing
-            try:
-                if workers > 1 and not qgis_multiprocessing_ok():
-                    log_with_time("Multiprocessing QGIS indisponible -> execution sequentielle")
-                    workers = 1
-            except Exception:
-                pass
+            # Pas de preflight multiprocessing: on utilise des sous-processus QGIS Python
 
             if workers <= 1:
                 for chunk in chunks:
@@ -839,23 +825,9 @@ class ExportCartesTab(ttk.Frame):
                     sys.path = [qgis_py_root, qgis_py_lib, qgis_dlls, qgis_site, qgis_app_py] + [p for p in old_syspath if _keep_path(p)]
                 except Exception as e:
                     log_with_time(f"sys.path cleanup skip: {e}")
-                with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as ex:
-                    futures = []
-                    for chunk in chunks:
-                        if not chunk:
-                            continue
-                        try:
-                            futures.append(ex.submit(worker_run, (chunk, cfg)))
-                        except Exception as e:
-                            log_with_time(f"Submit KO ({type(e).__name__}): {e} -> exécution séquentielle du lot")
-                            try:
-                                ok, ko = run_worker_subprocess(chunk, cfg)
-                                ok_total += ok
-                                ko_total += ko
-                                self.after(0, ui_update_progress, ok + ko)
-                                log_with_time(f"Lot terminé (fallback): {ok} OK, {ko} KO")
-                            except Exception as e2:
-                                log_with_time(f"Erreur fallback: {e2}")
+                # Pool de threads qui pilotent des sous-processus QGIS Python (pas de multiprocessing)
+                with ThreadPoolExecutor(max_workers=workers) as ex:
+                    futures = [ex.submit(run_worker_subprocess, chunk, cfg) for chunk in chunks if chunk]
                     for fut in as_completed(futures):
                         try:
                             ok, ko = fut.result()
@@ -1825,7 +1797,7 @@ class ContexteEcoTab(ttk.Frame):
             log_with_time(f"Workers={self.workers_var.get()}, DPI={self.dpi_var.get()}, marge={self.margin_var.get():.2f}, overwrite={self.overwrite_var.get()}")
             workers = int(self.workers_var.get())
             # Désactive provisoirement le multiprocessing pour éviter les erreurs _multiprocessing
-            workers = 1
+            workers = workers
             chunks = chunk_even(projets, workers)
             # Forcer au moins 2 workers pour utiliser ProcessPoolExecutor
             # (et donc le Python de QGIS configuré ci-dessous)
@@ -1924,8 +1896,8 @@ class ContexteEcoTab(ttk.Frame):
                     sys.path = [qgis_py_root, qgis_py_lib, qgis_site, qgis_app_py] + [p for p in old_syspath if _keep_path(p)]
                 except Exception as e:
                     log_with_time(f"sys.path cleanup skip: {e}")
-                with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as ex:
-                    futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
+                with ThreadPoolExecutor(max_workers=workers) as ex:
+                    futures = [ex.submit(run_worker_subprocess, chunk, cfg) for chunk in chunks if chunk]
                     for fut in as_completed(futures):
                         try:
                             ok, ko = fut.result()
