@@ -197,14 +197,15 @@ def fetch_wikipedia_info(commune_query: str) -> Tuple[Dict[str, str], webdriver.
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    # Headless par défaut pour faciliter les tests automatisés
-    if os.environ.get("APP_HEADLESS", "1").lower() in ("1", "true", "yes"):  # opt-out via APP_HEADLESS=0
+    # Par défaut on affiche le navigateur (APP_HEADLESS=0)
+    # Mettre APP_HEADLESS=1 pour exécuter en mode headless si souhaité.
+    if os.environ.get("APP_HEADLESS", "0").lower() in ("1", "true", "yes"):  # opt-in via APP_HEADLESS=1
         try:
             options.add_argument("--headless=new")
         except Exception:
             options.add_argument("--headless")
     # Driver local (repo) prioritaire si présent
-    # Ensure browser is visible if APP_HEADLESS=0 (or unset)
+    # Ensure browser is visible if APP_HEADLESS=0 (ou non défini)
     import os as _os
     try:
         if _os.environ.get("APP_HEADLESS", "0").lower() in ("0", "false", "no", ""):
