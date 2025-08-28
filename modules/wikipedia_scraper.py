@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from typing import Dict, Tuple
 import time
+import urllib.parse
+import requests
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -106,6 +108,53 @@ def _scrape_sections(driver: webdriver.Chrome) -> Dict[str, str]:
     return out
 
 
+def _scrape_sections_from_html(html: str) -> Dict[str, str]:
+    """Version hors-Selenium: extrait les mêmes sections depuis du HTML.
+
+    Utilisé en repli si la navigation Selenium échoue ou ne trouve pas
+    les paragraphes souhaités.
+    """
+    out = {
+        "climat_p1": "Non trouvé",
+        "climat_p2": "Non trouvé",
+        "occupation_p1": "Non trouvé",
+    }
+    soup = BeautifulSoup(html, "html.parser")
+
+    h = _find_section_heading(soup, "Climat")
+    if h:
+        target = None
+        for p in h.find_all_next("p"):
+            t = p.get_text(strip=True)
+            if t.startswith("Pour la période 1971-2000"):
+                target = t
+                break
+        if target:
+            out["climat_p1"] = target
+        else:
+            start = None
+            for p in h.find_all_next("p"):
+                t = p.get_text(strip=True)
+                if t.startswith("En 2010, le climat de la commune est de type") or "climat de la commune est de type" in t:
+                    start = p
+                    break
+            if start:
+                fol = start.find_next_siblings("p", limit=2)
+                if len(fol) >= 1:
+                    out["climat_p1"] = fol[0].get_text(strip=True)
+                if len(fol) >= 2:
+                    out["climat_p2"] = fol[1].get_text(strip=True)
+
+    h = _find_section_heading(soup, "Occupation des sols")
+    if h:
+        for p in h.find_all_next("p"):
+            t = p.get_text(strip=True)
+            if t.startswith("L'occupation des sols de la commune, telle qu'elle") or "L'occupation des sols de la commune, telle qu'elle ressort" in t:
+                out["occupation_p1"] = t
+                break
+    return out
+
+
 def _normalize_query(s: str) -> str:
     s = s.strip()
     m = re.match(r"^(.*?)[\s,;_-]*\(?(\d{2})\)?$", s)
@@ -176,6 +225,73 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
         return False
 
 
+def _http_fetch_article_and_parse(query: str) -> Tuple[Dict[str, str], str]:
+    """Recherche via l'API MediaWiki et extrait les sections depuis l'HTML.
+
+    Retourne (data, url) où data contient les clés climat_p1, climat_p2,
+    occupation_p1. Lève aucune exception: en cas d'échec, renvoie des valeurs
+    "Non trouvé" et une URL vide.
+    """
+    try:
+        api = "https://fr.wikipedia.org/w/api.php"
+        # 1) Recherche du titre
+        r = requests.get(
+            api,
+            params={
+                "action": "query",
+                "list": "search",
+                "srsearch": query,
+                "utf8": 1,
+                "format": "json",
+                "srlimit": 1,
+                "srprop": "",
+            },
+            timeout=10,
+            headers={"User-Agent": "ContexteEco/1.0 (scraper)"},
+        )
+        r.raise_for_status()
+        js = r.json()
+        hits = js.get("query", {}).get("search", [])
+        if not hits:
+            return {
+                "climat_p1": "Non trouvé",
+                "climat_p2": "Non trouvé",
+                "occupation_p1": "Non trouvé",
+            }, ""
+        title = hits[0]["title"]
+        # 2) Récupération du HTML de la page via action=parse (formatversion=2)
+        r2 = requests.get(
+            api,
+            params={
+                "action": "parse",
+                "page": title,
+                "prop": "text",
+                "format": "json",
+                "formatversion": 2,
+                "utf8": 1,
+            },
+            timeout=10,
+            headers={"User-Agent": "ContexteEco/1.0 (scraper)"},
+        )
+        r2.raise_for_status()
+        html = r2.json().get("parse", {}).get("text", "")
+        if not html:
+            return {
+                "climat_p1": "Non trouvé",
+                "climat_p2": "Non trouvé",
+                "occupation_p1": "Non trouvé",
+            }, ""
+        data = _scrape_sections_from_html(html)
+        url = f"https://fr.wikipedia.org/wiki/{urllib.parse.quote(title.replace(' ', '_'))}"
+        return data, url
+    except Exception:
+        return {
+            "climat_p1": "Non trouvé",
+            "climat_p2": "Non trouvé",
+            "occupation_p1": "Non trouvé",
+        }, ""
+
+
 def fetch_wikipedia_info(commune_query: str) -> Tuple[Dict[str, str], webdriver.Chrome]:
     """Ouvre la page Wikipédia correspondant à ``commune_query`` et en extrait
     quelques sections utiles. La fonction renvoie également l'objet ``driver``
@@ -225,10 +341,27 @@ def fetch_wikipedia_info(commune_query: str) -> Tuple[Dict[str, str], webdriver.
     if not ok:
         alt = f"{query} (commune)"
         ok = _open_article(driver, alt, wait)
-    if not ok:
-        return {"error": "Article introuvable"}, driver
 
-    data = _scrape_sections(driver)
-    data["url"] = driver.current_url
+    data: Dict[str, str]
+    if ok:
+        data = _scrape_sections(driver)
+        data["url"] = driver.current_url
+        # Si le scraping via Selenium ne trouve rien, on tente le repli HTTP
+        if all(data.get(k, "").startswith("Non trouv") for k in ("climat_p1", "occupation_p1")):
+            http_data, http_url = _http_fetch_article_and_parse(query)
+            # Remplacer uniquement les champs manquants
+            for k in ("climat_p1", "climat_p2", "occupation_p1"):
+                if data.get(k, "").startswith("Non trouv") and not http_data.get(k, "").startswith("Non trouv"):
+                    data[k] = http_data[k]
+            if http_url:
+                data["url"] = http_url
+        return data, driver
+
+    # Selenium a échoué: repli 100% HTTP
+    data, http_url = _http_fetch_article_and_parse(query)
+    if http_url:
+        data["url"] = http_url
+    else:
+        data["error"] = "Article introuvable"
     return data, driver
 
