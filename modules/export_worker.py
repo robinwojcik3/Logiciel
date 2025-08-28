@@ -21,7 +21,7 @@ def to_long_unc(path: str) -> str:
 def _prepare_qgis_env(cfg: Dict) -> str:
     """Prépare l'environnement QGIS/Qt pour un sous-processus."""
     # Assainir les variables d'environnement Python pour éviter les mélanges 3.12/3.13
-    for _k in ("PYTHONHOME", "PYTHONPATH", "PYTHONSTARTUP"):
+    for _k in ("PYTHONPATH", "PYTHONSTARTUP"):
         try:
             os.environ.pop(_k, None)
         except Exception:

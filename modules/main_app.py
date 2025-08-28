@@ -693,6 +693,22 @@ class ExportCartesTab(ttk.Frame):
                             except Exception:
                                 pass
                     os.environ["PYTHONNOUSERSITE"] = "1"
+                    # Fixer PYTHONHOME et PYTHONPATH sur le Python de QGIS
+                    try:
+                        qgis_py_root = os.path.join(QGIS_ROOT, "apps", PY_VER)
+                        if os.path.isdir(qgis_py_root):
+                            os.environ["PYTHONHOME"] = qgis_py_root
+                            qgis_lib   = os.path.join(qgis_py_root, "Lib")
+                            qgis_dlls  = os.path.join(qgis_py_root, "DLLs")
+                            qgis_site  = os.path.join(qgis_lib, "site-packages")
+                            qgis_app_py = os.path.join(QGIS_APP, "python")
+                            py_paths = [qgis_py_root, qgis_lib, qgis_dlls, qgis_site, qgis_app_py]
+                            os.environ["PYTHONPATH"] = os.pathsep.join(py_paths)
+                            # Préfixer le PATH avec les dossiers Python QGIS pour la résolution des DLLs
+                            os.environ["PATH"] = os.pathsep.join([qgis_py_root, qgis_dlls, os.environ.get("PATH", "")])
+                            log_with_time(f"PYTHONHOME={qgis_py_root}")
+                    except Exception:
+                        pass
 
                     ctx = mp.get_context("spawn")
                     # Forcer l'utilisation du Python de QGIS pour les sous-processus (compat CPython/Qt)
@@ -1726,11 +1742,19 @@ class ContexteEcoTab(ttk.Frame):
                         except Exception:
                             pass
                     os.environ["PYTHONNOUSERSITE"] = "1"
-                    # Fixer PYTHONHOME sur le Python de QGIS pour que l'interprète trouve sa stdlib
+                    # Fixer PYTHONHOME et PYTHONPATH sur le Python de QGIS
                     try:
                         qgis_py_root = os.path.join(QGIS_ROOT, "apps", PY_VER)
                         if os.path.isdir(qgis_py_root):
                             os.environ["PYTHONHOME"] = qgis_py_root
+                            qgis_lib   = os.path.join(qgis_py_root, "Lib")
+                            qgis_dlls  = os.path.join(qgis_py_root, "DLLs")
+                            qgis_site  = os.path.join(qgis_lib, "site-packages")
+                            qgis_app_py = os.path.join(QGIS_APP, "python")
+                            py_paths = [qgis_py_root, qgis_lib, qgis_dlls, qgis_site, qgis_app_py]
+                            os.environ["PYTHONPATH"] = os.pathsep.join(py_paths)
+                            # Préfixer le PATH avec les dossiers Python QGIS pour la résolution des DLLs
+                            os.environ["PATH"] = os.pathsep.join([qgis_py_root, qgis_dlls, os.environ.get("PATH", "")])
                             log_with_time(f"PYTHONHOME={qgis_py_root}")
                     except Exception:
                         pass
