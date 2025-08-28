@@ -1246,6 +1246,13 @@ class ContexteEcoTab(ttk.Frame):
         self.bassin_button = ttk.Button(idf, text="Bassin versant", style="Accent.TButton", command=self.start_bassin_thread)
         self.bassin_button.grid(row=0, column=7, sticky="w", padx=(12,0))
 
+        # Champ de requête Wikipedia optionnel (permet d'écrire la commune à la main)
+        ttk.Label(idf, text="Commune (optionnel)", style="Card.TLabel").grid(row=1, column=0, sticky="w", pady=(8,0))
+        wiki_q_row = ttk.Frame(idf)
+        wiki_q_row.grid(row=1, column=1, columnspan=3, sticky="ew", pady=(8,0))
+        wiki_q_row.columnconfigure(0, weight=1)
+        ttk.Entry(wiki_q_row, textvariable=self.wiki_query_var).grid(row=0, column=0, sticky="ew")
+
         # Tableau Wikipedia (2 lignes, 2 colonnes)
         wiki_res = ttk.Frame(self, style="Card.TFrame", padding=12)
         wiki_res.pack(fill=tk.X, pady=(8,0))
@@ -1329,8 +1336,8 @@ class ContexteEcoTab(ttk.Frame):
             messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
 
     def start_wiki_thread(self):
-        if not self.ze_shp_var.get().strip():
-            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
+        if (not self.wiki_query_var.get().strip()) and (not self.ze_shp_var.get().strip()):
+            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude ou saisir une commune.")
             return
         print("[Wiki] Bouton Wikipédia cliqué", file=self.stdout_redirect)
         self.wiki_button.config(state="disabled")

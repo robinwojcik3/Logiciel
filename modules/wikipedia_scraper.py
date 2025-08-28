@@ -329,13 +329,24 @@ def fetch_wikipedia_info(commune_query: str) -> Tuple[Dict[str, str], webdriver.
                 options.arguments = [a for a in options.arguments if not str(a).startswith("--headless")]
     except Exception:
         pass
-    local_driver = REPO_ROOT / "tools" / "chromedriver.exe"
-    if local_driver.is_file():
-        driver = webdriver.Chrome(service=Service(str(local_driver)), options=options)
-    else:
-        driver = webdriver.Chrome(options=options)
-    driver.maximize_window()
-    wait = WebDriverWait(driver, 10)
+    # Création driver Chrome avec repli HTTP si indisponible
+    driver = None
+    try:
+        local_driver = REPO_ROOT / "tools" / "chromedriver.exe"
+        if local_driver.is_file():
+            driver = webdriver.Chrome(service=Service(str(local_driver)), options=options)
+        else:
+            driver = webdriver.Chrome(options=options)
+        driver.maximize_window()
+        wait = WebDriverWait(driver, 10)
+    except Exception:
+        # Impossible d'initialiser Selenium → repli direct HTTP
+        data, http_url = _http_fetch_article_and_parse(query)
+        if http_url:
+            data["url"] = http_url
+        else:
+            data["error"] = "Article introuvable"
+        return data, driver
 
     ok = _open_article(driver, query, wait)
     if not ok:
