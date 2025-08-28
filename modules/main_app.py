@@ -648,7 +648,7 @@ class ExportCartesTab(ttk.Frame):
             chunks = chunk_even(projets, workers)
             # Forcer au moins 2 workers pour utiliser ProcessPoolExecutor
             # (et donc le Python de QGIS configuré ci-dessous)
-            workers = max(2, workers)
+            workers = max(1, workers)
             cfg = {
                 "QGIS_ROOT": QGIS_ROOT,
                 "QGIS_APP": QGIS_APP,
@@ -682,6 +682,7 @@ class ExportCartesTab(ttk.Frame):
                     self.after(0, ui_update_progress, ok + ko)
                     log_with_time(f"Lot terminé: {ok} OK, {ko} KO")
             else:
+                ctx = None
                 try:
                     import multiprocessing as mp
                     # Nettoyer l'environnement Python hérité pour éviter le mélange de versions (3.12/3.13)
@@ -743,7 +744,22 @@ class ExportCartesTab(ttk.Frame):
                 except Exception as e:
                     log_with_time(f"sys.path cleanup skip: {e}")
                 with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as ex:
-                    futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
+                    futures = []
+                    for chunk in chunks:
+                        if not chunk:
+                            continue
+                        try:
+                            futures.append(ex.submit(worker_run, (chunk, cfg)))
+                        except Exception as e:
+                            log_with_time(f"Submit KO ({type(e).__name__}): {e} -> exécution séquentielle du lot")
+                            try:
+                                ok, ko = worker_run((chunk, cfg))
+                                ok_total += ok
+                                ko_total += ko
+                                self.after(0, ui_update_progress, ok + ko)
+                                log_with_time(f"Lot terminé (fallback): {ok} OK, {ko} KO")
+                            except Exception as e2:
+                                log_with_time(f"Erreur fallback: {e2}")
                     for fut in as_completed(futures):
                         try:
                             ok, ko = fut.result()
@@ -755,6 +771,18 @@ class ExportCartesTab(ttk.Frame):
                             log_with_time(f"Erreur worker: {e}")
                 # Restaure le sys.path initial
                 sys.path = old_syspath
+                # Fallback séquentiel si aucun résultat (pool KO)
+                if (ok_total + ko_total) == 0 and chunks:
+                    log_with_time("Tous les workers ont échoué -> bascule en mode séquentiel")
+                    for chunk in chunks:
+                        try:
+                            ok, ko = worker_run((chunk, cfg))
+                            ok_total += ok
+                            ko_total += ko
+                            self.after(0, ui_update_progress, ok + ko)
+                            log_with_time(f"Lot terminé (fallback): {ok} OK, {ko} KO")
+                        except Exception as e:
+                            log_with_time(f"Erreur fallback: {e}")
 
             # Si aucun résultat n'a été produit (workers plantés), on retente en séquentiel
             if (ok_total + ko_total) == 0 and chunks:
@@ -1702,7 +1730,7 @@ class ContexteEcoTab(ttk.Frame):
             chunks = chunk_even(projets, workers)
             # Forcer au moins 2 workers pour utiliser ProcessPoolExecutor
             # (et donc le Python de QGIS configuré ci-dessous)
-            workers = max(2, workers)
+            workers = max(1, workers)
             cfg = {
                 "QGIS_ROOT": QGIS_ROOT,
                 "QGIS_APP": QGIS_APP,
