@@ -1177,17 +1177,17 @@ class ContexteEcoTab(ttk.Frame):
         t.daemon = True
         t.start()
 
+
     def _run_vegsol(self):
         try:
             print("[Cartes] Lancement du scraping des cartes", file=self.stdout_redirect)
             ze_path = self.ze_shp_var.get()
-            gdf = gpd.read_file(ze_path)
-            if gdf.crs is None:
-                raise ValueError("CRS non défini")
-            gdf = gdf.to_crs("EPSG:4326")
-            centroid = gdf.geometry.unary_union.centroid
-            lat, lon = centroid.y, centroid.x
-            coords_dms = dd_to_dms(lat, lon)
+            base = os.path.splitext(ze_path)[0]
+            candidates = [f"{base}.{ext}" for ext in ("cpg", "dbf", "prj", "qmd", "shp", "shx")]
+            files = [to_long_unc(f) for f in candidates if os.path.exists(f)]
+            if not files:
+                raise FileNotFoundError("Fichiers du shapefile introuvables")
+
             options = webdriver.ChromeOptions()
             options.add_experimental_option("excludeSwitches", ["enable-logging"])
             options.add_argument("--log-level=3")
@@ -1197,26 +1197,20 @@ class ContexteEcoTab(ttk.Frame):
             options.add_argument("--disable-dev-shm-usage")
             self.vegsol_driver = webdriver.Chrome(options=options)
             self.vegsol_driver.maximize_window()
+            wait = WebDriverWait(self.vegsol_driver, 10)
 
-            def _open_layer(layer_label: str) -> None:
+            self.vegsol_driver.get("https://floreapp.netlify.app/biblio-patri.html")
+            wait.until(EC.element_to_be_clickable((By.ID, "upload-shapefile-btn"))).click()
+            wait.until(EC.element_to_be_clickable((By.ID, "import-zone-btn"))).click()
+            input_elem = wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='file']"))
+            )
+            input_elem.send_keys("\n".join(files))
+            wait.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "a.leaflet-control-layers-toggle"))
+            ).click()
+            for layer_label in ("Carte de la végétation", "Carte des sols"):
                 try:
-                    wait = WebDriverWait(self.vegsol_driver, 0.5)
-                    self.vegsol_driver.execute_script(
-                        "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
-                    )
-                    self.vegsol_driver.switch_to.window(self.vegsol_driver.window_handles[-1])
-                    addr = wait.until(EC.element_to_be_clickable((By.ID, "address-input")))
-                    addr.click()
-                    addr.clear()
-                    addr.send_keys(coords_dms)
-                    wait.until(
-                        EC.element_to_be_clickable((By.ID, "search-address-btn"))
-                    ).click()
-                    wait.until(
-                        EC.element_to_be_clickable(
-                            (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
-                        )
-                    ).click()
                     checkbox = wait.until(
                         EC.element_to_be_clickable(
                             (By.XPATH, f"//label[contains(.,'{layer_label}')]/input")
@@ -1229,15 +1223,11 @@ class ContexteEcoTab(ttk.Frame):
                         f"[Cartes] Étapes {layer_label} échouées : {fe}",
                         file=self.stdout_redirect,
                     )
-
-            _open_layer("Carte de la végétation")
-            _open_layer("Carte des sols")
         except Exception as e:
             print(f"[Cartes] Erreur : {e}", file=self.stdout_redirect)
         finally:
             self.after(0, lambda: self.vegsol_button.config(state="normal"))
 
-    # --- Boutons ajoutés ---
     def start_rlt_thread(self):
         if not self.ze_shp_var.get().strip():
             messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
