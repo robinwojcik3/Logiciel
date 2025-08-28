@@ -710,7 +710,8 @@ class ExportCartesTab(ttk.Frame):
                 # Ajuster temporairement sys.path pour privilégier les libs QGIS
                 old_syspath = list(sys.path)
                 try:
-                    qgis_py_lib = os.path.join(QGIS_ROOT, "apps", PY_VER, "Lib")
+                    qgis_py_root = os.path.join(QGIS_ROOT, "apps", PY_VER)
+                    qgis_py_lib = os.path.join(qgis_py_root, "Lib")
                     qgis_site = os.path.join(qgis_py_lib, "site-packages")
                     qgis_app_py = os.path.join(QGIS_APP, "python")
                     def _keep_path(p: str) -> bool:
@@ -722,7 +723,7 @@ class ExportCartesTab(ttk.Frame):
                         if ".venv" in l:
                             return False
                         return True
-                    sys.path = [qgis_app_py, qgis_site] + [p for p in old_syspath if _keep_path(p)]
+                    sys.path = [qgis_py_root, qgis_py_lib, qgis_site, qgis_app_py] + [p for p in old_syspath if _keep_path(p)]
                 except Exception as e:
                     log_with_time(f"sys.path cleanup skip: {e}")
                 with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as ex:
@@ -1725,6 +1726,22 @@ class ContexteEcoTab(ttk.Frame):
                         except Exception:
                             pass
                     os.environ["PYTHONNOUSERSITE"] = "1"
+                    # Fixer PYTHONHOME sur le Python de QGIS pour que l'interprète trouve sa stdlib
+                    try:
+                        qgis_py_root = os.path.join(QGIS_ROOT, "apps", PY_VER)
+                        if os.path.isdir(qgis_py_root):
+                            os.environ["PYTHONHOME"] = qgis_py_root
+                            log_with_time(f"PYTHONHOME={qgis_py_root}")
+                    except Exception:
+                        pass
+                    # Fixer PYTHONHOME sur le Python de QGIS pour que l'interprète trouve sa stdlib
+                    try:
+                        qgis_py_root = os.path.join(QGIS_ROOT, "apps", PY_VER)
+                        if os.path.isdir(qgis_py_root):
+                            os.environ["PYTHONHOME"] = qgis_py_root
+                            log_with_time(f"PYTHONHOME={qgis_py_root}")
+                    except Exception:
+                        pass
                     ctx = mp.get_context("spawn")
                     try:
                         qgis_py = os.path.join(QGIS_ROOT, "apps", PY_VER, "python.exe")
@@ -1740,7 +1757,8 @@ class ContexteEcoTab(ttk.Frame):
                 # Ajuster temporairement sys.path pour privilégier les libs QGIS
                 old_syspath = list(sys.path)
                 try:
-                    qgis_py_lib = os.path.join(QGIS_ROOT, "apps", PY_VER, "Lib")
+                    qgis_py_root = os.path.join(QGIS_ROOT, "apps", PY_VER)
+                    qgis_py_lib = os.path.join(qgis_py_root, "Lib")
                     qgis_site = os.path.join(qgis_py_lib, "site-packages")
                     qgis_app_py = os.path.join(QGIS_APP, "python")
                     def _keep_path(p: str) -> bool:
@@ -1752,7 +1770,7 @@ class ContexteEcoTab(ttk.Frame):
                         if ".venv" in l:
                             return False
                         return True
-                    sys.path = [qgis_app_py, qgis_site] + [p for p in old_syspath if _keep_path(p)]
+                    sys.path = [qgis_py_root, qgis_py_lib, qgis_site, qgis_app_py] + [p for p in old_syspath if _keep_path(p)]
                 except Exception as e:
                     log_with_time(f"sys.path cleanup skip: {e}")
                 with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as ex:
