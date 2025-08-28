@@ -729,6 +729,7 @@ class ExportCartesTab(ttk.Frame):
                 try:
                     qgis_py_root = os.path.join(QGIS_ROOT, "apps", PY_VER)
                     qgis_py_lib = os.path.join(qgis_py_root, "Lib")
+                    qgis_dlls = os.path.join(qgis_py_root, "DLLs")
                     qgis_site = os.path.join(qgis_py_lib, "site-packages")
                     qgis_app_py = os.path.join(QGIS_APP, "python")
                     def _keep_path(p: str) -> bool:
@@ -740,7 +741,8 @@ class ExportCartesTab(ttk.Frame):
                         if ".venv" in l:
                             return False
                         return True
-                    sys.path = [qgis_py_root, qgis_py_lib, qgis_site, qgis_app_py] + [p for p in old_syspath if _keep_path(p)]
+                    # Important: include QGIS DLLs so extension modules like _multiprocessing are found
+                    sys.path = [qgis_py_root, qgis_py_lib, qgis_dlls, qgis_site, qgis_app_py] + [p for p in old_syspath if _keep_path(p)]
                 except Exception as e:
                     log_with_time(f"sys.path cleanup skip: {e}")
                 with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as ex:
