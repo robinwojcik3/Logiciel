@@ -4,8 +4,8 @@ from pathlib import Path
 # Repo root (modules/..)
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# Import modules after defining REPO_ROOT so we can override constants
-from . import main_app as main_app  # noqa: E402
+# Ne pas importer main_app ici pour éviter de charger des dépendances lourdes
+# (les sous-modules sont importés à la demande: `from modules import main_app` fonctionne)
 
 # Repo-first overrides (non-destructive, keep defaults as fallback)
 try:

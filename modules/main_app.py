@@ -684,6 +684,16 @@ class ExportCartesTab(ttk.Frame):
             else:
                 try:
                     import multiprocessing as mp
+                    # Nettoyer l'environnement Python hérité pour éviter le mélange de versions (3.12/3.13)
+                    for _k in ("PYTHONHOME", "PYTHONPATH", "PYTHONSTARTUP"):
+                        if os.environ.get(_k):
+                            try:
+                                os.environ.pop(_k, None)
+                                log_with_time(f"Env nettoye: unset {_k} pour les workers")
+                            except Exception:
+                                pass
+                    os.environ["PYTHONNOUSERSITE"] = "1"
+
                     ctx = mp.get_context("spawn")
                     # Forcer l'utilisation du Python de QGIS pour les sous-processus (compat CPython/Qt)
                     try:

@@ -20,6 +20,14 @@ def to_long_unc(path: str) -> str:
 
 def _prepare_qgis_env(cfg: Dict) -> str:
     """Prépare l'environnement QGIS/Qt pour un sous-processus."""
+    # Assainir les variables d'environnement Python pour éviter les mélanges 3.12/3.13
+    for _k in ("PYTHONHOME", "PYTHONPATH", "PYTHONSTARTUP"):
+        try:
+            os.environ.pop(_k, None)
+        except Exception:
+            pass
+    os.environ["PYTHONNOUSERSITE"] = "1"
+
     os.environ["OSGEO4W_ROOT"] = cfg["QGIS_ROOT"]
     os.environ["QGIS_PREFIX_PATH"] = cfg["QGIS_APP"]
     os.environ.setdefault("GDAL_DATA", os.path.join(cfg["QGIS_ROOT"], "share", "gdal"))
