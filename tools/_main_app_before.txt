@@ -675,7 +675,7 @@ class ExportCartesTab(ttk.Frame):
         try:
             log_with_time("Test QGIS : import…")
             cfg = {"QGIS_ROOT": QGIS_ROOT, "QGIS_APP": QGIS_APP, "PY_VER": PY_VER}
-            run_worker_subprocess([], cfg)
+            worker_run(([], cfg))
             log_with_time("Test QGIS : OK")
             messagebox.showinfo("QGIS", "Import QGIS OK.")
         except Exception as e:
@@ -770,7 +770,7 @@ class ExportCartesTab(ttk.Frame):
 
             if workers <= 1:
                 for chunk in chunks:
-                    ok, ko = run_worker_subprocess(chunk, cfg)
+                    ok, ko = worker_run((chunk, cfg))
                     ok_total += ok
                     ko_total += ko
                     self.after(0, ui_update_progress, ok + ko)
@@ -849,7 +849,7 @@ class ExportCartesTab(ttk.Frame):
                         except Exception as e:
                             log_with_time(f"Submit KO ({type(e).__name__}): {e} -> exécution séquentielle du lot")
                             try:
-                                ok, ko = run_worker_subprocess(chunk, cfg)
+                                ok, ko = worker_run((chunk, cfg))
                                 ok_total += ok
                                 ko_total += ko
                                 self.after(0, ui_update_progress, ok + ko)
@@ -872,7 +872,7 @@ class ExportCartesTab(ttk.Frame):
                     log_with_time("Tous les workers ont échoué -> bascule en mode séquentiel")
                     for chunk in chunks:
                         try:
-                            ok, ko = run_worker_subprocess(chunk, cfg)
+                            ok, ko = worker_run((chunk, cfg))
                             ok_total += ok
                             ko_total += ko
                             self.after(0, ui_update_progress, ok + ko)
@@ -885,7 +885,7 @@ class ExportCartesTab(ttk.Frame):
                 log_with_time("Tous les workers ont échoué — bascule en mode séquentiel…")
                 for chunk in chunks:
                     try:
-                        ok, ko = run_worker_subprocess(chunk, cfg)
+                        ok, ko = worker_run((chunk, cfg))
                         ok_total += ok
                         ko_total += ko
                         self.after(0, ui_update_progress, ok + ko)
@@ -897,7 +897,7 @@ class ExportCartesTab(ttk.Frame):
                 log_with_time("Tous les workers ont échoué — bascule en mode séquentiel…")
                 for chunk in chunks:
                     try:
-                        ok, ko = run_worker_subprocess(chunk, cfg)
+                        ok, ko = worker_run((chunk, cfg))
                         ok_total += ok
                         ko_total += ko
                         self.after(0, ui_update_progress, ok + ko)
@@ -1854,7 +1854,7 @@ class ContexteEcoTab(ttk.Frame):
                 self.status_label.config(text=f"Progression : {self.progress_done}/{self.total_expected}")
             if workers <= 1:
                 for chunk in chunks:
-                    ok, ko = run_worker_subprocess(chunk, cfg)
+                    ok, ko = worker_run((chunk, cfg))
                     ok_total += ok
                     ko_total += ko
                     self.after(0, ui_update_progress, ok + ko)
@@ -2067,3 +2067,4 @@ def launch():
 
 if __name__ == "__main__":
     launch()
+
