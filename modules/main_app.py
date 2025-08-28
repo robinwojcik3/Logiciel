@@ -678,6 +678,16 @@ class ExportCartesTab(ttk.Frame):
                 try:
                     import multiprocessing as mp
                     mp.set_start_method("spawn", force=True)
+                    # Forcer l'utilisation du Python de QGIS pour les sous-processus (compat CPython/Qt)
+                    try:
+                        qgis_py = os.path.join(QGIS_ROOT, "apps", PY_VER, "python.exe")
+                        if os.path.isfile(qgis_py):
+                            mp.set_executable(qgis_py)
+                            log_with_time(f"MP exe: {qgis_py}")
+                        else:
+                            log_with_time(f"Python QGIS introuvable: {qgis_py}")
+                    except Exception as e:
+                        log_with_time(f"set_executable �chec: {e}")
                 except Exception:
                     pass
                 with ProcessPoolExecutor(max_workers=workers) as ex:

@@ -1,0 +1,21 @@
+# Dépendances Python de l'application
+
+# Géospatial (geopandas installe pandas, numpy, shapely, fiona, pyproj, rtree)
+geopandas[all]
+
+# Réseau et parsing
+requests
+beautifulsoup4
+lxml
+
+# Images
+pillow
+pillow-heif
+
+# Automatisation navigateur
+selenium
+
+# Bureautique
+python-docx
+openpyxl
+
