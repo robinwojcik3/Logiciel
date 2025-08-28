@@ -1032,14 +1032,16 @@ class ContexteEcoTab(ttk.Frame):
         ttk.Spinbox(idf, from_=0.0, to=50.0, increment=0.5, textvariable=self.buffer_var, width=6, justify="right").grid(row=0, column=1, sticky="w", padx=(8,0))
         self.id_button = ttk.Button(idf, text="Lancer l’ID Contexte éco", style="Accent.TButton", command=self.start_id_thread)
         self.id_button.grid(row=0, column=2, sticky="w", padx=(12,0))
-        self.wiki_button = ttk.Button(idf, text="Scraping", style="Accent.TButton", command=self.start_wiki_thread)
+        self.wiki_button = ttk.Button(idf, text="Scraper Wikipedia", style="Accent.TButton", command=self.start_wiki_thread)
         self.wiki_button.grid(row=0, column=3, sticky="w", padx=(12,0))
+        self.carto_button = ttk.Button(idf, text="Scraper cartes végétation/sols", style="Accent.TButton", command=self.start_carto_thread)
+        self.carto_button.grid(row=0, column=4, sticky="w", padx=(12,0))
         self.rlt_button = ttk.Button(idf, text="Remonter le temps", style="Accent.TButton", command=self.start_rlt_thread)
-        self.rlt_button.grid(row=0, column=4, sticky="w", padx=(12,0))
+        self.rlt_button.grid(row=0, column=5, sticky="w", padx=(12,0))
         self.maps_button = ttk.Button(idf, text="Ouvrir Google Maps", style="Accent.TButton", command=self.open_gmaps)
-        self.maps_button.grid(row=0, column=5, sticky="w", padx=(12,0))
+        self.maps_button.grid(row=0, column=6, sticky="w", padx=(12,0))
         self.bassin_button = ttk.Button(idf, text="Bassin versant", style="Accent.TButton", command=self.start_bassin_thread)
-        self.bassin_button.grid(row=0, column=6, sticky="w", padx=(12,0))
+        self.bassin_button.grid(row=0, column=7, sticky="w", padx=(12,0))
 
         # Console + progression
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
@@ -1121,6 +1123,7 @@ class ContexteEcoTab(ttk.Frame):
 
     def _run_wiki(self):
         try:
+            print("[Wiki] Lancement du scraping Wikipédia", file=self.stdout_redirect)
             ze_path = self.ze_shp_var.get()
             gdf = gpd.read_file(ze_path)
             if gdf.crs is None:
@@ -1128,7 +1131,6 @@ class ContexteEcoTab(ttk.Frame):
             gdf = gdf.to_crs("EPSG:4326")
             centroid = gdf.geometry.unary_union.centroid
             lat, lon = centroid.y, centroid.x
-            coords_dms = dd_to_dms(lat, lon)
             commune, dep = self._detect_commune(lat, lon)
             query = f"{commune} {dep}".strip()
             print(f"[Wiki] Requête : {query}", file=self.stdout_redirect)
@@ -1146,54 +1148,85 @@ class ContexteEcoTab(ttk.Frame):
                 if data['occupation_p1'] != 'Non trouvé':
                     print(data['occupation_p1'], file=self.stdout_redirect)
 
-                # Étapes supplémentaires : ouverture des cartes et activation des couches
-                def _open_layer(layer_label: str) -> None:
-                    """Ouvre FloreApp dans un nouvel onglet et coche ``layer_label``."""
-                    try:
-                        wait = WebDriverWait(self.wiki_driver, 0.5)
-                        # 1) Ouvrir l'URL dans un nouvel onglet
-                        self.wiki_driver.execute_script(
-                            "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
-                        )
-                        self.wiki_driver.switch_to.window(self.wiki_driver.window_handles[-1])
-                        # 2) Cliquer sur la barre de recherche
-                        addr = wait.until(
-                            EC.element_to_be_clickable((By.ID, "address-input"))
-                        )
-                        addr.click()
-                        # 3) Saisir les coordonnées du centroïde
-                        addr.clear()
-                        addr.send_keys(coords_dms)
-                        # 4) Valider la recherche
-                        wait.until(
-                            EC.element_to_be_clickable((By.ID, "search-address-btn"))
-                        ).click()
-                        # 5) Ouvrir le menu des couches
-                        wait.until(
-                            EC.element_to_be_clickable(
-                                (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
-                            )
-                        ).click()
-                        # 6) Cocher la couche demandée
-                        checkbox = wait.until(
-                            EC.element_to_be_clickable(
-                                (By.XPATH, f"//label[contains(.,'{layer_label}')]/input")
-                            )
-                        )
-                        if not checkbox.is_selected():
-                            checkbox.click()
-                    except Exception as fe:
-                        print(
-                            f"[Wiki] Étapes {layer_label} échouées : {fe}",
-                            file=self.stdout_redirect,
-                        )
-
-                _open_layer("Carte de la végétation")
-                _open_layer("Carte des sols")
+                # Scraping dédié à Wikipédia uniquement
         except Exception as e:
             print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
         finally:
             self.after(0, lambda: self.wiki_button.config(state="normal"))
+
+    def start_carto_thread(self):
+        if not self.ze_shp_var.get().strip():
+            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
+            return
+        self.carto_button.config(state="disabled")
+        t = threading.Thread(target=self._run_carto)
+        t.daemon = True
+        t.start()
+
+    def _run_carto(self):
+        try:
+            print("[Cartes] Lancement du scraping des cartes", file=self.stdout_redirect)
+            ze_path = self.ze_shp_var.get()
+            gdf = gpd.read_file(ze_path)
+            if gdf.crs is None:
+                raise ValueError("CRS non défini")
+            gdf = gdf.to_crs("EPSG:4326")
+            centroid = gdf.geometry.unary_union.centroid
+            lat, lon = centroid.y, centroid.x
+            coords_dms = dd_to_dms(lat, lon)
+
+            options = webdriver.ChromeOptions()
+            options.add_experimental_option("excludeSwitches", ["enable-logging"])
+            options.add_argument("--log-level=3")
+            options.add_argument("--disable-extensions")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+
+            driver = webdriver.Chrome(options=options)
+            driver.maximize_window()
+
+            def _open_layer(layer_label: str) -> None:
+                try:
+                    wait = WebDriverWait(driver, 0.5)
+                    driver.execute_script(
+                        "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');",
+                    )
+                    driver.switch_to.window(driver.window_handles[-1])
+                    addr = wait.until(
+                        EC.element_to_be_clickable((By.ID, "address-input"))
+                    )
+                    addr.click()
+                    addr.clear()
+                    addr.send_keys(coords_dms)
+                    wait.until(
+                        EC.element_to_be_clickable((By.ID, "search-address-btn"))
+                    ).click()
+                    wait.until(
+                        EC.element_to_be_clickable(
+                            (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
+                        )
+                    ).click()
+                    checkbox = wait.until(
+                        EC.element_to_be_clickable(
+                            (By.XPATH, f"//label[contains(.,'{layer_label}')]/input")
+                        )
+                    )
+                    if not checkbox.is_selected():
+                        checkbox.click()
+                except Exception as fe:
+                    print(
+                        f"[Cartes] Étapes {layer_label} échouées : {fe}",
+                        file=self.stdout_redirect,
+                    )
+
+            _open_layer("Carte de la végétation")
+            _open_layer("Carte des sols")
+            self.cartes_driver = driver
+        except Exception as e:
+            print(f"[Cartes] Erreur : {e}", file=self.stdout_redirect)
+        finally:
+            self.after(0, lambda: self.carto_button.config(state="normal"))
 
     # --- Boutons ajoutés ---
     def start_rlt_thread(self):
