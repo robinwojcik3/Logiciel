@@ -204,6 +204,14 @@ def fetch_wikipedia_info(commune_query: str) -> Tuple[Dict[str, str], webdriver.
         except Exception:
             options.add_argument("--headless")
     # Driver local (repo) prioritaire si présent
+    # Ensure browser is visible if APP_HEADLESS=0 (or unset)
+    import os as _os
+    try:
+        if _os.environ.get("APP_HEADLESS", "0").lower() in ("0", "false", "no", ""):
+            if hasattr(options, "arguments"):
+                options.arguments = [a for a in options.arguments if not str(a).startswith("--headless")]
+    except Exception:
+        pass
     local_driver = REPO_ROOT / "tools" / "chromedriver.exe"
     if local_driver.is_file():
         driver = webdriver.Chrome(service=Service(str(local_driver)), options=options)

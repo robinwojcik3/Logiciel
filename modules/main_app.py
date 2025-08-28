@@ -1410,10 +1410,16 @@ class ContexteEcoTab(ttk.Frame):
             options.add_argument("--disable-gpu")
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
+            # Respect APP_HEADLESS env var (default: visible)
             try:
-                options.add_argument("--headless=new")
+                if os.environ.get("APP_HEADLESS", "0").lower() in ("1", "true", "yes"):
+                    options.add_argument("--headless=new")
             except Exception:
-                options.add_argument("--headless")
+                try:
+                    if os.environ.get("APP_HEADLESS", "0").lower() in ("1", "true", "yes"):
+                        options.add_argument("--headless")
+                except Exception:
+                    pass
             # Driver local si présent
             local_driver = os.path.join(REPO_ROOT if 'REPO_ROOT' in globals() else os.path.abspath(os.path.join(os.path.dirname(__file__), '..')), 'tools', 'chromedriver.exe')
             if os.path.isfile(local_driver):
