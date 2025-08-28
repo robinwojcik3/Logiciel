@@ -12,6 +12,7 @@ from typing import Dict, Tuple
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
@@ -170,6 +171,10 @@ def fetch_wikipedia_info(commune_query: str) -> Tuple[Dict[str, str], webdriver.
     """
 
     query = _normalize_query(commune_query)
+    import os
+    from pathlib import Path
+    # Repo root (modules/..)
+    REPO_ROOT = Path(__file__).resolve().parent.parent
     options = webdriver.ChromeOptions()
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
     options.add_argument("--log-level=3")
@@ -177,8 +182,18 @@ def fetch_wikipedia_info(commune_query: str) -> Tuple[Dict[str, str], webdriver.
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-
-    driver = webdriver.Chrome(options=options)
+    # Headless par défaut pour faciliter les tests automatisés
+    if os.environ.get("APP_HEADLESS", "1").lower() in ("1", "true", "yes"):  # opt-out via APP_HEADLESS=0
+        try:
+            options.add_argument("--headless=new")
+        except Exception:
+            options.add_argument("--headless")
+    # Driver local (repo) prioritaire si présent
+    local_driver = REPO_ROOT / "tools" / "chromedriver.exe"
+    if local_driver.is_file():
+        driver = webdriver.Chrome(service=Service(str(local_driver)), options=options)
+    else:
+        driver = webdriver.Chrome(options=options)
     driver.maximize_window()
     wait = WebDriverWait(driver, 10)
 

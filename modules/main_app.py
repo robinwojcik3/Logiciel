@@ -54,6 +54,7 @@ from .export_worker import worker_run
 
 # ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -1235,7 +1236,16 @@ class ContexteEcoTab(ttk.Frame):
             options.add_argument("--disable-gpu")
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
-            self.vegsol_driver = webdriver.Chrome(options=options)
+            try:
+                options.add_argument("--headless=new")
+            except Exception:
+                options.add_argument("--headless")
+            # Driver local si présent
+            local_driver = os.path.join(REPO_ROOT if 'REPO_ROOT' in globals() else os.path.abspath(os.path.join(os.path.dirname(__file__), '..')), 'tools', 'chromedriver.exe')
+            if os.path.isfile(local_driver):
+                self.vegsol_driver = webdriver.Chrome(service=Service(local_driver), options=options)
+            else:
+                self.vegsol_driver = webdriver.Chrome(options=options)
             self.vegsol_driver.maximize_window()
 
             def _open_layer(layer_label: str) -> None:
