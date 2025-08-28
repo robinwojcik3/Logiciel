@@ -1135,6 +1135,7 @@ class ContexteEcoTab(ttk.Frame):
         self.wiki_climat_var = tk.StringVar(value="")
         self.wiki_occ_var = tk.StringVar(value="")
         self.wiki_last_url = ""
+        self.wiki_query_var = tk.StringVar(value=self.prefs.get("WIKI_QUERY", ""))
 
         self.project_vars: dict[str, tk.IntVar] = {}
         self.all_projects: List[str] = []
@@ -1350,6 +1351,9 @@ class ContexteEcoTab(ttk.Frame):
                 self.wiki_open_button.config(state="disabled")
         except Exception:
             pass
+        t = threading.Thread(target=self._run_wiki)
+        t.daemon = True
+        t.start()
 
     def open_wiki_url(self) -> None:
         try:
@@ -1361,9 +1365,6 @@ class ContexteEcoTab(ttk.Frame):
             webbrowser.open(url)
         except Exception as e:
             messagebox.showerror("Wikipedia", f"Impossible d'ouvrir l'URL : {e}")
-        t = threading.Thread(target=self._run_wiki)
-        t.daemon = True
-        t.start()
 
     def _run_wiki(self):
         try:
@@ -1375,8 +1376,16 @@ class ContexteEcoTab(ttk.Frame):
             gdf = gdf.to_crs("EPSG:4326")
             centroid = gdf.geometry.unary_union.centroid
             lat, lon = centroid.y, centroid.x
-            commune, dep = self._detect_commune(lat, lon)
-            query = f"{commune} {dep}".strip()
+            manual = (self.wiki_query_var.get() or "").strip()
+            if manual:
+                query = manual
+                try:
+                    self.prefs["WIKI_QUERY"] = manual; save_prefs(self.prefs)
+                except Exception:
+                    pass
+            else:
+                commune, dep = self._detect_commune(lat, lon)
+                query = f"{commune} {dep}".strip()
             print(f"[Wiki] Requête : {query}", file=self.stdout_redirect)
             data, self.wiki_driver = fetch_wikipedia_info(query)
             # Mettre à jour le tableau Wikipedia (dès que les données sont disponibles)
