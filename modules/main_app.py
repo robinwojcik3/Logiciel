@@ -1134,6 +1134,7 @@ class ContexteEcoTab(ttk.Frame):
         # Resultats Wikipedia (affichage sous forme de tableau)
         self.wiki_climat_var = tk.StringVar(value="")
         self.wiki_occ_var = tk.StringVar(value="")
+        self.wiki_last_url = ""
 
         self.project_vars: dict[str, tk.IntVar] = {}
         self.all_projects: List[str] = []
@@ -1248,7 +1249,10 @@ class ContexteEcoTab(ttk.Frame):
         # Tableau Wikipedia (2 lignes, 2 colonnes)
         wiki_res = ttk.Frame(self, style="Card.TFrame", padding=12)
         wiki_res.pack(fill=tk.X, pady=(8,0))
-        ttk.Label(wiki_res, text="Wikipedia", style="Card.TLabel").grid(row=0, column=0, columnspan=2, sticky="w", pady=(0,6))
+        ttk.Label(wiki_res, text="Wikipedia", style="Card.TLabel").grid(row=0, column=0, sticky="w", pady=(0,6))
+        # Bouton pour ouvrir l'article dans le navigateur
+        self.wiki_open_button = ttk.Button(wiki_res, text="Ouvrir Wikipédia", command=self.open_wiki_url, state="disabled")
+        self.wiki_open_button.grid(row=0, column=1, sticky="e", pady=(0,6))
         ttk.Label(wiki_res, text="Climat", style="Card.TLabel").grid(row=1, column=0, sticky="nw")
         ttk.Label(wiki_res, text="Corine Land Cover", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
         ttk.Label(wiki_res, textvariable=self.wiki_climat_var, wraplength=900, style="Card.TLabel").grid(row=1, column=1, sticky="w")
@@ -1330,6 +1334,26 @@ class ContexteEcoTab(ttk.Frame):
             return
         print("[Wiki] Bouton Wikipédia cliqué", file=self.stdout_redirect)
         self.wiki_button.config(state="disabled")
+        # Réinitialiser le tableau et le bouton avant un nouveau scraping
+        try:
+            self.wiki_climat_var.set("")
+            self.wiki_occ_var.set("")
+            self.wiki_last_url = ""
+            if hasattr(self, 'wiki_open_button'):
+                self.wiki_open_button.config(state="disabled")
+        except Exception:
+            pass
+
+    def open_wiki_url(self) -> None:
+        try:
+            url = (self.wiki_last_url or "").strip()
+            if not url:
+                messagebox.showinfo("Wikipedia", "Aucune URL disponible. Lancez d'abord le scraping.")
+                return
+            print(f"[Wiki] Ouverture dans le navigateur : {url}", file=self.stdout_redirect)
+            webbrowser.open(url)
+        except Exception as e:
+            messagebox.showerror("Wikipedia", f"Impossible d'ouvrir l'URL : {e}")
         t = threading.Thread(target=self._run_wiki)
         t.daemon = True
         t.start()
@@ -1372,6 +1396,7 @@ class ContexteEcoTab(ttk.Frame):
         try:
             clim_txt = data.get('climat_p1', '')
             occ_txt = data.get('occupation_p1', '')
+            url_txt = data.get('url', '')
             def _norm(s):
                 try:
                     return s if (isinstance(s, str) and not s.lower().startswith('non trouv')) else '—'
@@ -1379,6 +1404,15 @@ class ContexteEcoTab(ttk.Frame):
                     return '—'
             self.after(0, lambda: self.wiki_climat_var.set(_norm(clim_txt)))
             self.after(0, lambda: self.wiki_occ_var.set(_norm(occ_txt)))
+            # Mettre à jour l'URL et l'état du bouton d'ouverture
+            def _upd_url():
+                try:
+                    self.wiki_last_url = url_txt or ""
+                    if hasattr(self, 'wiki_open_button'):
+                        self.wiki_open_button.config(state=("normal" if self.wiki_last_url else "disabled"))
+                except Exception:
+                    pass
+            self.after(0, _upd_url)
         except Exception:
             pass
 
