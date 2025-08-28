@@ -40,7 +40,10 @@ import zipfile
 import traceback
 
 # ==== Imports supplémentaires pour l'onglet Contexte éco ====
-import geopandas as gpd
+# Note: geopandas n'est pas utilisé directement dans ce module.
+# Les traitements géospatiaux sont effectués dans des modules dédiés
+# (ex: id_contexte_eco) afin d'éviter de charger des dépendances lourdes
+# au lancement de l'UI principale.
 
 # Import du scraper Wikipédia
 from .wikipedia_scraper import DEP, fetch_wikipedia_info
