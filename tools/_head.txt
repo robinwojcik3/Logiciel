@@ -1,0 +1,250 @@
+#!/usr/bin/env "C:/Program Files/QGIS 3.40.3/apps/Python312/python.exe"
+# -*- coding: utf-8 -*-
+r"""
+Application à onglets (ttk.Notebook) :
+
+Onglet « Contexte éco » :
+    - Export des mises en page QGIS en PNG.
+    - Identification des zonages (ID Contexte éco) avec tampon configurable.
+    - Sélection commune des shapefiles ZE/AE et console partagée.
+    - Boutons « Remonter le temps », « Ouvrir Google Maps » et « Bassin versant »
+      utilisant le centroïde de la zone d'étude.
+
+Onglet « Identification Pl@ntNet » :
+    - Reconnaissance de plantes via l'API Pl@ntNet.
+
+Pré-requis Python : qgis (environnement QGIS), selenium, pillow, python-docx,
+openpyxl (non utilisé ici), chromedriver dans PATH.
+"""
+
+import os
+import sys
+import re
+import json
+import time
+import shutil
+import tempfile
+import datetime
+import threading
+import urllib.request
+import webbrowser
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+from tkinter import font as tkfont
+from typing import List, Optional, Tuple
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+import requests
+from io import BytesIO
+import pillow_heif
+import zipfile
+import traceback
+import subprocess
+
+# ==== Imports supplémentaires pour l'onglet Contexte éco ====
+# Note: geopandas n'est pas utilisé directement dans ce module.
+# Les traitements géospatiaux sont effectués dans des modules dédiés
+# (ex: id_contexte_eco) afin d'éviter de charger des dépendances lourdes
+# au lancement de l'UI principale.
+
+# Import du scraper Wikipédia
+from .wikipedia_scraper import DEP, fetch_wikipedia_info
+
+# Import du worker QGIS externalisé
+from .export_worker import worker_run
+
+
+# ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver import ActionChains
+
+from docx import Document
+from docx.shared import Cm
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.section import WD_ORIENT
+from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.oxml.ns import qn
+
+from PIL import Image
+
+# Enregistrer le décodeur HEIF
+pillow_heif.register_heif_opener()
+
+# =========================
+# Paramètres globaux
+# =========================
+# Contexte éco — Export Cartes
+DPI_DEFAULT        = 300
+N_WORKERS_DEFAULT  = max(1, min((os.cpu_count() or 2) - 1, 6))
+MARGIN_FAC_DEFAULT = 1.15
+OVERWRITE_DEFAULT  = False
+
+LAYER_AE_NAME = "Aire d'étude élargie"
+LAYER_ZE_NAME = "Zone d'étude"
+
+BASE_SHARE = r"\\192.168.1.240\commun\PARTAGE"
+SUBPATH    = r"Espace_RWO\CARTO ROBIN"
+
+OUT_IMG    = r"C:\Users\utilisateur\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 3) BDD\PYTHON\2) Contexte éco\OUTPUT"
+
+# Dossier par défaut pour la sélection des shapefiles (onglet 1)
+DEFAULT_SHAPE_DIR = r"C:\Users\utilisateur\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 2) CARTO terrain"
+
+# QGIS
+QGIS_ROOT = r"C:\Program Files\QGIS 3.40.3"
+QGIS_APP  = os.path.join(QGIS_ROOT, "apps", "qgis")
+PY_VER    = "Python312"
+
+# Préférences
+PREFS_PATH = os.path.join(os.path.expanduser("~"), "ExportCartesContexteEco.config.json")
+
+# Constantes « Remonter le temps » et « Bassin versant » (issues du script source)
+LAYERS = [
+    ("Aujourd’hui",   "10"),
+    ("2000-2005",     "18"),
+    ("1965-1980",     "20"),
+    ("1950-1965",     "19"),
+]
+URL = ("https://remonterletemps.ign.fr/comparer/?lon={lon}&lat={lat}"
+       "&z=17&layer1={layer}&layer2=19&mode=dub1")
+WAIT_TILES_DEFAULT = 1.5
+IMG_WIDTH = Cm(12.5 * 0.8)
+WORD_FILENAME = "Comparaison_temporelle_Paysage.docx"
+OUTPUT_DIR_RLT = os.path.join(OUT_IMG, "Remonter le temps")
+COMMENT_TEMPLATE = (
+    "Rédige un commentaire synthétique de l'évolution de l'occupation du sol observée "
+    "sur les images aériennes de la zone d'étude, aux différentes dates indiquées "
+    "(1950–1965, 1965–1980, 2000–2005, aujourd’hui). Concentre-toi sur les grandes "
+    "dynamiques d'aménagement (urbanisation, artificialisation, évolution des milieux "
+    "ouverts ou boisés), en identifiant les principales transformations visibles. "
+    "Fais ta réponse en un seul court paragraphe. Intègre les éléments de contexte "
+    "historique et territorial propres à la commune de {commune} pour interpréter ces évolutions."
+)
+
+# Onglet 3 — Identification Pl@ntNet
+API_KEY = "2b10vfT6MvFC2lcAzqG1ZMKO"  # Votre clé API Pl@ntNet
+PROJECT = "all"
+API_URL = f"https://my-api.plantnet.org/v2/identify/{PROJECT}?api-key={API_KEY}"
+
+# =========================
+# Utils communs
+# =========================
+def log_with_time(msg: str) -> None:
+    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}")
+
+def normalize_name(s: str) -> str:
+    s2 = s.replace("\u00A0", " ").replace("\u202F", " ")
+    while "  " in s2:
+        s2 = s2.replace("  ", " ")
+    return s2.strip().lower()
+
+def to_long_unc(path: str) -> str:
+    if path.startswith("\\\\?\\"): return path
+    if path.startswith("\\\\"):   return "\\\\?\\UNC" + path[1:]
+    return "\\\\?\\" + path
+
+def chunk_even(lst: List[str], k: int) -> List[List[str]]:
+    if not lst: return []
+    k = max(1, min(k, len(lst)))
+    base = len(lst) // k
+    extra = len(lst) % k
+    out, start = [], 0
+    for i in range(k):
+        size = base + (1 if i < extra else 0)
+        out.append(lst[start:start+size])
+        start += size
+    return out
+
+def qgis_multiprocessing_ok() -> bool:
+    """Quick check: can QGIS's Python import _multiprocessing? Avoids noisy spawn failures."""
+    try:
+        qgis_py = os.path.join(QGIS_ROOT, "apps", PY_VER, "python.exe")
+        if not os.path.isfile(qgis_py):
+            return False
+        env = os.environ.copy()
+        # Prefer clean env and explicit paths
+        qgis_py_root = os.path.join(QGIS_ROOT, "apps", PY_VER)
+        qgis_lib = os.path.join(qgis_py_root, "Lib")
+        qgis_dlls = os.path.join(qgis_py_root, "DLLs")
+        qgis_site = os.path.join(qgis_lib, "site-packages")
+        qgis_app_py = os.path.join(QGIS_APP, "python")
+        env.pop("PYTHONHOME", None); env.pop("PYTHONPATH", None); env["PYTHONNOUSERSITE"] = "1"
+        env["PYTHONHOME"] = qgis_py_root
+        env["PYTHONPATH"] = os.pathsep.join([qgis_py_root, qgis_lib, qgis_dlls, qgis_site, qgis_app_py])
+        code = "import multiprocessing, multiprocessing.connection, _multiprocessing; print('OK')"
+        r = subprocess.run([qgis_py, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           text=True, timeout=6, env=env, cwd=os.path.dirname(__file__))
+        return r.returncode == 0 and (r.stdout or "").strip().endswith("OK")
+    except Exception:
+        return False
+
+def load_prefs() -> dict:
+    if os.path.isfile(PREFS_PATH):
+        try:
+            with open(PREFS_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_prefs(d: dict) -> None:
+    try:
+        with open(PREFS_PATH, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+class TextRedirector:
+    def __init__(self, widget): self.widget = widget
+    def write(self, s):
+        self.widget.config(state='normal')
+        self.widget.insert(tk.END, s)
+        self.widget.see(tk.END)
+        self.widget.config(state='disabled')
+        self.widget.update_idletasks()
+    def flush(self): pass
+
+class ToolTip:
+    def __init__(self, widget, text: str, delay: int = 600):
+        self.widget = widget; self.text = text; self.delay = delay
+        self.tipwindow = None; self.id = None
+        widget.bind("<Enter>", self._schedule); widget.bind("<Leave>", self._hide)
+    def _schedule(self, _=None):
+        self._cancel(); self.id = self.widget.after(self.delay, self._show)
+    def _cancel(self):
+        if self.id: self.widget.after_cancel(self.id); self.id = None
+    def _show(self):
+        if self.tipwindow: return
+        x = self.widget.winfo_rootx() + 15; y = self.widget.winfo_rooty() + 25
+        self.tipwindow = tw = tk.Toplevel(self.widget); tw.wm_overrideredirect(True); tw.wm_geometry(f"+{x}+{y}")
+        ttk.Label(tw, text=self.text, style="Tooltip.TLabel", padding=(8, 4)).pack()
+    def _hide(self, _=None):
+        self._cancel()
+        if self.tipwindow: self.tipwindow.destroy(); self.tipwindow = None
+
+# =========================
+# Fonctions Pl@ntNet
+# =========================
+def resize_image(image_path, max_size=(800, 800), quality=70):
+    """
+    Redimensionne et compresse une image.
+
+    :param image_path: Chemin de l'image à traiter.
+    :param max_size: Tuple indiquant la taille maximale (largeur, hauteur).
+    :param quality: Qualité de compression (1-100).
+    :return: BytesIO de l'image traitée ou None en cas d'erreur.
+    """
+    try:
+        with Image.open(image_path) as img:
+            img.thumbnail(max_size)
+            buffer = BytesIO()
+            img.save(buffer, format='JPEG', quality=quality)
+            buffer.seek(0)
+            return buffer
+    except Exception as e:
+        print(f"Erreur lors du redimensionnement de l'image : {e}")
+        return None

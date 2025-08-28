@@ -32,7 +32,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from tkinter import font as tkfont
 from typing import List, Optional, Tuple
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import requests
 from io import BytesIO
 import pillow_heif
@@ -181,6 +181,58 @@ def qgis_multiprocessing_ok() -> bool:
         return r.returncode == 0 and (r.stdout or "").strip().endswith("OK")
     except Exception:
         return False
+
+def run_worker_subprocess(projects: List[str], cfg: dict) -> tuple[int, int]:
+    """Exécute un lot via QGIS Python dans un sous-processus.
+
+    Cette approche évite totalement multiprocessing dans l'interpréteur QGIS,
+    supprimant l'erreur `_multiprocessing`.
+    """
+    import json as _json
+    tmp = None
+    try:
+        qgis_py = os.path.join(QGIS_ROOT, "apps", PY_VER, "python.exe")
+        if not os.path.isfile(qgis_py):
+            raise RuntimeError(f"Python QGIS introuvable: {qgis_py}")
+
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+        qgis_py_root = os.path.join(QGIS_ROOT, "apps", PY_VER)
+        qgis_lib  = os.path.join(qgis_py_root, "Lib")
+        qgis_dlls = os.path.join(qgis_py_root, "DLLs")
+        qgis_site = os.path.join(qgis_lib, "site-packages")
+        qgis_app_py = os.path.join(QGIS_APP, "python")
+
+        data = {"projects": list(projects or []), "cfg": dict(cfg or {})}
+        fd, tmp = tempfile.mkstemp(prefix="qgis_worker_", suffix=".json")
+        os.close(fd)
+        with open(tmp, "w", encoding="utf-8") as f:
+            _json.dump(data, f)
+
+        env = os.environ.copy()
+        for k in ("PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP"):
+            env.pop(k, None)
+        env["PYTHONNOUSERSITE"] = "1"
+        env["PYTHONHOME"] = qgis_py_root
+        env["PYTHONPATH"] = os.pathsep.join([repo_root, qgis_py_root, qgis_lib, qgis_dlls, qgis_site, qgis_app_py])
+
+        cmd = [qgis_py, "-m", "modules.export_worker_cli", tmp]
+        r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
+        out = (r.stdout or "").strip()
+        if r.returncode == 0 and "," in out:
+            try:
+                last = out.splitlines()[-1]
+                s_ok, s_ko = last.split(",", 1)
+                return int(s_ok), int(s_ko)
+            except Exception:
+                pass
+        log_with_time(f"Worker subproc KO (code={r.returncode}): {out[:400]}")
+        return 0, len(projects or [])
+    finally:
+        if tmp and os.path.isfile(tmp):
+            try:
+                os.remove(tmp)
+            except Exception:
+                pass
 
 def load_prefs() -> dict:
     if os.path.isfile(PREFS_PATH):
@@ -669,6 +721,8 @@ class ExportCartesTab(ttk.Frame):
             log_with_time(f"Workers={self.workers_var.get()}, DPI={self.dpi_var.get()}, marge={self.margin_var.get():.2f}, overwrite={self.overwrite_var.get()}")
 
             workers = int(self.workers_var.get())
+            # Désactive provisoirement le multiprocessing pour éviter les erreurs _multiprocessing
+            workers = 1
             chunks = chunk_even(projets, workers)
             # Forcer au moins 2 workers pour utiliser ProcessPoolExecutor
             # (et donc le Python de QGIS configuré ci-dessous)
@@ -1769,6 +1823,8 @@ class ContexteEcoTab(ttk.Frame):
             log_with_time(f"{len(projets)} projets (attendu = calcul en cours)")
             log_with_time(f"Workers={self.workers_var.get()}, DPI={self.dpi_var.get()}, marge={self.margin_var.get():.2f}, overwrite={self.overwrite_var.get()}")
             workers = int(self.workers_var.get())
+            # Désactive provisoirement le multiprocessing pour éviter les erreurs _multiprocessing
+            workers = 1
             chunks = chunk_even(projets, workers)
             # Forcer au moins 2 workers pour utiliser ProcessPoolExecutor
             # (et donc le Python de QGIS configuré ci-dessous)
