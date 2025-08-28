@@ -39,6 +39,7 @@ import pillow_heif
 import zipfile
 import traceback
 import subprocess
+import geopandas as gpd
 
 # ==== Imports supplémentaires pour l'onglet Contexte éco ====
 # Note: geopandas n'est pas utilisé directement dans ce module.
