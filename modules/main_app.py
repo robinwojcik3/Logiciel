@@ -707,6 +707,24 @@ class ExportCartesTab(ttk.Frame):
                         log_with_time(f"set_executable �chec: {e}")
                 except Exception:
                     pass
+                # Ajuster temporairement sys.path pour privilégier les libs QGIS
+                old_syspath = list(sys.path)
+                try:
+                    qgis_py_lib = os.path.join(QGIS_ROOT, "apps", PY_VER, "Lib")
+                    qgis_site = os.path.join(qgis_py_lib, "site-packages")
+                    qgis_app_py = os.path.join(QGIS_APP, "python")
+                    def _keep_path(p: str) -> bool:
+                        if not isinstance(p, str):
+                            return False
+                        l = p.lower()
+                        if "python313" in l or "python311" in l or "python310" in l or "python39" in l:
+                            return False
+                        if ".venv" in l:
+                            return False
+                        return True
+                    sys.path = [qgis_app_py, qgis_site] + [p for p in old_syspath if _keep_path(p)]
+                except Exception as e:
+                    log_with_time(f"sys.path cleanup skip: {e}")
                 with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as ex:
                     futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
                     for fut in as_completed(futures):
@@ -718,6 +736,8 @@ class ExportCartesTab(ttk.Frame):
                             log_with_time(f"Lot terminé: {ok} OK, {ko} KO")
                         except Exception as e:
                             log_with_time(f"Erreur worker: {e}")
+                # Restaure le sys.path initial
+                sys.path = old_syspath
 
             # Si aucun résultat n'a été produit (workers plantés), on retente en séquentiel
             if (ok_total + ko_total) == 0 and chunks:
@@ -1698,6 +1718,13 @@ class ContexteEcoTab(ttk.Frame):
             else:
                 try:
                     import multiprocessing as mp
+                    # Nettoyage de l'environnement hérité pour éviter collisions Python 3.12/3.13
+                    for _k in ("PYTHONHOME", "PYTHONPATH", "PYTHONSTARTUP"):
+                        try:
+                            os.environ.pop(_k, None)
+                        except Exception:
+                            pass
+                    os.environ["PYTHONNOUSERSITE"] = "1"
                     ctx = mp.get_context("spawn")
                     try:
                         qgis_py = os.path.join(QGIS_ROOT, "apps", PY_VER, "python.exe")
@@ -1710,6 +1737,24 @@ class ContexteEcoTab(ttk.Frame):
                         log_with_time(f"set_executable échec: {e}")
                 except Exception as e:
                     log_with_time(f"init multiprocessing: {e}")
+                # Ajuster temporairement sys.path pour privilégier les libs QGIS
+                old_syspath = list(sys.path)
+                try:
+                    qgis_py_lib = os.path.join(QGIS_ROOT, "apps", PY_VER, "Lib")
+                    qgis_site = os.path.join(qgis_py_lib, "site-packages")
+                    qgis_app_py = os.path.join(QGIS_APP, "python")
+                    def _keep_path(p: str) -> bool:
+                        if not isinstance(p, str):
+                            return False
+                        l = p.lower()
+                        if "python313" in l or "python311" in l or "python310" in l or "python39" in l:
+                            return False
+                        if ".venv" in l:
+                            return False
+                        return True
+                    sys.path = [qgis_app_py, qgis_site] + [p for p in old_syspath if _keep_path(p)]
+                except Exception as e:
+                    log_with_time(f"sys.path cleanup skip: {e}")
                 with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as ex:
                     futures = [ex.submit(worker_run, (chunk, cfg)) for chunk in chunks if chunk]
                     for fut in as_completed(futures):
@@ -1721,6 +1766,8 @@ class ContexteEcoTab(ttk.Frame):
                             log_with_time(f"Lot terminé: {ok} OK, {ko} KO")
                         except Exception as e:
                             log_with_time(f"Erreur worker: {e}")
+                # Restaure le sys.path initial
+                sys.path = old_syspath
             elapsed = datetime.datetime.now() - start
             log_with_time(f"FIN — OK={ok_total} | KO={ko_total} | Attendu={self.total_expected} | Durée={elapsed}")
             self.after(0, lambda: self.status_label.config(text=f"Terminé — OK={ok_total} / KO={ko_total}"))
