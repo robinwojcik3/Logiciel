@@ -71,6 +71,7 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 
 from PIL import Image
+from bs4 import BeautifulSoup
 
 # Enregistrer le décodeur HEIF
 pillow_heif.register_heif_opener()
@@ -1137,6 +1138,11 @@ class ContexteEcoTab(ttk.Frame):
         self.wiki_last_url = ""
         self.wiki_query_var = tk.StringVar(value=self.prefs.get("WIKI_QUERY", ""))
 
+        # Résultats Cartes végétation/sols
+        self.veg_alt_var = tk.StringVar(value="")
+        self.veg_veg_var = tk.StringVar(value="")
+        self.veg_soil_var = tk.StringVar(value="")
+
         self.project_vars: dict[str, tk.IntVar] = {}
         self.all_projects: List[str] = []
         self.filtered_projects: List[str] = []
@@ -1281,6 +1287,36 @@ class ContexteEcoTab(ttk.Frame):
         occ_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
         wiki_res.columnconfigure(1, weight=1)
+
+        # Tableau Cartes végétation/sols (3 lignes)
+        vegsol_res = ttk.Frame(self, style="Card.TFrame", padding=12)
+        vegsol_res.pack(fill=tk.X, pady=(8,0))
+        ttk.Label(vegsol_res, text="Cartes végétation/sols", style="Card.TLabel").grid(row=0, column=0, sticky="w", pady=(0,6))
+        ttk.Label(vegsol_res, text="Altitude", style="Card.TLabel").grid(row=1, column=0, sticky="nw")
+        ttk.Label(vegsol_res, text="Végétation", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
+        ttk.Label(vegsol_res, text="Sols", style="Card.TLabel").grid(row=3, column=0, sticky="nw")
+
+        alt_cell = ttk.Frame(vegsol_res); alt_cell.grid(row=1, column=1, sticky="nsew")
+        self.veg_alt_txt = tk.Text(alt_cell, height=2, wrap=tk.WORD, state='disabled', relief='flat')
+        alt_scroll = ttk.Scrollbar(alt_cell, orient="vertical", command=self.veg_alt_txt.yview)
+        self.veg_alt_txt.configure(yscrollcommand=alt_scroll.set)
+        self.veg_alt_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        alt_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        veg_cell = ttk.Frame(vegsol_res); veg_cell.grid(row=2, column=1, sticky="nsew")
+        self.veg_veg_txt = tk.Text(veg_cell, height=4, wrap=tk.WORD, state='disabled', relief='flat')
+        veg_scroll = ttk.Scrollbar(veg_cell, orient="vertical", command=self.veg_veg_txt.yview)
+        self.veg_veg_txt.configure(yscrollcommand=veg_scroll.set)
+        self.veg_veg_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        veg_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        soil_cell = ttk.Frame(vegsol_res); soil_cell.grid(row=3, column=1, sticky="nsew")
+        self.veg_soil_txt = tk.Text(soil_cell, height=4, wrap=tk.WORD, state='disabled', relief='flat')
+        soil_scroll = ttk.Scrollbar(soil_cell, orient="vertical", command=self.veg_soil_txt.yview)
+        self.veg_soil_txt.configure(yscrollcommand=soil_scroll.set)
+        self.veg_soil_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        soil_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        vegsol_res.columnconfigure(1, weight=1)
 
         # Console + progression
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
@@ -1508,6 +1544,84 @@ class ContexteEcoTab(ttk.Frame):
                 self.vegsol_driver = webdriver.Chrome(options=options)
             self.vegsol_driver.maximize_window()
 
+            # Nouveau flux automatisé (import shapefile + scraping pop-up)
+            try:
+                wait = WebDriverWait(self.vegsol_driver, 10)
+                # 1) Ouvrir l'URL
+                self.vegsol_driver.get("https://floreapp.netlify.app/biblio-patri.html")
+                time.sleep(0.75)
+
+                # 3) Cliquer sur Importer shapefile
+                try:
+                    btn_upload = wait.until(EC.element_to_be_clickable((By.ID, "upload-shapefile-btn")))
+                    btn_upload.click()
+                except Exception:
+                    pass
+                time.sleep(0.75)
+
+                # 5) Cliquer sur Zone d’étude
+                try:
+                    btn_zone = wait.until(EC.element_to_be_clickable((By.ID, "import-zone-btn")))
+                    btn_zone.click()
+                except Exception:
+                    pass
+
+                # Préparer la liste des fichiers du shapefile
+                def _from_long_unc(p: str) -> str:
+                    p = p or ""
+                    if p.startswith("\\\\?\\UNC"):
+                        return "\\\\" + p[8:]
+                    if p.startswith("\\\\?\\"):
+                        return p[4:]
+                    return p
+
+                ze_shp = (self.ze_shp_var.get() or "").strip()
+                base_no_ext, _ = os.path.splitext(_from_long_unc(ze_shp))
+                exts = [".cpg", ".dbf", ".prj", ".qmd", ".shp", ".shx"]
+                files = [base_no_ext + e for e in exts if os.path.isfile(base_no_ext + e)]
+                if not files:
+                    raise ValueError("Fichiers du shapefile introuvables pour l'import")
+
+                # Envoyer les fichiers à l'input[type=file]
+                inputs = self.vegsol_driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
+                target_input = inputs[-1] if inputs else None
+                if not target_input:
+                    raise RuntimeError("Champ d'import fichier introuvable")
+                try:
+                    target_input.send_keys("\n".join(files))
+                except Exception as e:
+                    print(f"[Cartes] Envoi fichiers échoué: {e}", file=self.stdout_redirect)
+
+                time.sleep(0.75)
+
+                # 8) Clic droit au centre de la carte
+                map_el = wait.until(EC.visibility_of_element_located((By.ID, "map")))
+                ActionChains(self.vegsol_driver).move_to_element(map_el).context_click(map_el).perform()
+                time.sleep(0.5)
+
+                # 10) Cliquer sur 'Ressources'
+                try:
+                    btn_res = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(.,'Ressources')]")))
+                    btn_res.click()
+                except Exception:
+                    pass
+
+                time.sleep(0.75)
+
+                # 12) Scraper les éléments de la pop-up
+                html = self.vegsol_driver.page_source
+                soup = BeautifulSoup(html, "lxml")
+                def _txt(sel):
+                    el = soup.select_one(sel)
+                    return el.get_text(" ", strip=True) if el else "Non trouvé"
+                alt = _txt("div.altitude-info")
+                veg = _txt("div.tooltip-pill.vegetation-pill")
+                soil = _txt("div.tooltip-pill.soil-pill")
+                self._update_vegsol_table({"altitude": alt, "vegetation": veg, "sol": soil})
+                return
+            except Exception as flow_err:
+                print(f"[Cartes] Flux import/scraping échoué: {flow_err}", file=self.stdout_redirect)
+
             def _open_layer(layer_label: str) -> None:
                 try:
                     wait = WebDriverWait(self.vegsol_driver, 0.5)
@@ -1546,6 +1660,26 @@ class ContexteEcoTab(ttk.Frame):
             print(f"[Cartes] Erreur : {e}", file=self.stdout_redirect)
         finally:
             self.after(0, lambda: self.vegsol_button.config(state="normal"))
+
+    def _update_vegsol_table(self, data: dict) -> None:
+        try:
+            alt = data.get('altitude', '')
+            veg = data.get('vegetation', '')
+            soil = data.get('sol', '')
+            def _fill(widget: tk.Text, s: str):
+                try:
+                    widget.config(state='normal')
+                    widget.delete('1.0', tk.END)
+                    s2 = s if (isinstance(s, str) and s.strip()) else 'Non trouvé'
+                    widget.insert(tk.END, s2)
+                    widget.config(state='disabled')
+                except Exception:
+                    pass
+            self.after(0, lambda: _fill(self.veg_alt_txt, alt))
+            self.after(0, lambda: _fill(self.veg_veg_txt, veg))
+            self.after(0, lambda: _fill(self.veg_soil_txt, soil))
+        except Exception:
+            pass
 
     # --- Boutons ajoutés ---
     def start_rlt_thread(self):

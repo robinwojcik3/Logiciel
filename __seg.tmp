@@ -1,0 +1,122 @@
+    def _run_vegsol(self):
+        try:
+            print("[Cartes] Lancement du scraping des cartes", file=self.stdout_redirect)
+            ze_path = self.ze_shp_var.get()
+            gdf = gpd.read_file(ze_path)
+            if gdf.crs is None:
+                raise ValueError("CRS non défini")
+            gdf = gdf.to_crs("EPSG:4326")
+            centroid = gdf.geometry.unary_union.centroid
+            lat, lon = centroid.y, centroid.x
+            coords_dms = dd_to_dms(lat, lon)
+            options = webdriver.ChromeOptions()
+            options.add_experimental_option("excludeSwitches", ["enable-logging"])
+            options.add_argument("--log-level=3")
+            options.add_argument("--disable-extensions")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            # Respect APP_HEADLESS env var (default: visible)
+            try:
+                if os.environ.get("APP_HEADLESS", "0").lower() in ("1", "true", "yes"):
+                    options.add_argument("--headless=new")
+            except Exception:
+                try:
+                    if os.environ.get("APP_HEADLESS", "0").lower() in ("1", "true", "yes"):
+                        options.add_argument("--headless")
+                except Exception:
+                    pass
+            # Driver local si présent
+            local_driver = os.path.join(REPO_ROOT if 'REPO_ROOT' in globals() else os.path.abspath(os.path.join(os.path.dirname(__file__), '..')), 'tools', 'chromedriver.exe')
+            if os.path.isfile(local_driver):
+                self.vegsol_driver = webdriver.Chrome(service=Service(local_driver), options=options)
+            else:
+                self.vegsol_driver = webdriver.Chrome(options=options)
+            self.vegsol_driver.maximize_window()
+
+            def _open_layer(layer_label: str) -> None:
+                try:
+                    wait = WebDriverWait(self.vegsol_driver, 0.5)
+                    self.vegsol_driver.execute_script(
+                        "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
+                    )
+                    self.vegsol_driver.switch_to.window(self.vegsol_driver.window_handles[-1])
+                    addr = wait.until(EC.element_to_be_clickable((By.ID, "address-input")))
+                    addr.click()
+                    addr.clear()
+                    addr.send_keys(coords_dms)
+                    wait.until(
+                        EC.element_to_be_clickable((By.ID, "search-address-btn"))
+                    ).click()
+                    wait.until(
+                        EC.element_to_be_clickable(
+                            (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
+                        )
+                    ).click()
+                    checkbox = wait.until(
+                        EC.element_to_be_clickable(
+                            (By.XPATH, f"//label[contains(.,'{layer_label}')]/input")
+                        )
+                    )
+                    if not checkbox.is_selected():
+                        checkbox.click()
+                except Exception as fe:
+                    print(
+                        f"[Cartes] Étapes {layer_label} échouées : {fe}",
+                        file=self.stdout_redirect,
+                    )
+
+            _open_layer("Carte de la végétation")
+            _open_layer("Carte des sols")
+        except Exception as e:
+            print(f"[Cartes] Erreur : {e}", file=self.stdout_redirect)
+        finally:
+            self.after(0, lambda: self.vegsol_button.config(state="normal"))
+
+    # --- Boutons ajoutés ---
+    def start_rlt_thread(self):
+        if not self.ze_shp_var.get().strip():
+            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
+            return
+        self.rlt_button.config(state="disabled")
+        t = threading.Thread(target=self._run_rlt)
+        t.daemon = True
+        t.start()
+
+    def start_bassin_thread(self):
+        if not self.ze_shp_var.get().strip():
+            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
+            return
+        self.bassin_button.config(state="disabled")
+        t = threading.Thread(target=self._run_bassin)
+        t.daemon = True
+        t.start()
+
+    def open_gmaps(self):
+        if not self.ze_shp_var.get().strip():
+            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
+            return
+        try:
+            gdf = gpd.read_file(self.ze_shp_var.get())
+            if gdf.crs is None:
+                raise ValueError("CRS non défini")
+            gdf = gdf.to_crs("EPSG:4326")
+            centroid = gdf.geometry.unary_union.centroid
+            lat, lon = centroid.y, centroid.x
+            url = f"https://www.google.com/maps/@{lat},{lon},17z"
+            print(f"[Maps] {url}", file=self.stdout_redirect)
+            webbrowser.open(url)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d’ouvrir Google Maps : {e}")
+
+    def _run_rlt(self):
+        try:
+            ze_path = self.ze_shp_var.get()
+            gdf = gpd.read_file(ze_path)
+            if gdf.crs is None:
+                raise ValueError("CRS non défini")
+            gdf = gdf.to_crs("EPSG:4326")
+            centroid = gdf.geometry.unary_union.centroid
+            lat_dd, lon_dd = centroid.y, centroid.x
+            commune, _dep = self._detect_commune(lat_dd, lon_dd)
+            wait_s = WAIT_TILES_DEFAULT

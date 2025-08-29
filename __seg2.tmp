@@ -1,0 +1,87 @@
+            # Mettre à jour aussi les zones scrollables
+            def _fill(widget, s):
+                try:
+                    widget.config(state='normal')
+                    widget.delete('1.0', tk.END)
+                    s2 = s if (isinstance(s, str) and not s.lower().startswith('non trouv')) else 'Non trouvé'
+                    widget.insert(tk.END, s2)
+                    widget.config(state='disabled')
+                except Exception:
+                    pass
+            self.after(0, lambda: _fill(self.wiki_climat_txt, clim_txt2 or ''))
+            self.after(0, lambda: _fill(self.wiki_occ_txt, occ_txt2 or ''))
+            self.after(0, lambda: self.wiki_climat_var.set(_norm(clim_txt2)))
+            self.after(0, lambda: self.wiki_occ_var.set(_norm(occ_txt2)))
+            # Mettre à jour l'URL et l'état du bouton d'ouverture
+            def _upd_url():
+                try:
+                    self.wiki_last_url = url_txt or ""
+                    if hasattr(self, 'wiki_open_button'):
+                        self.wiki_open_button.config(state=("normal" if self.wiki_last_url else "disabled"))
+                except Exception:
+                    pass
+            self.after(0, _upd_url)
+        except Exception:
+            pass
+
+    def start_vegsol_thread(self):
+        if not self.ze_shp_var.get().strip():
+            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
+            return
+        print("[Cartes] Bouton cartes cliqué", file=self.stdout_redirect)
+        self.vegsol_button.config(state="disabled")
+        t = threading.Thread(target=self._run_vegsol)
+        t.daemon = True
+        t.start()
+
+    def _run_vegsol(self):
+        try:
+            print("[Cartes] Lancement du scraping des cartes", file=self.stdout_redirect)
+            ze_path = self.ze_shp_var.get()
+            gdf = gpd.read_file(ze_path)
+            if gdf.crs is None:
+                raise ValueError("CRS non défini")
+            gdf = gdf.to_crs("EPSG:4326")
+            centroid = gdf.geometry.unary_union.centroid
+            lat, lon = centroid.y, centroid.x
+            coords_dms = dd_to_dms(lat, lon)
+            options = webdriver.ChromeOptions()
+            options.add_experimental_option("excludeSwitches", ["enable-logging"])
+            options.add_argument("--log-level=3")
+            options.add_argument("--disable-extensions")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            # Respect APP_HEADLESS env var (default: visible)
+            try:
+                if os.environ.get("APP_HEADLESS", "0").lower() in ("1", "true", "yes"):
+                    options.add_argument("--headless=new")
+            except Exception:
+                try:
+                    if os.environ.get("APP_HEADLESS", "0").lower() in ("1", "true", "yes"):
+                        options.add_argument("--headless")
+                except Exception:
+                    pass
+            # Driver local si présent
+            local_driver = os.path.join(REPO_ROOT if 'REPO_ROOT' in globals() else os.path.abspath(os.path.join(os.path.dirname(__file__), '..')), 'tools', 'chromedriver.exe')
+            if os.path.isfile(local_driver):
+                self.vegsol_driver = webdriver.Chrome(service=Service(local_driver), options=options)
+            else:
+                self.vegsol_driver = webdriver.Chrome(options=options)
+            self.vegsol_driver.maximize_window()
+
+            def _open_layer(layer_label: str) -> None:
+                try:
+                    wait = WebDriverWait(self.vegsol_driver, 0.5)
+                    self.vegsol_driver.execute_script(
+                        "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
+                    )
+                    self.vegsol_driver.switch_to.window(self.vegsol_driver.window_handles[-1])
+                    addr = wait.until(EC.element_to_be_clickable((By.ID, "address-input")))
+                    addr.click()
+                    addr.clear()
+                    addr.send_keys(coords_dms)
+                    wait.until(
+                        EC.element_to_be_clickable((By.ID, "search-address-btn"))
+                    ).click()
+                    wait.until(
