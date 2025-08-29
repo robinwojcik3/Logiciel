@@ -3641,23 +3641,60 @@ class ContexteEcoTab(ttk.Frame):
 
             wait = WebDriverWait(driver, 12)
 
+            # Helper: trouve la 1ère suggestion visible dans plusieurs implémentations d'auto-complétion
+            def _first_suggestion(drv):
+                candidates = [
+                    "#searchTaxons + .tt-menu .tt-suggestion",
+                    ".tt-menu .tt-suggestion",
+                    "ul.ui-autocomplete li.ui-menu-item",
+                    "div.autocomplete-suggestions div.autocomplete-suggestion",
+                    "div.list-group a.list-group-item",
+                ]
+                for css in candidates:
+                    try:
+                        els = drv.find_elements(By.CSS_SELECTOR, css)
+                        for el in els:
+                            if el.is_displayed():
+                                return el
+                    except Exception:
+                        pass
+                return None
+
             for idx, sp in enumerate(species_list, start=1):
                 try:
                     print(f"[Biodiv] ({idx}/{len(species_list)}) {sp}", file=self.stdout_redirect)
                     driver.get("https://atlas.biodiversite-auvergne-rhone-alpes.fr/")
 
-                    inp = wait.until(EC.presence_of_element_located((By.ID, "searchTaxons")))
+                    inp = wait.until(EC.element_to_be_clickable((By.ID, "searchTaxons")))
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", inp)
                     inp.click()
                     time.sleep(0.5)
 
                     inp.clear()
                     inp.send_keys(sp)
 
-                    time.sleep(0.4)
-                    inp.send_keys(Keys.ARROW_DOWN)
-                    inp.send_keys(Keys.ENTER)
+                    # Attendre l'apparition de la liste et cliquer la 1ère suggestion visible
+                    sug = None
+                    try:
+                        sug = WebDriverWait(driver, 5).until(lambda d: _first_suggestion(d))
+                    except Exception:
+                        sug = None
 
-                    time.sleep(1.0)
+                    if sug is not None:
+                        try:
+                            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", sug)
+                            ActionChains(driver).move_to_element(sug).pause(0.05).click(sug).perform()
+                        except Exception:
+                            # Repli: flèche bas + entrée
+                            inp.send_keys(Keys.ARROW_DOWN)
+                            inp.send_keys(Keys.ENTER)
+                    else:
+                        # Repli: flèche bas + entrée
+                        inp.send_keys(Keys.ARROW_DOWN)
+                        inp.send_keys(Keys.ENTER)
+
+                    # Laisser charger la page de l'espèce
+                    time.sleep(1.2)
                     img_el = wait.until(EC.presence_of_element_located((By.ID, "mainImg")))
                     src = img_el.get_attribute("src") or ""
 
