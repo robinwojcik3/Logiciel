@@ -472,13 +472,15 @@ class StyleHelper:
         self.master.configure(bg=bg)
         s = self.style
         s.configure(".", background=bg, foreground=fg, fieldbackground=card_bg, bordercolor=border)
-        s.configure("Card.TFrame", background=card_bg, bordercolor=border, relief="solid", borderwidth=1)
-        s.configure("Header.TFrame", background=card_bg, bordercolor=border, relief="flat")
+        # Card-like containers
+        s.configure("Card.TFrame", background=card_bg, bordercolor=border, relief="solid", borderwidth=1, padding=8)
+        s.configure("Header.TFrame", background=card_bg, bordercolor=border, relief="flat", padding=6)
         s.configure("TLabel", background=bg, foreground=fg)
         s.configure("Card.TLabel", background=card_bg, foreground=fg)
         s.configure("Subtle.TLabel", background=bg, foreground=subfg)
         s.configure("Tooltip.TLabel", background="#111827", foreground="#F9FAFB")
-        s.configure("Accent.TButton", padding=10, background=accent, foreground="#FFFFFF")
+        # Buttons: compact, consistent
+        s.configure("Accent.TButton", padding=(12, 6), background=accent, foreground="#FFFFFF")
         s.map("Accent.TButton", background=[("active", active_accent)], foreground=[("active", "#FFFFFF")])
         s.configure("Card.TCheckbutton", background=card_bg, foreground=fg)
         s.configure("Card.TRadiobutton", background=card_bg, foreground=fg)
@@ -578,7 +580,7 @@ class ExportCartesTab(ttk.Frame):
         self.scrollable_frame = ttk.Frame(canvas)
         self.scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.configure(yscrollcommand=scrollbar.set, height=220)
         canvas.grid(row=2, column=0, columnspan=4, sticky="nsew", pady=(6, 6))
         scrollbar.grid(row=2, column=4, sticky="ns", padx=(6,0))
         proj.rowconfigure(2, weight=1); proj.columnconfigure(1, weight=1)
@@ -1175,7 +1177,7 @@ class ContexteEcoTab(ttk.Frame):
         ttk.Radiobutton(opt, text="AE + ZE", variable=self.cadrage_var, value="BOTH", style="Card.TRadiobutton").grid(row=1, column=0, sticky="w")
         ttk.Radiobutton(opt, text="ZE uniquement", variable=self.cadrage_var, value="ZE", style="Card.TRadiobutton").grid(row=1, column=1, sticky="w", padx=(12,0))
         ttk.Radiobutton(opt, text="AE uniquement", variable=self.cadrage_var, value="AE", style="Card.TRadiobutton").grid(row=1, column=2, sticky="w", padx=(12,0))
-        ttk.Checkbutton(opt, text="Ã‰craser si le PNG existe", variable=self.overwrite_var, style="Card.TCheckbutton").grid(row=2, column=0, columnspan=3, sticky="w", pady=(6,0))
+        ttk.Checkbutton(opt, text="Écraser si le PNG existe", variable=self.overwrite_var, style="Card.TCheckbutton").grid(row=2, column=0, columnspan=3, sticky="w", pady=(6,0))
 
         ttk.Label(opt, text="DPI", style="Card.TLabel").grid(row=3, column=0, sticky="w", pady=(6,0))
         ttk.Spinbox(opt, from_=72, to=1200, textvariable=self.dpi_var, width=6, justify="right").grid(row=3, column=1, sticky="w", pady=(6,0))
@@ -1198,7 +1200,7 @@ class ContexteEcoTab(ttk.Frame):
         ttk.Radiobutton(exp_row, text="PNG uniquement", variable=self.export_type_var, value="PNG", style="Card.TRadiobutton").pack(side=tk.LEFT, padx=(8,0))
         ttk.Radiobutton(exp_row, text="QGIS uniquement", variable=self.export_type_var, value="QGS", style="Card.TRadiobutton").pack(side=tk.LEFT, padx=(8,0))
 
-        self.export_button = ttk.Button(opt, text="Lancer lâ€™export cartes", style="Accent.TButton", command=self.start_export_thread)
+        self.export_button = ttk.Button(opt, text="Lancer l’export cartes", style="Accent.TButton", command=self.start_export_thread)
         self.export_button.grid(row=8, column=0, columnspan=3, sticky="w", pady=(10,0))
 
         proj = ttk.Frame(exp)
@@ -1227,7 +1229,7 @@ class ContexteEcoTab(ttk.Frame):
         idf.pack(fill=tk.X, pady=(10,0))
         ttk.Label(idf, text="Tampon ZE (km)", style="Card.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Spinbox(idf, from_=0.0, to=50.0, increment=0.5, textvariable=self.buffer_var, width=6, justify="right").grid(row=0, column=1, sticky="w", padx=(8,0))
-        self.id_button = ttk.Button(idf, text="Lancer lâ€™ID Contexte Ã©co", style="Accent.TButton", command=self.start_id_thread)
+        self.id_button = ttk.Button(idf, text="Lancer l’ID Contexte éco", style="Accent.TButton", command=self.start_id_thread)
         self.id_button.grid(row=0, column=2, sticky="w", padx=(12,0))
 
         self.wiki_button = ttk.Button(
@@ -1265,7 +1267,7 @@ class ContexteEcoTab(ttk.Frame):
         wiki_res.pack(fill=tk.X, pady=(8,0))
         ttk.Label(wiki_res, text="Wikipedia", style="Card.TLabel").grid(row=0, column=0, sticky="w", pady=(0,6))
         # Bouton pour ouvrir l'article dans le navigateur
-        self.wiki_open_button = ttk.Button(wiki_res, text="Ouvrir WikipÃ©dia", command=self.open_wiki_url, state="disabled")
+        self.wiki_open_button = ttk.Button(wiki_res, text="Ouvrir Wikipédia", command=self.open_wiki_url, state="disabled")
         self.wiki_open_button.grid(row=0, column=1, sticky="e", pady=(0,6))
         ttk.Label(wiki_res, text="Climat", style="Card.TLabel").grid(row=1, column=0, sticky="nw")
         ttk.Label(wiki_res, text="Corine Land Cover", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
@@ -1291,9 +1293,9 @@ class ContexteEcoTab(ttk.Frame):
         # Tableau Cartes vÃ©gÃ©tation/sols (3 lignes)
         vegsol_res = ttk.Frame(wiki_res, style="Card.TFrame", padding=4)
         vegsol_res.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(6,0))
-        ttk.Label(vegsol_res, text="Cartes vÃ©gÃ©tation/sols", style="Card.TLabel").grid(row=0, column=0, sticky="w", pady=(0,6))
+        ttk.Label(vegsol_res, text="Cartes végétation/sols", style="Card.TLabel").grid(row=0, column=0, sticky="w", pady=(0,6))
         ttk.Label(vegsol_res, text="Altitude", style="Card.TLabel").grid(row=1, column=0, sticky="nw")
-        ttk.Label(vegsol_res, text="VÃ©gÃ©tation", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
+        ttk.Label(vegsol_res, text="Végétation", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
         ttk.Label(vegsol_res, text="Sols", style="Card.TLabel").grid(row=3, column=0, sticky="nw")
 
         alt_cell = ttk.Frame(vegsol_res); alt_cell.grid(row=1, column=1, sticky="nsew")
@@ -1321,7 +1323,7 @@ class ContexteEcoTab(ttk.Frame):
         # Console + progression
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
         bottom.pack(fill=tk.BOTH, expand=True, pady=(10,0))
-        self.status_label = ttk.Label(bottom, text="PrÃªt.", style="Status.TLabel")
+        self.status_label = ttk.Label(bottom, text="Prêt.", style="Status.TLabel")
         self.status_label.grid(row=0, column=0, sticky="w")
         self.progress = ttk.Progressbar(bottom, orient="horizontal", mode="determinate", length=220)
         self.progress.grid(row=0, column=1, sticky="e")
@@ -1469,17 +1471,17 @@ class ContexteEcoTab(ttk.Frame):
             occ_txt2 = data.get('occup_sols') or occ_txt
             def _norm(s):
                 try:
-                    return s if (isinstance(s, str) and not s.lower().startswith('Non trouvé) else 'â€”'
+                    return s if (isinstance(s, str) and not s.lower().startswith('non trouv')) else ''
                 except Exception:
-                    return 'â€”'
+                    return ''
             # Mettre Ã  jour aussi les zones scrollables
             def _fill(widget, s):
                 try:
-                    widget.config(state='normal')
                     widget.delete('1.0', tk.END)
-                    s2 = s if (isinstance(s, str) and not s.lower().startswith('Non trouvé) else 'Non trouvé'
+                    s2 = s if (isinstance(s, str) and not s.lower().startswith('non trouv')) else 'Non trouvé'
                     widget.insert(tk.END, s2)
                     widget.config(state='disabled')
+                    #
                 except Exception:
                     pass
             self.after(0, lambda: _fill(self.wiki_climat_txt, clim_txt2 or ''))
@@ -1975,9 +1977,17 @@ class ContexteEcoTab(ttk.Frame):
         if not self.all_projects:
             ttk.Label(self.scrollable_frame, text="Aucun projet trouvÃ© ou dossier inaccessible.", foreground="red").pack(anchor="w")
             return
-        for proj_path in self.filtered_projects:
+        # Display checkboxes in two columns for compactness
+        for i, proj_path in enumerate(self.filtered_projects):
             var = tk.IntVar(value=1); self.project_vars[proj_path] = var
-            ttk.Checkbutton(self.scrollable_frame, text=os.path.basename(proj_path), variable=var, style="Card.TCheckbutton").pack(anchor='w', padx=4, pady=1)
+            r, c = divmod(i, 2)
+            cb = ttk.Checkbutton(self.scrollable_frame, text=os.path.basename(proj_path), variable=var, style="Card.TCheckbutton")
+            cb.grid(row=r, column=c, sticky='w', padx=4, pady=2)
+        try:
+            self.scrollable_frame.columnconfigure(0, weight=1)
+            self.scrollable_frame.columnconfigure(1, weight=1)
+        except Exception:
+            pass
 
     def _apply_filter(self):
         term = normalize_name(self.filter_var.get())
@@ -1986,10 +1996,17 @@ class ContexteEcoTab(ttk.Frame):
         if not self.filtered_projects:
             ttk.Label(self.scrollable_frame, text="Aucun projet ne correspond au filtre.", foreground="red").pack(anchor="w")
             self.project_vars = {}; self._update_counts(); return
-        for proj_path in self.filtered_projects:
+        for i, proj_path in enumerate(self.filtered_projects):
             current = self.project_vars.get(proj_path, tk.IntVar(value=1))
             self.project_vars[proj_path] = current
-            ttk.Checkbutton(self.scrollable_frame, text=os.path.basename(proj_path), variable=current, style="Card.TCheckbutton").pack(anchor='w', padx=4, pady=1)
+            r, c = divmod(i, 2)
+            cb = ttk.Checkbutton(self.scrollable_frame, text=os.path.basename(proj_path), variable=current, style="Card.TCheckbutton")
+            cb.grid(row=r, column=c, sticky='w', padx=4, pady=2)
+        try:
+            self.scrollable_frame.columnconfigure(0, weight=1)
+            self.scrollable_frame.columnconfigure(1, weight=1)
+        except Exception:
+            pass
         self._update_counts()
 
     def _select_all(self, state: bool):
@@ -2248,9 +2265,9 @@ class MainApp:
         # Header global + bouton thÃ¨me
         top = ttk.Frame(root, style="Header.TFrame", padding=(12, 8))
         top.pack(fill=tk.X)
-        ttk.Label(top, text="Contexte Ã©co â€” Suite dâ€™outils", style="Card.TLabel",
+        ttk.Label(top, text='Contexte éco — Suite d’outils', style='Card.TLabel',
                   font=tkfont.Font(family="Segoe UI", size=16, weight="bold")).pack(side=tk.LEFT)
-        btn_theme = ttk.Button(top, text="Changer de thÃ¨me", command=self._toggle_theme)
+        btn_theme = ttk.Button(top, text='Changer de thème', command=self._toggle_theme)
         btn_theme.pack(side=tk.RIGHT)
 
         # Notebook
@@ -2297,6 +2314,11 @@ def launch():
 
 if __name__ == "__main__":
     launch()
+
+
+
+
+
 
 
 
