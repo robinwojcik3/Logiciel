@@ -48,7 +48,7 @@ import geopandas as gpd
 # au lancement de l'UI principale.
 
 # Import du scraper Wikipédia
-from .wikipedia_scraper import DEP, fetch_wikipedia_info
+from .wikipedia_scraper import DEP, get_wikipedia_extracts
 
 # Import du worker QGIS externalisé
 from .export_worker import worker_run
@@ -1263,8 +1263,23 @@ class ContexteEcoTab(ttk.Frame):
         self.wiki_open_button.grid(row=0, column=1, sticky="e", pady=(0,6))
         ttk.Label(wiki_res, text="Climat", style="Card.TLabel").grid(row=1, column=0, sticky="nw")
         ttk.Label(wiki_res, text="Corine Land Cover", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
-        ttk.Label(wiki_res, textvariable=self.wiki_climat_var, wraplength=900, style="Card.TLabel").grid(row=1, column=1, sticky="w")
-        ttk.Label(wiki_res, textvariable=self.wiki_occ_var, wraplength=900, style="Card.TLabel").grid(row=2, column=1, sticky="w")
+        # Cellules scrollables pour les textes
+        clim_cell = ttk.Frame(wiki_res)
+        clim_cell.grid(row=1, column=1, sticky="nsew")
+        self.wiki_climat_txt = tk.Text(clim_cell, height=4, wrap=tk.WORD, state='disabled', relief='flat')
+        clim_scroll = ttk.Scrollbar(clim_cell, orient="vertical", command=self.wiki_climat_txt.yview)
+        self.wiki_climat_txt.configure(yscrollcommand=clim_scroll.set)
+        self.wiki_climat_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        clim_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        occ_cell = ttk.Frame(wiki_res)
+        occ_cell.grid(row=2, column=1, sticky="nsew")
+        self.wiki_occ_txt = tk.Text(occ_cell, height=4, wrap=tk.WORD, state='disabled', relief='flat')
+        occ_scroll = ttk.Scrollbar(occ_cell, orient="vertical", command=self.wiki_occ_txt.yview)
+        self.wiki_occ_txt.configure(yscrollcommand=occ_scroll.set)
+        self.wiki_occ_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        occ_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
         wiki_res.columnconfigure(1, weight=1)
 
         # Console + progression
@@ -1387,7 +1402,7 @@ class ContexteEcoTab(ttk.Frame):
                 commune, dep = self._detect_commune(lat, lon)
                 query = f"{commune} {dep}".strip()
             print(f"[Wiki] Requête : {query}", file=self.stdout_redirect)
-            data, self.wiki_driver = fetch_wikipedia_info(query)
+            data = get_wikipedia_extracts(query)
             # Mettre à jour le tableau Wikipedia (dès que les données sont disponibles)
             self._update_wiki_table(data)
             if "error" in data:
@@ -1413,13 +1428,28 @@ class ContexteEcoTab(ttk.Frame):
             clim_txt = data.get('climat_p1', '')
             occ_txt = data.get('occupation_p1', '')
             url_txt = data.get('url', '')
+            # Compat: utiliser les nouvelles clés si présentes
+            clim_txt2 = data.get('climat') or clim_txt
+            occ_txt2 = data.get('occup_sols') or occ_txt
             def _norm(s):
                 try:
                     return s if (isinstance(s, str) and not s.lower().startswith('non trouv')) else '—'
                 except Exception:
                     return '—'
-            self.after(0, lambda: self.wiki_climat_var.set(_norm(clim_txt)))
-            self.after(0, lambda: self.wiki_occ_var.set(_norm(occ_txt)))
+            # Mettre à jour aussi les zones scrollables
+            def _fill(widget, s):
+                try:
+                    widget.config(state='normal')
+                    widget.delete('1.0', tk.END)
+                    s2 = s if (isinstance(s, str) and not s.lower().startswith('non trouv')) else 'Non trouvé'
+                    widget.insert(tk.END, s2)
+                    widget.config(state='disabled')
+                except Exception:
+                    pass
+            self.after(0, lambda: _fill(self.wiki_climat_txt, clim_txt2 or ''))
+            self.after(0, lambda: _fill(self.wiki_occ_txt, occ_txt2 or ''))
+            self.after(0, lambda: self.wiki_climat_var.set(_norm(clim_txt2)))
+            self.after(0, lambda: self.wiki_occ_var.set(_norm(occ_txt2)))
             # Mettre à jour l'URL et l'état du bouton d'ouverture
             def _upd_url():
                 try:
