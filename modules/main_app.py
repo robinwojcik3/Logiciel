@@ -1893,6 +1893,40 @@ class PlantNetTab(ttk.Frame):
 
 
     def _build_ui(self):
+        # Zone haute défilante + console basse fixe
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        top_container = ttk.Frame(self)
+        top_container.grid(row=0, column=0, sticky="nsew")
+        canvas = tk.Canvas(top_container, highlightthickness=0, borderwidth=0)
+        vscroll = ttk.Scrollbar(top_container, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vscroll.set)
+        vscroll.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        top = ttk.Frame(canvas)
+        _win = canvas.create_window((0, 0), window=top, anchor="nw")
+        def _on_frame_config(_=None):
+            try:
+                canvas.configure(scrollregion=canvas.bbox("all"))
+            except Exception:
+                pass
+        def _on_canvas_config(e):
+            try:
+                canvas.itemconfigure(_win, width=e.width)
+            except Exception:
+                pass
+        top.bind("<Configure>", _on_frame_config)
+        canvas.bind("<Configure>", _on_canvas_config)
+        def _mw(e):
+            try:
+                delta = -1 * (e.delta // 120)
+            except Exception:
+                delta = -1 if getattr(e, 'num', 0) == 4 else (1 if getattr(e, 'num', 0) == 5 else 0)
+            if delta:
+                canvas.yview_scroll(delta, "units")
+        canvas.bind_all("<MouseWheel>", _mw)
+        canvas.bind_all("<Button-4>", _mw)
+        canvas.bind_all("<Button-5>", _mw)
 
         header = ttk.Frame(top, style="Header.TFrame", padding=(14, 12))
 
