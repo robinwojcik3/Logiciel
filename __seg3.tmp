@@ -1,0 +1,13 @@
+vegsol_res = ttk.Frame(self, style="Card.TFrame", padding=12)
+        vegsol_res.pack(fill=tk.X, pady=(8,0))
+        ttk.Label(vegsol_res, text="Cartes végétation/sols", style="Card.TLabel").grid(row=0, column=0, sticky="w", pady=(0,6))
+        ttk.Label(vegsol_res, text="Altitude", style="Card.TLabel").grid(row=1, column=0, sticky="nw")
+        ttk.Label(vegsol_res, text="Végétation", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
+        ttk.Label(vegsol_res, text="Sols", style="Card.TLabel").grid(row=3, column=0, sticky="nw")
+
+        alt_cell = ttk.Frame(vegsol_res); alt_cell.grid(row=1, column=1, sticky="nsew")
+        self.veg_alt_txt = tk.Text(alt_cell, height=2, wrap=tk.WORD, state='disabled', relief='flat')
+        alt_scroll = ttk.Scrollbar(alt_cell, orient="vertical", command=self.veg_alt_txt.yview)
+        self.veg_alt_txt.configure(yscrollcommand=alt_scroll.set)
+        self.veg_alt_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        alt_scroll.pack(side

@@ -1272,7 +1272,7 @@ class ContexteEcoTab(ttk.Frame):
         # Cellules scrollables pour les textes
         clim_cell = ttk.Frame(wiki_res)
         clim_cell.grid(row=1, column=1, sticky="nsew")
-        self.wiki_climat_txt = tk.Text(clim_cell, height=4, wrap=tk.WORD, state='disabled', relief='flat')
+        self.wiki_climat_txt = tk.Text(clim_cell, height=3, wrap=tk.WORD, state='disabled', relief='flat')
         clim_scroll = ttk.Scrollbar(clim_cell, orient="vertical", command=self.wiki_climat_txt.yview)
         self.wiki_climat_txt.configure(yscrollcommand=clim_scroll.set)
         self.wiki_climat_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -1280,7 +1280,7 @@ class ContexteEcoTab(ttk.Frame):
 
         occ_cell = ttk.Frame(wiki_res)
         occ_cell.grid(row=2, column=1, sticky="nsew")
-        self.wiki_occ_txt = tk.Text(occ_cell, height=4, wrap=tk.WORD, state='disabled', relief='flat')
+        self.wiki_occ_txt = tk.Text(occ_cell, height=3, wrap=tk.WORD, state='disabled', relief='flat')
         occ_scroll = ttk.Scrollbar(occ_cell, orient="vertical", command=self.wiki_occ_txt.yview)
         self.wiki_occ_txt.configure(yscrollcommand=occ_scroll.set)
         self.wiki_occ_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -1289,8 +1289,8 @@ class ContexteEcoTab(ttk.Frame):
         wiki_res.columnconfigure(1, weight=1)
 
         # Tableau Cartes végétation/sols (3 lignes)
-        vegsol_res = ttk.Frame(self, style="Card.TFrame", padding=12)
-        vegsol_res.pack(fill=tk.X, pady=(8,0))
+        vegsol_res = ttk.Frame(self, style="Card.TFrame", padding=8)
+        vegsol_res.pack(fill=tk.X, pady=(4,0))
         ttk.Label(vegsol_res, text="Cartes végétation/sols", style="Card.TLabel").grid(row=0, column=0, sticky="w", pady=(0,6))
         ttk.Label(vegsol_res, text="Altitude", style="Card.TLabel").grid(row=1, column=0, sticky="nw")
         ttk.Label(vegsol_res, text="Végétation", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
@@ -1304,14 +1304,14 @@ class ContexteEcoTab(ttk.Frame):
         alt_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
         veg_cell = ttk.Frame(vegsol_res); veg_cell.grid(row=2, column=1, sticky="nsew")
-        self.veg_veg_txt = tk.Text(veg_cell, height=4, wrap=tk.WORD, state='disabled', relief='flat')
+        self.veg_veg_txt = tk.Text(veg_cell, height=3, wrap=tk.WORD, state='disabled', relief='flat')
         veg_scroll = ttk.Scrollbar(veg_cell, orient="vertical", command=self.veg_veg_txt.yview)
         self.veg_veg_txt.configure(yscrollcommand=veg_scroll.set)
         self.veg_veg_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         veg_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
         soil_cell = ttk.Frame(vegsol_res); soil_cell.grid(row=3, column=1, sticky="nsew")
-        self.veg_soil_txt = tk.Text(soil_cell, height=4, wrap=tk.WORD, state='disabled', relief='flat')
+        self.veg_soil_txt = tk.Text(soil_cell, height=3, wrap=tk.WORD, state='disabled', relief='flat')
         soil_scroll = ttk.Scrollbar(soil_cell, orient="vertical", command=self.veg_soil_txt.yview)
         self.veg_soil_txt.configure(yscrollcommand=soil_scroll.set)
         self.veg_soil_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
