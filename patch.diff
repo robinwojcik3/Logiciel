@@ -1,0 +1,48 @@
+*** Begin Patch
+*** Update File: modules/main_app.py
+@@
+-        self.wiki_button = ttk.Button(
++        self.wiki_button = ttk.Button(
+             idf,
+             text="Scraper Wikipedia",
+             style="Accent.TButton",
+             command=self.start_wiki_thread,
+         )
+         self.wiki_button.grid(row=0, column=3, sticky="w", padx=(12,0))
+ 
++        # Nouveau bouton Photo Biodiv'AURA (a cote de Wikipedia)
++        self.biodiv_button = ttk.Button(
++            idf,
++            text="Photo Biodiv'AURA",
++            style="Accent.TButton",
++            command=self.open_biodiv_dialog,
++        )
++        self.biodiv_button.grid(row=0, column=4, sticky="w", padx=(12,0))
++
+@@
+-        self.vegsol_button = ttk.Button(
++        # Decale les boutons suivants d'une colonne
++        self.vegsol_button = ttk.Button(
+             idf,
+             text="Cartes végétation/sols",
+             style="Accent.TButton",
+             command=self.start_vegsol_thread,
+         )
+-        self.vegsol_button.grid(row=0, column=4, sticky="w", padx=(12,0))
++        self.vegsol_button.grid(row=0, column=5, sticky="w", padx=(12,0))
+@@
+-        self.rlt_button = ttk.Button(idf, text="Remonter le temps", style="Accent.TButton", command=self.start_rlt_thread)
+-        self.rlt_button.grid(row=0, column=5, sticky="w", padx=(12,0))
++        self.rlt_button = ttk.Button(idf, text="Remonter le temps", style="Accent.TButton", command=self.start_rlt_thread)
++        self.rlt_button.grid(row=0, column=6, sticky="w", padx=(12,0))
+@@
+-        self.maps_button = ttk.Button(idf, text="Ouvrir Google Maps", style="Accent.TButton", command=self.open_gmaps)
+-        self.maps_button.grid(row=0, column=6, sticky="w", padx=(12,0))
++        self.maps_button = ttk.Button(idf, text="Ouvrir Google Maps", style="Accent.TButton", command=self.open_gmaps)
++        self.maps_button.grid(row=0, column=7, sticky="w", padx=(12,0))
+@@
+-        self.bassin_button = ttk.Button(idf, text="Bassin versant", style="Accent.TButton", command=self.start_bassin_thread)
+-        self.bassin_button.grid(row=0, column=7, sticky="w", padx=(12,0))
++        self.bassin_button = ttk.Button(idf, text="Bassin versant", style="Accent.TButton", command=self.start_bassin_thread)
++        self.bassin_button.grid(row=0, column=8, sticky="w", padx=(12,0))
+*** End Patch
