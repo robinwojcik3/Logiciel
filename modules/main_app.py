@@ -96,19 +96,37 @@ import geopandas as gpd
 
 
 
+# Assurer que le dossier racine du projet est dans sys.path quand ce fichier est exécuté directement
+try:
+    _THIS_DIR = os.path.dirname(__file__)
+    _PROJECT_ROOT = os.path.abspath(os.path.join(_THIS_DIR, '..'))  # .. = dossier Logiciel/
+    if _PROJECT_ROOT not in sys.path:
+        sys.path.insert(0, _PROJECT_ROOT)
+except Exception:
+    pass
+
+
 # Import du scraper Wikipédia
 
-from .wikipedia_scraper import DEP, get_wikipedia_extracts
-
-
-
-# Import du worker QGIS externalisé
-
-from .export_worker import worker_run
-
-
-
-
+try:
+    # When run as package (via Start.py)
+    from .wikipedia_scraper import DEP, get_wikipedia_extracts
+except Exception:
+    # Fallback when running this file directly
+    from modules.wikipedia_scraper import DEP, get_wikipedia_extracts
+  
+  
+  # Import du worker QGIS externalisé
+ 
+try:
+    from .export_worker import worker_run
+except Exception:
+    from modules.export_worker import worker_run
+  
+  
+  
+  
+  
 
 # ==== Imports spécifiques onglet 2 (gardés en tête de fichier comme le script source) ====
 
