@@ -301,7 +301,7 @@ def to_long_unc(path: str) -> str:
 
 def from_long_unc(path: str) -> str:
 
-    """Convertit un chemin Windows étendu (\\\\?\\ ou \\\\?\\UNC) en chemin standard.
+    r"""Convertit un chemin Windows étendu (\\?\ ou \\?\UNC) en chemin standard.
 
     - \\?\UNC\server\share\... -> \\server\share\...
     - \\?\C:\path -> C:\path
@@ -1065,13 +1065,9 @@ class ExportCartesTab(ttk.Frame):
 
         header.pack(fill=tk.X, pady=(0, 10))
 
-        ttk.Label(header, text="Export cartes — QGIS → PNG", style="Card.TLabel", font=self.font_title)\
+        ttk.Label(header, text="Export cartes — QGIS → PNG", style="Card.TLabel", font=self.font_title).grid(row=0, column=0, sticky="w")
 
-            .grid(row=0, column=0, sticky="w")
-
-        ttk.Label(header, text="Sélection shapefiles, choix du cadrage, export multi-projets.", style="Subtle.TLabel", font=self.font_sub)\
-
-            .grid(row=1, column=0, sticky="w", pady=(4,0))
+        ttk.Label(header, text="Sélection shapefiles, choix du cadrage, export multi-projets.", style="Subtle.TLabel", font=self.font_sub).grid(row=1, column=0, sticky="w", pady=(4,0))
 
         header.columnconfigure(0, weight=1)
 
@@ -1295,9 +1291,7 @@ class ExportCartesTab(ttk.Frame):
 
             var = tk.IntVar(value=1); self.project_vars[proj_path] = var
 
-            ttk.Checkbutton(self.scrollable_frame, text=os.path.basename(proj_path), variable=var, style="Card.TCheckbutton")\
-
-                .pack(anchor='w', padx=4, pady=1)
+            ttk.Checkbutton(self.scrollable_frame, text=os.path.basename(proj_path), variable=var, style="Card.TCheckbutton").pack(anchor='w', padx=4, pady=1)
 
 
 
@@ -1321,9 +1315,7 @@ class ExportCartesTab(ttk.Frame):
 
             self.project_vars[proj_path] = current
 
-            ttk.Checkbutton(self.scrollable_frame, text=os.path.basename(proj_path), variable=current, style="Card.TCheckbutton")\
-
-                .pack(anchor='w', padx=4, pady=1)
+            ttk.Checkbutton(self.scrollable_frame, text=os.path.basename(proj_path), variable=current, style="Card.TCheckbutton").pack(anchor='w', padx=4, pady=1)
 
         self._update_counts()
 
@@ -1839,13 +1831,9 @@ class PlantNetTab(ttk.Frame):
 
         header.pack(fill=tk.X, pady=(0, 10))
 
-        ttk.Label(header, text="Identification Pl@ntNet", style="Card.TLabel", font=self.font_title)\
+        ttk.Label(header, text="Identification Pl@ntNet", style="Card.TLabel", font=self.font_title).grid(row=0, column=0, sticky="w")
 
-            .grid(row=0, column=0, sticky="w")
-
-        ttk.Label(header, text="Analyse un dossier d'images via l'API Pl@ntNet.", style="Subtle.TLabel", font=self.font_sub)\
-
-            .grid(row=1, column=0, sticky="w", pady=(4,0))
+        ttk.Label(header, text="Analyse un dossier d'images via l'API Pl@ntNet.", style="Subtle.TLabel", font=self.font_sub).grid(row=1, column=0, sticky="w", pady=(4,0))
 
         header.columnconfigure(0, weight=1)
 
@@ -2079,15 +2067,9 @@ class IDContexteEcoTab(ttk.Frame):
 
         header.pack(fill=tk.X, pady=(0, 10))
 
-        ttk.Label(header, text="Identification des zonages", style="Card.TLabel", font=self.font_title)\
+        ttk.Label(header, text="Identification des zonages", style="Card.TLabel", font=self.font_title).grid(row=0, column=0, sticky="w")
 
-            .grid(row=0, column=0, sticky="w")
-
-        ttk.Label(header, text="Choisissez les shapefiles de référence puis lancez l'analyse.",
-
-                  style="Subtle.TLabel", font=self.font_sub)\
-
-            .grid(row=1, column=0, sticky="w", pady=(4,0))
+        ttk.Label(header, text="Choisissez les shapefiles de référence puis lancez l'analyse.", style="Subtle.TLabel", font=self.font_sub).grid(row=1, column=0, sticky="w", pady=(4,0))
 
         header.columnconfigure(0, weight=1)
 
