@@ -3644,10 +3644,18 @@ class ContexteEcoTab(ttk.Frame):
 
             # Collecter toutes les données d'espèces avec leurs images
             species_data = []
+            
+            # Charger la page principale une seule fois
+            print("[Biodiv] Chargement de la page principale...", file=self.stdout_redirect)
+            driver.get("https://atlas.biodiversite-auvergne-rhone-alpes.fr/")
+
             for idx, sp in enumerate(species_list, start=1):
                 try:
                     print(f"[Biodiv] ({idx}/{len(species_list)}) {sp}", file=self.stdout_redirect)
-                    driver.get("https://atlas.biodiversite-auvergne-rhone-alpes.fr/")
+                    
+                    # Revenir à la page d'accueil pour la recherche si nécessaire (plus rapide que de recharger)
+                    if "atlas.biodiversite" not in driver.current_url:
+                         driver.get("https://atlas.biodiversite-auvergne-rhone-alpes.fr/")
 
                     inp = wait.until(EC.element_to_be_clickable((By.ID, "searchTaxons")))
                     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", inp)
