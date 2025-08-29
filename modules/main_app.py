@@ -1060,8 +1060,41 @@ class ExportCartesTab(ttk.Frame):
 
 
     def _build_ui(self):
-
-        header = ttk.Frame(self, style="Header.TFrame", padding=(14, 12))
+        # Layout root of the tab: top scrollable content + fixed bottom console
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        top_container = ttk.Frame(self)
+        top_container.grid(row=0, column=0, sticky="nsew")
+        canvas = tk.Canvas(top_container, highlightthickness=0, borderwidth=0)
+        vscroll = ttk.Scrollbar(top_container, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vscroll.set)
+        vscroll.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        top = ttk.Frame(canvas)
+        _win = canvas.create_window((0, 0), window=top, anchor="nw")
+        def _on_frame_config(_e=None):
+            try:
+                canvas.configure(scrollregion=canvas.bbox("all"))
+            except Exception:
+                pass
+        def _on_canvas_config(e):
+            try:
+                canvas.itemconfigure(_win, width=e.width)
+            except Exception:
+                pass
+        top.bind("<Configure>", _on_frame_config)
+        canvas.bind("<Configure>", _on_canvas_config)
+        def _mw(e):
+            try:
+                delta = -1 * (e.delta // 120)
+            except Exception:
+                delta = -1 if getattr(e, 'num', 0) == 4 else (1 if getattr(e, 'num', 0) == 5 else 0)
+            if delta:
+                canvas.yview_scroll(delta, "units")
+        canvas.bind_all("<MouseWheel>", _mw)
+        canvas.bind_all("<Button-4>", _mw)
+        canvas.bind_all("<Button-5>", _mw)
+        header = ttk.Frame(top, style="Header.TFrame", padding=(14, 12))
 
         header.pack(fill=tk.X, pady=(0, 10))
 
@@ -1839,7 +1872,7 @@ class PlantNetTab(ttk.Frame):
 
 
 
-        card = ttk.Frame(self, style="Card.TFrame", padding=12)
+        card = ttk.Frame(top, style="Card.TFrame", padding=12)
 
         card.pack(fill=tk.X)
 
@@ -1859,7 +1892,7 @@ class PlantNetTab(ttk.Frame):
 
 
 
-        act = ttk.Frame(self, style="Card.TFrame", padding=12)
+        act = ttk.Frame(top, style="Card.TFrame", padding=12)
 
         act.pack(fill=tk.X, pady=(10,0))
 
@@ -1874,8 +1907,8 @@ class PlantNetTab(ttk.Frame):
 
 
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
-
-        bottom.pack(fill=tk.BOTH, expand=True, pady=(10,0))
+        bottom.grid(row=1, column=0, sticky="nsew", pady=(10,0))
+        bottom.columnconfigure(0, weight=1)
 
         self.log_text = tk.Text(bottom, height=12, wrap=tk.WORD, state='disabled',
 
@@ -2098,8 +2131,8 @@ class IDContexteEcoTab(ttk.Frame):
 
 
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
-
-        bottom.pack(fill=tk.BOTH, expand=True, pady=(10,0))
+        bottom.grid(row=1, column=0, sticky="nsew", pady=(10,0))
+        bottom.columnconfigure(0, weight=1)
 
         self.log_text = tk.Text(bottom, height=12, wrap=tk.WORD, state='disabled',
 
@@ -2316,10 +2349,44 @@ class ContexteEcoTab(ttk.Frame):
     # ---------- Construction UI ----------
 
     def _build_ui(self):
+        # Layout racine: contenu haut défilant + console fixe en bas
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        top_container = ttk.Frame(self)
+        top_container.grid(row=0, column=0, sticky="nsew")
+        canvas = tk.Canvas(top_container, highlightthickness=0, borderwidth=0)
+        vscroll = ttk.Scrollbar(top_container, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vscroll.set)
+        vscroll.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        top = ttk.Frame(canvas)
+        _win = canvas.create_window((0, 0), window=top, anchor="nw")
+        def _on_frame_config(_e=None):
+            try:
+                canvas.configure(scrollregion=canvas.bbox("all"))
+            except Exception:
+                pass
+        def _on_canvas_config(e):
+            try:
+                canvas.itemconfigure(_win, width=e.width)
+            except Exception:
+                pass
+        top.bind("<Configure>", _on_frame_config)
+        canvas.bind("<Configure>", _on_canvas_config)
+        def _mw(e):
+            try:
+                delta = -1 * (e.delta // 120)
+            except Exception:
+                delta = -1 if getattr(e, 'num', 0) == 4 else (1 if getattr(e, 'num', 0) == 5 else 0)
+            if delta:
+                canvas.yview_scroll(delta, "units")
+        canvas.bind_all("<MouseWheel>", _mw)
+        canvas.bind_all("<Button-4>", _mw)
+        canvas.bind_all("<Button-5>", _mw)
 
         # Sélecteurs shapefiles
 
-        shp = ttk.Frame(self, style="Card.TFrame", padding=12)
+        shp = ttk.Frame(top, style="Card.TFrame", padding=12)
 
         shp.pack(fill=tk.X)
 
@@ -2335,7 +2402,7 @@ class ContexteEcoTab(ttk.Frame):
 
         # Encart Export cartes
 
-        exp = ttk.Frame(self, style="Card.TFrame", padding=12)
+        exp = ttk.Frame(top, style="Card.TFrame", padding=12)
 
         exp.pack(fill=tk.BOTH, expand=True, pady=(10,0))
 
@@ -2451,7 +2518,7 @@ class ContexteEcoTab(ttk.Frame):
 
         # Encart ID contexte éco
 
-        idf = ttk.Frame(self, style="Card.TFrame", padding=12)
+        idf = ttk.Frame(top, style="Card.TFrame", padding=12)
 
         idf.pack(fill=tk.X, pady=(10,0))
 
@@ -2527,7 +2594,7 @@ class ContexteEcoTab(ttk.Frame):
 
         # Tableau Wikipedia (2 lignes, 2 colonnes)
 
-        wiki_res = ttk.Frame(self, style="Card.TFrame", padding=12)
+        wiki_res = ttk.Frame(top, style="Card.TFrame", padding=12)
 
         wiki_res.pack(fill=tk.X, pady=(8,0))
 
@@ -2644,8 +2711,8 @@ class ContexteEcoTab(ttk.Frame):
         # Console + progression
 
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
-
-        bottom.pack(fill=tk.BOTH, expand=True, pady=(10,0))
+        bottom.grid(row=1, column=0, sticky="nsew", pady=(10,0))
+        bottom.columnconfigure(0, weight=1)
 
         self.status_label = ttk.Label(bottom, text="Prêt.", style="Status.TLabel")
 
@@ -2685,9 +2752,12 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-        obtn = ttk.Button(bottom, text="Ouvrire output", command=self._open_out_dir)
-
+        obtn = ttk.Button(bottom, text="📂 Ouvrir le dossier de sortie", command=self._open_out_dir)
         obtn.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8,0))
+        try:
+            ToolTip(obtn, "Ouvrir le dossier cible")
+        except Exception:
+            pass
 
 
 
