@@ -2423,32 +2423,41 @@ class ContexteEcoTab(ttk.Frame):
     # ---------- Construction UI ----------
 
     def _build_ui(self):
-        # Layout racine: contenu haut défilant + console fixe en bas
+        # Layout racine: contenu haut défilant (vertical uniquement) + console fixe en bas
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
         top_container = ttk.Frame(self)
         top_container.grid(row=0, column=0, sticky="nsew")
+
+        # Zone défilante verticale sans barre horizontale (tout le contenu
+        # s'adapte en largeur au canevas pour éviter le défilement latéral)
         canvas = tk.Canvas(top_container, highlightthickness=0, borderwidth=0)
         vscroll = ttk.Scrollbar(top_container, orient="vertical", command=canvas.yview)
-        hscroll = ttk.Scrollbar(top_container, orient="horizontal", command=canvas.xview)
-        canvas.configure(yscrollcommand=vscroll.set, xscrollcommand=hscroll.set)
+        canvas.configure(yscrollcommand=vscroll.set)
         vscroll.pack(side=tk.RIGHT, fill=tk.Y)
-        hscroll.pack(side=tk.BOTTOM, fill=tk.X)
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
         top = ttk.Frame(canvas)
         _win = canvas.create_window((0, 0), window=top, anchor="nw")
+
         def _on_frame_config(_e=None):
+            # Met à jour la zone défilante lorsque le contenu change
             try:
                 canvas.configure(scrollregion=canvas.bbox("all"))
             except Exception:
                 pass
+
         def _on_canvas_config(e):
+            # Force l'adaptation en largeur du contenu au canevas
             try:
-                pass
+                canvas.itemconfigure(_win, width=e.width)
             except Exception:
                 pass
+
         top.bind("<Configure>", _on_frame_config)
         canvas.bind("<Configure>", _on_canvas_config)
+
+        # Défilement à la molette uniquement quand la souris est sur le canevas
         def _mw(e):
             try:
                 delta = -1 * (e.delta // 120)
@@ -2456,9 +2465,10 @@ class ContexteEcoTab(ttk.Frame):
                 delta = -1 if getattr(e, 'num', 0) == 4 else (1 if getattr(e, 'num', 0) == 5 else 0)
             if delta:
                 canvas.yview_scroll(delta, "units")
-        canvas.bind_all("<MouseWheel>", _mw)
-        canvas.bind_all("<Button-4>", _mw)
-        canvas.bind_all("<Button-5>", _mw)
+
+        canvas.bind("<MouseWheel>", _mw)
+        canvas.bind("<Button-4>", _mw)
+        canvas.bind("<Button-5>", _mw)
 
         # Sélecteurs shapefiles
 
