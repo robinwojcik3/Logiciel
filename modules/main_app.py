@@ -3863,6 +3863,16 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
+    def start_rlt_thread(self):
+        if not self.ze_shp_var.get().strip():
+            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
+            return
+        self.rlt_button.config(state="disabled")
+        t = threading.Thread(target=self._run_rlt)
+        t.daemon = True
+        t.start()
+
+
     def _run_rlt(self):
 
         try:
