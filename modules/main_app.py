@@ -3639,7 +3639,9 @@ class ContexteEcoTab(ttk.Frame):
             else:
                 driver = webdriver.Chrome(options=options)
 
-            wait = WebDriverWait(driver, 12)
+            # Attentes plus courtes pour accélérer le flux
+            driver.set_page_load_timeout(6)
+            wait = WebDriverWait(driver, 6)
 
             # Helper: trouve la 1ère suggestion visible dans plusieurs implémentations d'auto-complétion
             def _first_suggestion(drv):
@@ -3660,6 +3662,7 @@ class ContexteEcoTab(ttk.Frame):
                         pass
                 return None
 
+            WAIT_SHORT = 1.0  # secondes
             for idx, sp in enumerate(species_list, start=1):
                 try:
                     print(f"[Biodiv] ({idx}/{len(species_list)}) {sp}", file=self.stdout_redirect)
@@ -3668,7 +3671,7 @@ class ContexteEcoTab(ttk.Frame):
                     inp = wait.until(EC.element_to_be_clickable((By.ID, "searchTaxons")))
                     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", inp)
                     inp.click()
-                    time.sleep(0.5)
+                    time.sleep(WAIT_SHORT)
 
                     inp.clear()
                     inp.send_keys(sp)
@@ -3676,7 +3679,7 @@ class ContexteEcoTab(ttk.Frame):
                     # Attendre l'apparition de la liste et cliquer la 1ère suggestion visible
                     sug = None
                     try:
-                        sug = WebDriverWait(driver, 5).until(lambda d: _first_suggestion(d))
+                        sug = WebDriverWait(driver, 1).until(lambda d: _first_suggestion(d))
                     except Exception:
                         sug = None
 
@@ -3693,16 +3696,16 @@ class ContexteEcoTab(ttk.Frame):
                         inp.send_keys(Keys.ARROW_DOWN)
                         inp.send_keys(Keys.ENTER)
 
-                    # Laisser charger la page de l'espèce
-                    time.sleep(1.2)
-                    img_el = wait.until(EC.presence_of_element_located((By.ID, "mainImg")))
+                    # Laisser charger la page de l'espèce (attente courte)
+                    time.sleep(WAIT_SHORT)
+                    img_el = WebDriverWait(driver, 2).until(EC.presence_of_element_located((By.ID, "mainImg")))
                     src = img_el.get_attribute("src") or ""
 
                     img_bytes = None
                     if src:
                         try:
                             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-                            r = requests.get(src, headers=headers, timeout=15)
+                            r = requests.get(src, headers=headers, timeout=4)
                             if r.ok:
                                 img_bytes = r.content
                         except Exception as de:
