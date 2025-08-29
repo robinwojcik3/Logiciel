@@ -3671,19 +3671,7 @@ class ContexteEcoTab(ttk.Frame):
                         except Exception as de:
                             print(f"[Biodiv] Download echoue pour {sp}: {de}", file=self.stdout_redirect)
 
-                    # Ajouter au document unique
-                    p_title = doc.add_paragraph(sp)
-                    p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-                    # Lien de la page espece
-                    try:
-                        url_sp = driver.current_url
-                        p_link = doc.add_paragraph()
-                        add_hyperlink(p_link, url_sp, url_sp, italic=False)
-                        p_link.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                    except Exception:
-                        pass
-
+                    # Ajouter au document: photo puis nom de l'espèce en dessous
                     if img_bytes:
                         try:
                             tmp_path = os.path.join(tempfile.gettempdir(), f"biodiv_{int(time.time()*1000)}.jpg")
@@ -3694,6 +3682,18 @@ class ContexteEcoTab(ttk.Frame):
                             doc.add_paragraph("[Image non inseree]")
                     else:
                         doc.add_paragraph("Photo introuvable sur la page.")
+
+                    p_title = doc.add_paragraph(sp)
+                    p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+                    # Lien de la page espece (sous le nom)
+                    try:
+                        url_sp = driver.current_url
+                        p_link = doc.add_paragraph()
+                        add_hyperlink(p_link, url_sp, url_sp, italic=False)
+                        p_link.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    except Exception:
+                        pass
 
                     if idx < len(species_list):
                         doc.add_page_break()
