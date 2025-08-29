@@ -3639,30 +3639,13 @@ class ContexteEcoTab(ttk.Frame):
             else:
                 driver = webdriver.Chrome(options=options)
 
-            # Attentes plus courtes pour accélérer le flux
-            driver.set_page_load_timeout(6)
-            wait = WebDriverWait(driver, 6)
+            wait = WebDriverWait(driver, 10)
+            print(f"[Biodiv] Scraping de {len(species_list)} espece(s)...", file=self.stdout_redirect)
 
-            # Helper: trouve la 1ère suggestion visible dans plusieurs implémentations d'auto-complétion
-            def _first_suggestion(drv):
-                candidates = [
-                    "#searchTaxons + .tt-menu .tt-suggestion",
-                    ".tt-menu .tt-suggestion",
-                    "ul.ui-autocomplete li.ui-menu-item",
-                    "div.autocomplete-suggestions div.autocomplete-suggestion",
-                    "div.list-group a.list-group-item",
-                ]
-                for css in candidates:
-                    try:
-                        els = drv.find_elements(By.CSS_SELECTOR, css)
-                        for el in els:
-                            if el.is_displayed():
-                                return el
-                    except Exception:
-                        pass
-                return None
-
+            # Collecter toutes les données d'espèces avec leurs images
+            species_data = []
             WAIT_SHORT = 1.0  # secondes
+            
             for idx, sp in enumerate(species_list, start=1):
                 try:
                     print(f"[Biodiv] ({idx}/{len(species_list)}) {sp}", file=self.stdout_redirect)
@@ -3670,81 +3653,62 @@ class ContexteEcoTab(ttk.Frame):
 
                     inp = wait.until(EC.element_to_be_clickable((By.ID, "searchTaxons")))
                     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", inp)
-                    inp.click()
                     time.sleep(WAIT_SHORT)
 
                     inp.clear()
                     inp.send_keys(sp)
-
-                    # Attendre l'apparition de la liste et cliquer la 1ère suggestion visible
-                    sug = None
-                    try:
-                        sug = WebDriverWait(driver, 1).until(lambda d: _first_suggestion(d))
-                    except Exception:
-                        sug = None
-
-                    if sug is not None:
-                        try:
-                            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", sug)
-                            ActionChains(driver).move_to_element(sug).pause(0.05).click(sug).perform()
-                        except Exception:
-                            # Repli: flèche bas + entrée
-                            inp.send_keys(Keys.ARROW_DOWN)
-                            inp.send_keys(Keys.ENTER)
-                    else:
-                        # Repli: flèche bas + entrée
-                        inp.send_keys(Keys.ARROW_DOWN)
-                        inp.send_keys(Keys.ENTER)
-
-                    # Laisser charger la page de l'espèce (attente courte)
                     time.sleep(WAIT_SHORT)
-                    img_el = WebDriverWait(driver, 2).until(EC.presence_of_element_located((By.ID, "mainImg")))
-                    src = img_el.get_attribute("src") or ""
 
+                    # Cliquer sur le premier resultat
+                    try:
+                        first_result = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".search-results .result-item:first-child")))
+                        driver.execute_script("arguments[0].click();", first_result)
+                        time.sleep(WAIT_SHORT * 2)
+                    except Exception:
+                        print(f"[Biodiv] Pas de resultat pour {sp}", file=self.stdout_redirect)
+                        species_data.append({'name': sp, 'image_path': None, 'url': None})
+                        continue
+
+                    # Chercher une image
                     img_bytes = None
-                    if src:
-                        try:
-                            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-                            r = requests.get(src, headers=headers, timeout=4)
+                    tmp_path = None
+                    try:
+                        img_elem = driver.find_element(By.CSS_SELECTOR, ".species-photo img, .photo-gallery img, img[src*='photo'], img[src*='image']")
+                        img_url = img_elem.get_attribute("src")
+                        if img_url and img_url.startswith("http"):
+                            print(f"[Biodiv] Image trouvee: {img_url[:80]}...", file=self.stdout_redirect)
+                            r = requests.get(img_url, timeout=10)
                             if r.ok:
                                 img_bytes = r.content
-                        except Exception as de:
-                            print(f"[Biodiv] Download echoue pour {sp}: {de}", file=self.stdout_redirect)
+                                tmp_path = os.path.join(tempfile.gettempdir(), f"biodiv_{int(time.time()*1000)}_{idx}.jpg")
+                                with open(tmp_path, 'wb') as f:
+                                    f.write(img_bytes)
+                    except Exception as de:
+                        print(f"[Biodiv] Download echoue pour {sp}: {de}", file=self.stdout_redirect)
 
-                    # Ajouter au document: photo puis nom de l'espèce en dessous
-                    if img_bytes:
-                        try:
-                            tmp_path = os.path.join(tempfile.gettempdir(), f"biodiv_{int(time.time()*1000)}.jpg")
-                            with open(tmp_path, 'wb') as f:
-                                f.write(img_bytes)
-                            doc.add_paragraph().add_run().add_picture(tmp_path, width=IMG_WIDTH)
-                        except Exception:
-                            doc.add_paragraph("[Image non inseree]")
-                    else:
-                        doc.add_paragraph("Photo introuvable sur la page.")
-
-                    p_title = doc.add_paragraph(sp)
-                    p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-                    # Lien de la page espece (sous le nom)
+                    # Récupérer l'URL de la page espèce
                     try:
                         url_sp = driver.current_url
-                        p_link = doc.add_paragraph()
-                        add_hyperlink(p_link, url_sp, url_sp, italic=False)
-                        p_link.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     except Exception:
-                        pass
+                        url_sp = None
 
-                    if idx < len(species_list):
-                        doc.add_page_break()
+                    species_data.append({
+                        'name': sp,
+                        'image_path': tmp_path,
+                        'url': url_sp
+                    })
 
                 except Exception as sp_err:
                     print(f"[Biodiv] Erreur espece {sp}: {sp_err}", file=self.stdout_redirect)
+                    species_data.append({'name': sp, 'image_path': None, 'url': None})
 
             try:
                 driver.quit()
             except Exception:
                 pass
+
+            # Créer le tableau avec les images (2x3 format)
+            self._create_species_table(doc, species_data)
 
             ts = datetime.datetime.now().strftime('%Y%m%d-%H%M')
             doc_path = os.path.join(out_dir, f"Photos_BiodivAURA_{ts}.docx")
@@ -3764,13 +3728,78 @@ class ContexteEcoTab(ttk.Frame):
                     self.after(0, lambda: self.biodiv_launch_btn.config(state='normal'))
             except Exception:
                 pass
-    def start_rlt_thread(self):
 
-        if not self.ze_shp_var.get().strip():
-
-            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
-
+    def _create_species_table(self, doc, species_data):
+        """Crée un tableau 2x3 avec les images d'espèces comme dans le screenshot"""
+        if not species_data:
             return
+
+        # Traiter les espèces par groupes de 6 (2 lignes x 3 colonnes)
+        for page_start in range(0, len(species_data), 6):
+            page_species = species_data[page_start:page_start + 6]
+            
+            # Calculer le nombre de lignes nécessaires
+            rows_needed = (len(page_species) + 2) // 3  # +2 pour arrondir vers le haut
+            
+            # Créer le tableau
+            table = doc.add_table(rows=rows_needed, cols=3)
+            table.alignment = WD_TABLE_ALIGNMENT.CENTER
+            
+            # Configurer le style du tableau
+            table.style = 'Table Grid'
+            
+            # Remplir le tableau
+            for i, species in enumerate(page_species):
+                row_idx = i // 3
+                col_idx = i % 3
+                cell = table.cell(row_idx, col_idx)
+                
+                # Vider la cellule
+                cell.text = ''
+                
+                # Ajouter l'image
+                if species['image_path'] and os.path.exists(species['image_path']):
+                    try:
+                        # Créer un paragraphe pour l'image
+                        img_paragraph = cell.paragraphs[0]
+                        img_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        run = img_paragraph.runs[0] if img_paragraph.runs else img_paragraph.add_run()
+                        
+                        # Ajuster la taille de l'image pour le tableau (plus petite)
+                        img_width = Cm(4.5)  # Largeur réduite pour s'adapter au tableau
+                        run.add_picture(species['image_path'], width=img_width)
+                        
+                    except Exception as e:
+                        print(f"[Biodiv] Erreur ajout image {species['name']}: {e}", file=self.stdout_redirect)
+                        cell.paragraphs[0].add_run("[Image non disponible]")
+                else:
+                    cell.paragraphs[0].add_run("[Image non disponible]")
+                    cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                
+                # Ajouter le nom de l'espèce en dessous
+                name_paragraph = cell.add_paragraph()
+                name_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                name_run = name_paragraph.add_run(species['name'])
+                name_run.bold = True
+                
+                # Ajouter le lien si disponible
+                if species['url']:
+                    try:
+                        link_paragraph = cell.add_paragraph()
+                        link_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        add_hyperlink(link_paragraph, species['url'], "Voir sur Biodiv'AURA", italic=True)
+                    except Exception:
+                        pass
+            
+            # Ajuster la largeur des cellules
+            for row in table.rows:
+                for cell in row.cells:
+                    # Définir la largeur des cellules
+                    cell.width = Cm(5.5)
+            
+            # Ajouter un saut de page si ce n'est pas la dernière page
+            if page_start + 6 < len(species_data):
+                doc.add_page_break()
 
         self.rlt_button.config(state="disabled")
 
