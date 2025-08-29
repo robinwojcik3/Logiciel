@@ -3644,8 +3644,6 @@ class ContexteEcoTab(ttk.Frame):
 
             # Collecter toutes les données d'espèces avec leurs images
             species_data = []
-            WAIT_SHORT = 1.0  # secondes
-            
             for idx, sp in enumerate(species_list, start=1):
                 try:
                     print(f"[Biodiv] ({idx}/{len(species_list)}) {sp}", file=self.stdout_redirect)
@@ -3653,38 +3651,41 @@ class ContexteEcoTab(ttk.Frame):
 
                     inp = wait.until(EC.element_to_be_clickable((By.ID, "searchTaxons")))
                     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", inp)
-                    time.sleep(WAIT_SHORT)
 
                     inp.clear()
                     inp.send_keys(sp)
-                    time.sleep(WAIT_SHORT)
-
-                    # Cliquer sur le premier resultat
+                    
+                    # Attendre et cliquer sur le premier résultat
                     try:
                         first_result = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".search-results .result-item:first-child")))
                         driver.execute_script("arguments[0].click();", first_result)
-                        time.sleep(WAIT_SHORT * 2)
+                        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".species-header"))) # Attendre que la page de l'espèce se charge
                     except Exception:
                         print(f"[Biodiv] Pas de resultat pour {sp}", file=self.stdout_redirect)
                         species_data.append({'name': sp, 'image_path': None, 'url': None})
                         continue
 
-                    # Chercher une image
-                    img_bytes = None
+                    # Chercher une image de manière plus robuste
                     tmp_path = None
                     try:
-                        img_elem = driver.find_element(By.CSS_SELECTOR, ".species-photo img, .photo-gallery img, img[src*='photo'], img[src*='image']")
-                        img_url = img_elem.get_attribute("src")
-                        if img_url and img_url.startswith("http"):
-                            print(f"[Biodiv] Image trouvee: {img_url[:80]}...", file=self.stdout_redirect)
-                            r = requests.get(img_url, timeout=10)
-                            if r.ok:
-                                img_bytes = r.content
+                        # Prioriser la photo principale de l'espèce
+                        img_elems = driver.find_elements(By.CSS_SELECTOR, ".species-photo img")
+                        if not img_elems:
+                            # Sinon, chercher dans la galerie
+                            img_elems = driver.find_elements(By.CSS_SELECTOR, ".photo-gallery img")
+                        
+                        if img_elems:
+                            img_url = img_elems[0].get_attribute("src")
+                            if img_url and img_url.startswith("http"):
+                                print(f"[Biodiv] Image trouvee: {img_url[:80]}...", file=self.stdout_redirect)
+                                r = requests.get(img_url, stream=True, timeout=10)
+                                r.raise_for_status()
                                 tmp_path = os.path.join(tempfile.gettempdir(), f"biodiv_{int(time.time()*1000)}_{idx}.jpg")
                                 with open(tmp_path, 'wb') as f:
-                                    f.write(img_bytes)
+                                    for chunk in r.iter_content(1024):
+                                        f.write(chunk)
                     except Exception as de:
-                        print(f"[Biodiv] Download echoue pour {sp}: {de}", file=self.stdout_redirect)
+                        print(f"[Biodiv] Telechargement image echoue pour {sp}: {de}", file=self.stdout_redirect)
 
                     # Récupérer l'URL de la page espèce
                     try:
