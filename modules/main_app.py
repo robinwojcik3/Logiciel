@@ -1,36 +1,36 @@
-Ôªø#!/usr/bin/env "C:/Program Files/QGIS 3.40.3/apps/Python312/python.exe"
+#!/usr/bin/env "C:/Program Files/QGIS 3.40.3/apps/Python312/python.exe"
 
 # -*- coding: utf-8 -*-
 
 r"""
 
-Application √† onglets (ttk.Notebook) :
+Application ‡ onglets (ttk.Notebook) :
 
 
 
-Onglet ¬´ Contexte √©co ¬ª :
+Onglet ´ Contexte Èco ª :
 
     - Export des mises en page QGIS en PNG.
 
-    - Identification des zonages (ID Contexte √©co) avec tampon configurable.
+    - Identification des zonages (ID Contexte Èco) avec tampon configurable.
 
-    - S√©lection commune des shapefiles ZE/AE et console partag√©e.
+    - SÈlection commune des shapefiles ZE/AE et console partagÈe.
 
-    - Boutons ¬´ Remonter le temps ¬ª, ¬´ Ouvrir Google Maps ¬ª et ¬´ Bassin versant ¬ª
+    - Boutons ´ Remonter le temps ª, ´ Ouvrir Google Maps ª et ´ Bassin versant ª
 
-      utilisant le centro√Øde de la zone d'√©tude.
+      utilisant le centroÔde de la zone d'Ètude.
 
 
 
-Onglet ¬´ Identification Pl@ntNet ¬ª :
+Onglet ´ Identification Pl@ntNet ª :
 
     - Reconnaissance de plantes via l'API Pl@ntNet.
 
 
 
-Pr√©-requis Python : qgis (environnement QGIS), selenium, pillow, python-docx,
+PrÈ-requis Python : qgis (environnement QGIS), selenium, pillow, python-docx,
 
-openpyxl (non utilis√© ici), chromedriver dans PATH.
+openpyxl (non utilisÈ ici), chromedriver dans PATH.
 
 """
 
@@ -84,25 +84,25 @@ import geopandas as gpd
 
 
 
-# ==== Imports suppl√©mentaires pour l'onglet Contexte √©co ====
+# ==== Imports supplÈmentaires pour l'onglet Contexte Èco ====
 
-# Note: geopandas n'est pas utilis√© directement dans ce module.
+# Note: geopandas n'est pas utilisÈ directement dans ce module.
 
-# Les traitements g√©ospatiaux sont effectu√©s dans des modules d√©di√©s
+# Les traitements gÈospatiaux sont effectuÈs dans des modules dÈdiÈs
 
-# (ex: id_contexte_eco) afin d'√©viter de charger des d√©pendances lourdes
+# (ex: id_contexte_eco) afin d'Èviter de charger des dÈpendances lourdes
 
 # au lancement de l'UI principale.
 
 
 
-# Import du scraper Wikip√©dia
+# Import du scraper WikipÈdia
 
 from .wikipedia_scraper import DEP, get_wikipedia_extracts
 
 
 
-# Import du worker QGIS externalis√©
+# Import du worker QGIS externalisÈ
 
 from .export_worker import worker_run
 
@@ -110,7 +110,7 @@ from .export_worker import worker_run
 
 
 
-# ==== Imports sp√©cifiques onglet 2 (gard√©s en t√™te de fichier comme le script source) ====
+# ==== Imports spÈcifiques onglet 2 (gardÈs en tÍte de fichier comme le script source) ====
 
 from selenium import webdriver
 
@@ -148,7 +148,7 @@ from bs4 import BeautifulSoup
 
 
 
-# Enregistrer le d√©codeur HEIF
+# Enregistrer le dÈcodeur HEIF
 
 pillow_heif.register_heif_opener()
 
@@ -156,11 +156,11 @@ pillow_heif.register_heif_opener()
 
 # =========================
 
-# Param√®tres globaux
+# ParamËtres globaux
 
 # =========================
 
-# Contexte √©co ‚Äî Export Cartes
+# Contexte Èco ó Export Cartes
 
 DPI_DEFAULT        = 300
 
@@ -172,9 +172,9 @@ OVERWRITE_DEFAULT  = False
 
 
 
-LAYER_AE_NAME = "Aire d'√©tude √©largie"
+LAYER_AE_NAME = "Aire d'Ètude Èlargie"
 
-LAYER_ZE_NAME = "Zone d'√©tude"
+LAYER_ZE_NAME = "Zone d'Ètude"
 
 
 
@@ -184,11 +184,11 @@ SUBPATH    = r"Espace_RWO\CARTO ROBIN"
 
 
 
-OUT_IMG    = r"C:\Users\utilisateur\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 3) BDD\PYTHON\2) Contexte √©co\OUTPUT"
+OUT_IMG    = r"C:\Users\utilisateur\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 3) BDD\PYTHON\2) Contexte Èco\OUTPUT"
 
 
 
-# Dossier par d√©faut pour la s√©lection des shapefiles (onglet 1)
+# Dossier par dÈfaut pour la sÈlection des shapefiles (onglet 1)
 
 DEFAULT_SHAPE_DIR = r"C:\Users\utilisateur\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 2) CARTO terrain"
 
@@ -204,17 +204,17 @@ PY_VER    = "Python312"
 
 
 
-# Pr√©f√©rences
+# PrÈfÈrences
 
 PREFS_PATH = os.path.join(os.path.expanduser("~"), "ExportCartesContexteEco.config.json")
 
 
 
-# Constantes ¬´ Remonter le temps ¬ª et ¬´ Bassin versant ¬ª (issues du script source)
+# Constantes ´ Remonter le temps ª et ´ Bassin versant ª (issues du script source)
 
 LAYERS = [
 
-    ("Aujourd‚Äôhui",   "10"),
+    ("Aujourdíhui",   "10"),
 
     ("2000-2005",     "18"),
 
@@ -238,27 +238,27 @@ OUTPUT_DIR_RLT = os.path.join(OUT_IMG, "Remonter le temps")
 
 COMMENT_TEMPLATE = (
 
-    "R√©dige un commentaire synth√©tique de l'√©volution de l'occupation du sol observ√©e "
+    "RÈdige un commentaire synthÈtique de l'Èvolution de l'occupation du sol observÈe "
 
-    "sur les images a√©riennes de la zone d'√©tude, aux diff√©rentes dates indiqu√©es "
+    "sur les images aÈriennes de la zone d'Ètude, aux diffÈrentes dates indiquÈes "
 
-    "(1950‚Äì1965, 1965‚Äì1980, 2000‚Äì2005, aujourd‚Äôhui). Concentre-toi sur les grandes "
+    "(1950ñ1965, 1965ñ1980, 2000ñ2005, aujourdíhui). Concentre-toi sur les grandes "
 
-    "dynamiques d'am√©nagement (urbanisation, artificialisation, √©volution des milieux "
+    "dynamiques d'amÈnagement (urbanisation, artificialisation, Èvolution des milieux "
 
-    "ouverts ou bois√©s), en identifiant les principales transformations visibles. "
+    "ouverts ou boisÈs), en identifiant les principales transformations visibles. "
 
-    "Fais ta r√©ponse en un seul court paragraphe. Int√®gre les √©l√©ments de contexte "
+    "Fais ta rÈponse en un seul court paragraphe. IntËgre les ÈlÈments de contexte "
 
-    "historique et territorial propres √† la commune de {commune} pour interpr√©ter ces √©volutions."
+    "historique et territorial propres ‡ la commune de {commune} pour interprÈter ces Èvolutions."
 
 )
 
 
 
-# Onglet 3 ‚Äî Identification Pl@ntNet
+# Onglet 3 ó Identification Pl@ntNet
 
-API_KEY = "2b10vfT6MvFC2lcAzqG1ZMKO"  # Votre cl√© API Pl@ntNet
+API_KEY = "2b10vfT6MvFC2lcAzqG1ZMKO"  # Votre clÈ API Pl@ntNet
 
 PROJECT = "all"
 
@@ -301,7 +301,7 @@ def to_long_unc(path: str) -> str:
 
 def from_long_unc(path: str) -> str:
 
-    r"""Convertit un chemin Windows √©tendu (\\?\ ou \\?\UNC) en chemin standard.
+    r"""Convertit un chemin Windows Ètendu (\\?\ ou \\?\UNC) en chemin standard.
 
     - \\?\UNC\server\share\... -> \\server\share\...
     - \\?\C:\path -> C:\path
@@ -391,11 +391,11 @@ def qgis_multiprocessing_ok() -> bool:
 
 def run_worker_subprocess(projects: List[str], cfg: dict) -> tuple[int, int]:
 
-    """Ex√©cute un lot via QGIS Python dans un sous-processus.
+    """ExÈcute un lot via QGIS Python dans un sous-processus.
 
 
 
-    Cette approche √©vite totalement multiprocessing dans l'interpr√©teur QGIS,
+    Cette approche Èvite totalement multiprocessing dans l'interprÈteur QGIS,
 
     supprimant l'erreur `_multiprocessing`.
 
@@ -595,13 +595,13 @@ def resize_image(image_path, max_size=(800, 800), quality=70):
 
 
 
-    :param image_path: Chemin de l'image √† traiter.
+    :param image_path: Chemin de l'image ‡ traiter.
 
     :param max_size: Tuple indiquant la taille maximale (largeur, hauteur).
 
-    :param quality: Qualit√© de compression (1-100).
+    :param quality: QualitÈ de compression (1-100).
 
-    :return: BytesIO de l'image trait√©e ou None en cas d'erreur.
+    :return: BytesIO de l'image traitÈe ou None en cas d'erreur.
 
     """
 
@@ -631,19 +631,19 @@ def identify_plant(image_path, organ):
 
     """
 
-    Envoie une image √† l'API Pl@ntNet pour identification.
+    Envoie une image ‡ l'API Pl@ntNet pour identification.
 
 
 
-    :param image_path: Chemin de l'image √† envoyer.
+    :param image_path: Chemin de l'image ‡ envoyer.
 
     :param organ: Type d'organe de la plante (par exemple, 'flower').
 
-    :return: Nom scientifique de la plante identifi√©e ou None.
+    :return: Nom scientifique de la plante identifiÈe ou None.
 
     """
 
-    print(f"Envoi de l'image √† l'API : {image_path}")
+    print(f"Envoi de l'image ‡ l'API : {image_path}")
 
     try:
 
@@ -651,7 +651,7 @@ def identify_plant(image_path, organ):
 
         if not resized_image:
 
-            print(f"√âchec du redimensionnement de l'image : {image_path}")
+            print(f"…chec du redimensionnement de l'image : {image_path}")
 
             return None
 
@@ -675,7 +675,7 @@ def identify_plant(image_path, organ):
 
 
 
-        print(f"R√©ponse de l'API : {response.status_code}")
+        print(f"RÈponse de l'API : {response.status_code}")
 
         if response.status_code == 200:
 
@@ -685,13 +685,13 @@ def identify_plant(image_path, organ):
 
                 species = json_result['results'][0]['species']['scientificNameWithoutAuthor']
 
-                print(f"Plante identifi√©e : {species}")
+                print(f"Plante identifiÈe : {species}")
 
                 return species
 
             except (KeyError, IndexError):
 
-                print(f"Aucun r√©sultat trouv√© pour l'image : {image_path}")
+                print(f"Aucun rÈsultat trouvÈ pour l'image : {image_path}")
 
                 return None
 
@@ -723,7 +723,7 @@ def copy_and_rename_file(file_path, dest_folder, new_name, count):
 
     :param new_name: Nom scientifique de la plante.
 
-    :param count: Compteur pour diff√©rencier les fichiers portant le m√™me nom.
+    :param count: Compteur pour diffÈrencier les fichiers portant le mÍme nom.
 
     """
 
@@ -743,7 +743,7 @@ def copy_and_rename_file(file_path, dest_folder, new_name, count):
 
         shutil.copy(file_path, new_path)
 
-        print(f"Fichier copi√© et renomm√© : {file_path} -> {new_path}")
+        print(f"Fichier copiÈ et renommÈ : {file_path} -> {new_path}")
 
     except Exception as e:
 
@@ -779,7 +779,7 @@ def discover_projects() -> List[str]:
 
     except Exception as e:
 
-        log_with_time(f"Acc√®s PARTAGE impossible via listdir: {e}")
+        log_with_time(f"AccËs PARTAGE impossible via listdir: {e}")
 
 
 
@@ -798,7 +798,7 @@ def discover_projects() -> List[str]:
             files = os.listdir(d)
 
             qgz = [f for f in files if f.lower().endswith(".qgz")]
-            qgz = [f for f in qgz if normalize_name(f).startswith(normalize_name("Contexte √©co -"))]
+            qgz = [f for f in qgz if normalize_name(f).startswith(normalize_name("Contexte Èco -"))]
             return [from_long_unc(os.path.join(d, f)) for f in sorted(qgz)]
 
         except Exception:
@@ -811,13 +811,13 @@ def discover_projects() -> List[str]:
 
 # =========================
 
-# Fonctions IGN (onglet 2) ‚Äî identiques au script source
+# Fonctions IGN (onglet 2) ó identiques au script source
 
 # =========================
 
 def dms_to_dd(text: str) -> float:
 
-    pat = r"(\d{1,3})[¬∞d]\s*(\d{1,2})['m]\s*([\d\.]+)[\"s]?\s*([NSEW])"
+    pat = r"(\d{1,3})[∞d]\s*(\d{1,2})['m]\s*([\d\.]+)[\"s]?\s*([NSEW])"
 
     alt = r"(\d{1,3})\s+(\d{1,2})\s+([\d\.]+)\s*([NSEW])"
 
@@ -837,7 +837,7 @@ def dms_to_dd(text: str) -> float:
 
 def dd_to_dms(lat: float, lon: float) -> str:
 
-    """Convertit des coordonn√©es d√©cimales en DMS (degr√©s, minutes, secondes)."""
+    """Convertit des coordonnÈes dÈcimales en DMS (degrÈs, minutes, secondes)."""
 
     def _convert(value: float, positive: str, negative: str) -> str:
 
@@ -853,7 +853,7 @@ def dd_to_dms(lat: float, lon: float) -> str:
 
         seconds = (minutes_full - minutes) * 60
 
-        return f"{deg}¬∞{minutes:02d}'{seconds:04.1f}\"{hemi}"
+        return f"{deg}∞{minutes:02d}'{seconds:04.1f}\"{hemi}"
 
 
 
@@ -915,7 +915,7 @@ def add_hyperlink(paragraph, url: str, text: str, italic: bool = True):
 
 # =========================
 
-# UI ‚Äî Styles communs
+# UI ó Styles communs
 
 # =========================
 
@@ -949,7 +949,7 @@ class StyleHelper:
 
             active_accent = "#2563EB"
 
-        else:  # th√®me funky
+        else:  # thËme funky
 
             bg, fg, card_bg, accent, border, subfg = "#1E1E2F", "#FCEFF9", "#27293D", "#FF47A1", "#37394D", "#FFE66D"
 
@@ -1060,7 +1060,7 @@ class ExportCartesTab(ttk.Frame):
 
 
     def _build_ui(self):
-        # Zone haute d√©filante + console basse fixe (PlantNet)
+        # Zone haute dÈfilante + console basse fixe (PlantNet)
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
         top_container = ttk.Frame(self)
@@ -1132,9 +1132,9 @@ class ExportCartesTab(ttk.Frame):
 
         header.pack(fill=tk.X, pady=(0, 10))
 
-        ttk.Label(header, text="Export cartes ‚Äî QGIS ‚Üí PNG", style="Card.TLabel", font=self.font_title).grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text="Export cartes ó QGIS ? PNG", style="Card.TLabel", font=self.font_title).grid(row=0, column=0, sticky="w")
 
-        ttk.Label(header, text="S√©lection shapefiles, choix du cadrage, export multi-projets.", style="Subtle.TLabel", font=self.font_sub).grid(row=1, column=0, sticky="w", pady=(4,0))
+        ttk.Label(header, text="SÈlection shapefiles, choix du cadrage, export multi-projets.", style="Subtle.TLabel", font=self.font_sub).grid(row=1, column=0, sticky="w", pady=(4,0))
 
         header.columnconfigure(0, weight=1)
 
@@ -1156,9 +1156,9 @@ class ExportCartesTab(ttk.Frame):
 
         ttk.Label(shp, text="1. Couches Shapefile", style="Card.TLabel").grid(row=0, column=0, columnspan=4, sticky="w")
 
-        self._file_row(shp, 1, "üìÅ Zone d'√©tude‚Ä¶", self.ze_shp_var, lambda: self._select_shapefile('ZE'))
+        self._file_row(shp, 1, "?? Zone d'ÈtudeÖ", self.ze_shp_var, lambda: self._select_shapefile('ZE'))
 
-        self._file_row(shp, 2, "üìÅ Aire d'√©tude √©largie‚Ä¶", self.ae_shp_var, lambda: self._select_shapefile('AE'))
+        self._file_row(shp, 2, "?? Aire d'Ètude ÈlargieÖ", self.ae_shp_var, lambda: self._select_shapefile('AE'))
 
         shp.columnconfigure(1, weight=1)
 
@@ -1176,7 +1176,7 @@ class ExportCartesTab(ttk.Frame):
 
         ttk.Radiobutton(opt, text="AE uniquement", variable=self.cadrage_var, value="AE", style="Card.TRadiobutton").grid(row=1, column=2, sticky="w", padx=(12,0))
 
-        ttk.Checkbutton(opt, text="√âcraser si le PNG existe", variable=self.overwrite_var, style="Card.TCheckbutton").grid(row=1, column=3, sticky="w", padx=(24, 0))
+        ttk.Checkbutton(opt, text="…craser si le PNG existe", variable=self.overwrite_var, style="Card.TCheckbutton").grid(row=1, column=3, sticky="w", padx=(24, 0))
 
 
 
@@ -1198,17 +1198,17 @@ class ExportCartesTab(ttk.Frame):
 
         act = ttk.Frame(left, style="Card.TFrame", padding=12); act.pack(fill=tk.X, pady=(10,0))
 
-        self.export_button = ttk.Button(act, text="√¢‚Äì¬∂ Lancer l‚Äôexport", style="Accent.TButton", command=self.start_export_thread)
+        self.export_button = ttk.Button(act, text="‚ñ∂ Lancer líexport", style="Accent.TButton", command=self.start_export_thread)
 
         self.export_button.grid(row=0, column=0, sticky="w")
 
-        obtn = ttk.Button(act, text="üìÇ Ouvrir le dossier de sortie", command=self._open_out_dir)
+        obtn = ttk.Button(act, text="?? Ouvrir le dossier de sortie", command=self._open_out_dir)
 
         obtn.grid(row=0, column=1, padx=(10,0)); ToolTip(obtn, OUT_IMG)
 
-        tbtn = ttk.Button(act, text="üß™ Tester QGIS", command=self._test_qgis_threaded)
+        tbtn = ttk.Button(act, text="?? Tester QGIS", command=self._test_qgis_threaded)
 
-        tbtn.grid(row=0, column=2, padx=(10,0)); ToolTip(tbtn, "V√©rifier l‚Äôimport QGIS/Qt")
+        tbtn.grid(row=0, column=2, padx=(10,0)); ToolTip(tbtn, "VÈrifier líimport QGIS/Qt")
 
 
 
@@ -1256,7 +1256,7 @@ class ExportCartesTab(ttk.Frame):
 
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12); bottom.pack(fill=tk.BOTH, expand=True, pady=(10,0))
 
-        self.status_label = ttk.Label(bottom, text="Pr√™t.", style="Status.TLabel"); self.status_label.grid(row=0, column=0, sticky="w")
+        self.status_label = ttk.Label(bottom, text="PrÍt.", style="Status.TLabel"); self.status_label.grid(row=0, column=0, sticky="w")
 
         self.progress = ttk.Progressbar(bottom, orient="horizontal", mode="determinate", length=220)
 
@@ -1302,7 +1302,7 @@ class ExportCartesTab(ttk.Frame):
 
         copy_btn.grid(row=row, column=2, sticky="e")
 
-        clear_btn = ttk.Button(parent, text="‚úñ", width=3, command=lambda: var.set(""))
+        clear_btn = ttk.Button(parent, text="?", width=3, command=lambda: var.set(""))
 
         clear_btn.grid(row=row, column=3, sticky="e")
 
@@ -1322,9 +1322,9 @@ class ExportCartesTab(ttk.Frame):
 
     def _select_shapefile(self, shp_type):
 
-        label_text = "Zone d'√©tude" if shp_type == 'ZE' else "Aire d'√©tude √©largie"
+        label_text = "Zone d'Ètude" if shp_type == 'ZE' else "Aire d'Ètude Èlargie"
 
-        title = f"S√©lectionner le shapefile pour '{label_text}'"
+        title = f"SÈlectionner le shapefile pour '{label_text}'"
 
         base_dir = DEFAULT_SHAPE_DIR if os.path.isdir(DEFAULT_SHAPE_DIR) else os.path.expanduser("~")
 
@@ -1350,7 +1350,7 @@ class ExportCartesTab(ttk.Frame):
 
         if not self.all_projects:
 
-            ttk.Label(self.scrollable_frame, text="Aucun projet trouv√© ou dossier inaccessible.", foreground="red").pack(anchor="w")
+            ttk.Label(self.scrollable_frame, text="Aucun projet trouvÈ ou dossier inaccessible.", foreground="red").pack(anchor="w")
 
             return
 
@@ -1406,7 +1406,7 @@ class ExportCartesTab(ttk.Frame):
 
         selected = len(self._selected_projects()); total = len(self.filtered_projects)
 
-        self.status_label.config(text=f"Projets s√©lectionn√©s : {selected} / {total}")
+        self.status_label.config(text=f"Projets sÈlectionnÈs : {selected} / {total}")
 
 
 
@@ -1418,7 +1418,7 @@ class ExportCartesTab(ttk.Frame):
 
         except Exception as e:
 
-            messagebox.showerror("Erreur", f"Impossible d‚Äôouvrir le dossier de sortie : {e}")
+            messagebox.showerror("Erreur", f"Impossible díouvrir le dossier de sortie : {e}")
 
 
 
@@ -1432,7 +1432,7 @@ class ExportCartesTab(ttk.Frame):
 
         try:
 
-            log_with_time("Test QGIS : import‚Ä¶")
+            log_with_time("Test QGIS : importÖ")
 
             cfg = {"QGIS_ROOT": QGIS_ROOT, "QGIS_APP": QGIS_APP, "PY_VER": PY_VER}
 
@@ -1444,9 +1444,9 @@ class ExportCartesTab(ttk.Frame):
 
         except Exception as e:
 
-            log_with_time(f"√âchec import QGIS : {e}")
+            log_with_time(f"…chec import QGIS : {e}")
 
-            messagebox.showerror("QGIS", f"√âchec import QGIS : {e}")
+            messagebox.showerror("QGIS", f"…chec import QGIS : {e}")
 
 
 
@@ -1454,7 +1454,7 @@ class ExportCartesTab(ttk.Frame):
 
         if not self.ze_shp_var.get() or not self.ae_shp_var.get():
 
-            messagebox.showerror("Erreur", "S√©lectionnez les deux shapefiles."); return
+            messagebox.showerror("Erreur", "SÈlectionnez les deux shapefiles."); return
 
         if not os.path.isfile(self.ze_shp_var.get()) or not os.path.isfile(self.ae_shp_var.get()):
 
@@ -1464,7 +1464,7 @@ class ExportCartesTab(ttk.Frame):
 
         if not projets:
 
-            messagebox.showerror("Erreur", "S√©lectionnez au moins un projet."); return
+            messagebox.showerror("Erreur", "SÈlectionnez au moins un projet."); return
 
 
 
@@ -1528,7 +1528,7 @@ class ExportCartesTab(ttk.Frame):
 
             workers = int(self.workers_var.get())
 
-            # D√©sactive provisoirement le multiprocessing pour √©viter les erreurs _multiprocessing
+            # DÈsactive provisoirement le multiprocessing pour Èviter les erreurs _multiprocessing
 
             # keep configured workers
 
@@ -1536,7 +1536,7 @@ class ExportCartesTab(ttk.Frame):
 
             # Forcer au moins 2 workers pour utiliser ProcessPoolExecutor
 
-            # (et donc le Python de QGIS configur√© ci-dessous)
+            # (et donc le Python de QGIS configurÈ ci-dessous)
 
             workers = max(1, workers)
 
@@ -1606,7 +1606,7 @@ class ExportCartesTab(ttk.Frame):
 
                     self.after(0, ui_update_progress, ok + ko)
 
-                    log_with_time(f"Lot termin√©: {ok} OK, {ko} KO")
+                    log_with_time(f"Lot terminÈ: {ok} OK, {ko} KO")
 
             else:
 
@@ -1616,7 +1616,7 @@ class ExportCartesTab(ttk.Frame):
 
                     import multiprocessing as mp
 
-                    # Nettoyer l'environnement Python h√©rit√© pour √©viter le m√©lange de versions (3.12/3.13)
+                    # Nettoyer l'environnement Python hÈritÈ pour Èviter le mÈlange de versions (3.12/3.13)
 
                     for _k in ("PYTHONHOME", "PYTHONPATH", "PYTHONSTARTUP"):
 
@@ -1656,7 +1656,7 @@ class ExportCartesTab(ttk.Frame):
 
                             os.environ["PYTHONPATH"] = os.pathsep.join(py_paths)
 
-                            # Pr√©fixer le PATH avec les dossiers Python QGIS pour la r√©solution des DLLs
+                            # PrÈfixer le PATH avec les dossiers Python QGIS pour la rÈsolution des DLLs
 
                             os.environ["PATH"] = os.pathsep.join([qgis_py_root, qgis_dlls, os.environ.get("PATH", "")])
 
@@ -1688,13 +1688,13 @@ class ExportCartesTab(ttk.Frame):
 
                     except Exception as e:
 
-                        log_with_time(f"set_executable √Ø¬ø¬Ωchec: {e}")
+                        log_with_time(f"set_executable ÔøΩchec: {e}")
 
                 except Exception:
 
                     pass
 
-                # Ajuster temporairement sys.path pour privil√©gier les libs QGIS
+                # Ajuster temporairement sys.path pour privilÈgier les libs QGIS
 
                 old_syspath = list(sys.path)
 
@@ -1754,7 +1754,7 @@ class ExportCartesTab(ttk.Frame):
 
                             self.after(0, ui_update_progress, ok + ko)
 
-                            log_with_time(f"Lot termin√©: {ok} OK, {ko} KO")
+                            log_with_time(f"Lot terminÈ: {ok} OK, {ko} KO")
 
                         except Exception as e:
 
@@ -1764,11 +1764,11 @@ class ExportCartesTab(ttk.Frame):
 
                 sys.path = old_syspath
 
-                # Fallback s√©quentiel si aucun r√©sultat (pool KO)
+                # Fallback sÈquentiel si aucun rÈsultat (pool KO)
 
                 if (ok_total + ko_total) == 0 and chunks:
 
-                    log_with_time("Tous les workers ont √©chou√© -> bascule en mode s√©quentiel")
+                    log_with_time("Tous les workers ont ÈchouÈ -> bascule en mode sÈquentiel")
 
                     for chunk in chunks:
 
@@ -1782,7 +1782,7 @@ class ExportCartesTab(ttk.Frame):
 
                             self.after(0, ui_update_progress, ok + ko)
 
-                            log_with_time(f"Lot termin√© (fallback): {ok} OK, {ko} KO")
+                            log_with_time(f"Lot terminÈ (fallback): {ok} OK, {ko} KO")
 
                         except Exception as e:
 
@@ -1790,11 +1790,11 @@ class ExportCartesTab(ttk.Frame):
 
 
 
-            # Si aucun r√©sultat n'a √©t√© produit (workers plant√©s), on retente en s√©quentiel
+            # Si aucun rÈsultat n'a ÈtÈ produit (workers plantÈs), on retente en sÈquentiel
 
             if (ok_total + ko_total) == 0 and chunks:
 
-                log_with_time("Tous les workers ont √©chou√© ‚Äî bascule en mode s√©quentiel‚Ä¶")
+                log_with_time("Tous les workers ont ÈchouÈ ó bascule en mode sÈquentielÖ")
 
                 for chunk in chunks:
 
@@ -1808,17 +1808,17 @@ class ExportCartesTab(ttk.Frame):
 
                         self.after(0, ui_update_progress, ok + ko)
 
-                        log_with_time(f"Lot termin√© (fallback): {ok} OK, {ko} KO")
+                        log_with_time(f"Lot terminÈ (fallback): {ok} OK, {ko} KO")
 
                     except Exception as e:
 
                         log_with_time(f"Erreur fallback: {e}")
 
-            # Si aucun r√©sultat n'a √©t√© produit (workers plant√©s), on retente en s√©quentiel
+            # Si aucun rÈsultat n'a ÈtÈ produit (workers plantÈs), on retente en sÈquentiel
 
             if (ok_total + ko_total) == 0 and chunks:
 
-                log_with_time("Tous les workers ont √©chou√© ‚Äî bascule en mode s√©quentiel‚Ä¶")
+                log_with_time("Tous les workers ont ÈchouÈ ó bascule en mode sÈquentielÖ")
 
                 for chunk in chunks:
 
@@ -1832,7 +1832,7 @@ class ExportCartesTab(ttk.Frame):
 
                         self.after(0, ui_update_progress, ok + ko)
 
-                        log_with_time(f"Lot termin√© (fallback): {ok} OK, {ko} KO")
+                        log_with_time(f"Lot terminÈ (fallback): {ok} OK, {ko} KO")
 
                     except Exception as e:
 
@@ -1840,9 +1840,9 @@ class ExportCartesTab(ttk.Frame):
 
             elapsed = datetime.datetime.now() - start
 
-            log_with_time(f"FIN ‚Äî OK={ok_total} | KO={ko_total} | Attendu={self.total_expected} | Dur√©e={elapsed}")
+            log_with_time(f"FIN ó OK={ok_total} | KO={ko_total} | Attendu={self.total_expected} | DurÈe={elapsed}")
 
-            self.after(0, lambda: self.status_label.config(text=f"Termin√© ‚Äî OK={ok_total} / KO={ko_total}"))
+            self.after(0, lambda: self.status_label.config(text=f"TerminÈ ó OK={ok_total} / KO={ko_total}"))
 
         except Exception as e:
 
@@ -1860,7 +1860,7 @@ class ExportCartesTab(ttk.Frame):
 
 # =========================
 
-# Onglet 3 ‚Äî Identification Pl@ntNet (UI + logique)
+# Onglet 3 ó Identification Pl@ntNet (UI + logique)
 
 # =========================
 
@@ -1893,7 +1893,7 @@ class PlantNetTab(ttk.Frame):
 
 
     def _build_ui(self):
-        # Zone haute d√©filante + console basse fixe
+        # Zone haute dÈfilante + console basse fixe
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
         top_container = ttk.Frame(self)
@@ -1954,7 +1954,7 @@ class PlantNetTab(ttk.Frame):
 
         ttk.Entry(row, textvariable=self.folder_var).grid(row=0, column=0, sticky="ew")
 
-        ttk.Button(row, text="Parcourir‚Ä¶", command=self._pick_folder).grid(row=0, column=1, padx=(6,0))
+        ttk.Button(row, text="ParcourirÖ", command=self._pick_folder).grid(row=0, column=1, padx=(6,0))
 
         card.columnconfigure(1, weight=1)
 
@@ -1964,11 +1964,11 @@ class PlantNetTab(ttk.Frame):
 
         act.pack(fill=tk.X, pady=(10,0))
 
-        self.run_btn = ttk.Button(act, text="√¢‚Äì¬∂ Lancer l'analyse", style="Accent.TButton", command=self._start_thread)
+        self.run_btn = ttk.Button(act, text="‚ñ∂ Lancer l'analyse", style="Accent.TButton", command=self._start_thread)
 
         self.run_btn.grid(row=0, column=0, sticky="w")
 
-        obtn = ttk.Button(act, text="üìÇ Ouvrir le dossier de sortie", command=self._open_out_dir)
+        obtn = ttk.Button(act, text="?? Ouvrir le dossier de sortie", command=self._open_out_dir)
 
         obtn.grid(row=0, column=1, padx=(10,0)); ToolTip(obtn, "Ouvrir le dossier cible")
 
@@ -2020,7 +2020,7 @@ class PlantNetTab(ttk.Frame):
 
         except Exception as e:
 
-            messagebox.showerror("Erreur", f"Impossible d‚Äôouvrir le dossier : {e}")
+            messagebox.showerror("Erreur", f"Impossible díouvrir le dossier : {e}")
 
 
 
@@ -2042,7 +2042,7 @@ class PlantNetTab(ttk.Frame):
 
         if not folder:
 
-            print("Veuillez s√©lectionner un dossier.", file=self.stdout_redirect)
+            print("Veuillez sÈlectionner un dossier.", file=self.stdout_redirect)
 
             self.after(0, lambda: self.run_btn.config(state="normal"))
 
@@ -2050,7 +2050,7 @@ class PlantNetTab(ttk.Frame):
 
         if not os.path.exists(folder):
 
-            print(f"Le dossier √† traiter n'existe pas : {folder}", file=self.stdout_redirect)
+            print(f"Le dossier ‡ traiter n'existe pas : {folder}", file=self.stdout_redirect)
 
             self.after(0, lambda: self.run_btn.config(state="normal"))
 
@@ -2082,7 +2082,7 @@ class PlantNetTab(ttk.Frame):
 
         if not image_files:
 
-            print("Aucune image √† traiter dans le dossier.", file=self.stdout_redirect)
+            print("Aucune image ‡ traiter dans le dossier.", file=self.stdout_redirect)
 
             self.after(0, lambda: self.run_btn.config(state="normal"))
 
@@ -2116,7 +2116,7 @@ class PlantNetTab(ttk.Frame):
 
                     print(f"Aucune identification possible pour l'image : {image_path}")
 
-            print("Analyse termin√©e.")
+            print("Analyse terminÈe.")
 
         finally:
 
@@ -2128,7 +2128,7 @@ class PlantNetTab(ttk.Frame):
 
 # =========================
 
-# Onglet 4 ‚Äî ID contexte √©co
+# Onglet 4 ó ID contexte Èco
 
 # =========================
 
@@ -2170,7 +2170,7 @@ class IDContexteEcoTab(ttk.Frame):
 
         ttk.Label(header, text="Identification des zonages", style="Card.TLabel", font=self.font_title).grid(row=0, column=0, sticky="w")
 
-        ttk.Label(header, text="Choisissez les shapefiles de r√©f√©rence puis lancez l'analyse.", style="Subtle.TLabel", font=self.font_sub).grid(row=1, column=0, sticky="w", pady=(4,0))
+        ttk.Label(header, text="Choisissez les shapefiles de rÈfÈrence puis lancez l'analyse.", style="Subtle.TLabel", font=self.font_sub).grid(row=1, column=0, sticky="w", pady=(4,0))
 
         header.columnconfigure(0, weight=1)
 
@@ -2180,9 +2180,9 @@ class IDContexteEcoTab(ttk.Frame):
 
         card.pack(fill=tk.X)
 
-        self._file_row(card, 0, "üìÅ Aire d'√©tude √©largie‚Ä¶", self.ae_var, self._select_ae)
+        self._file_row(card, 0, "?? Aire d'Ètude ÈlargieÖ", self.ae_var, self._select_ae)
 
-        self._file_row(card, 1, "üìÅ Zone d'√©tude‚Ä¶", self.ze_var, self._select_ze)
+        self._file_row(card, 1, "?? Zone d'ÈtudeÖ", self.ze_var, self._select_ze)
 
         card.columnconfigure(1, weight=1)
 
@@ -2192,7 +2192,7 @@ class IDContexteEcoTab(ttk.Frame):
 
         act.pack(fill=tk.X, pady=(10,0))
 
-        self.run_btn = ttk.Button(act, text="√¢‚Äì¬∂ Lancer l'analyse", style="Accent.TButton", command=self._start_thread)
+        self.run_btn = ttk.Button(act, text="‚ñ∂ Lancer l'analyse", style="Accent.TButton", command=self._start_thread)
 
         self.run_btn.grid(row=0, column=0, sticky="w")
 
@@ -2234,7 +2234,7 @@ class IDContexteEcoTab(ttk.Frame):
 
         ent.configure(state="readonly")
 
-        clear_btn = ttk.Button(parent, text="‚úñ", width=3, command=lambda: var.set(""))
+        clear_btn = ttk.Button(parent, text="?", width=3, command=lambda: var.set(""))
 
         clear_btn.grid(row=row, column=2, sticky="e")
 
@@ -2246,7 +2246,7 @@ class IDContexteEcoTab(ttk.Frame):
 
         base = self.ae_var.get() or os.path.expanduser("~")
 
-        path = filedialog.askopenfilename(title="S√©lectionner l'aire d'√©tude √©largie",
+        path = filedialog.askopenfilename(title="SÈlectionner l'aire d'Ètude Èlargie",
 
                                           initialdir=base if os.path.isdir(base) else os.path.expanduser("~"),
 
@@ -2262,7 +2262,7 @@ class IDContexteEcoTab(ttk.Frame):
 
         base = self.ze_var.get() or os.path.expanduser("~")
 
-        path = filedialog.askopenfilename(title="S√©lectionner la zone d'√©tude",
+        path = filedialog.askopenfilename(title="SÈlectionner la zone d'Ètude",
 
                                           initialdir=base if os.path.isdir(base) else os.path.expanduser("~"),
 
@@ -2294,7 +2294,7 @@ class IDContexteEcoTab(ttk.Frame):
 
         if not ae or not ze:
 
-            print("Veuillez s√©lectionner les deux shapefiles.", file=self.stdout_redirect)
+            print("Veuillez sÈlectionner les deux shapefiles.", file=self.stdout_redirect)
 
             self.after(0, lambda: self.run_btn.config(state="normal"))
 
@@ -2312,7 +2312,7 @@ class IDContexteEcoTab(ttk.Frame):
 
             run_id_context(ae, ze)
 
-            print("Analyse termin√©e.")
+            print("Analyse terminÈe.")
 
         except Exception as e:
 
@@ -2328,7 +2328,7 @@ class IDContexteEcoTab(ttk.Frame):
 
 # =========================
 
-# Nouvel onglet ¬´ Contexte √©co ¬ª
+# Nouvel onglet ´ Contexte Èco ª
 
 # =========================
 
@@ -2348,7 +2348,7 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-        # Variables partag√©es
+        # Variables partagÈes
 
         self.ze_shp_var   = tk.StringVar(value=from_long_unc(self.prefs.get("ZE_SHP", "")))
 
@@ -2382,7 +2382,7 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-        # R√©sultats Cartes v√©g√©tation/sols
+        # RÈsultats Cartes vÈgÈtation/sols
 
         self.veg_alt_var = tk.StringVar(value="")
 
@@ -2417,7 +2417,7 @@ class ContexteEcoTab(ttk.Frame):
     # ---------- Construction UI ----------
 
     def _build_ui(self):
-        # Layout racine: contenu haut d√©filant + console fixe en bas
+        # Layout racine: contenu haut dÈfilant + console fixe en bas
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
         top_container = ttk.Frame(self)
@@ -2452,7 +2452,7 @@ class ContexteEcoTab(ttk.Frame):
         canvas.bind_all("<Button-4>", _mw)
         canvas.bind_all("<Button-5>", _mw)
 
-        # S√©lecteurs shapefiles
+        # SÈlecteurs shapefiles
 
         shp = ttk.Frame(top, style="Card.TFrame", padding=12)
 
@@ -2460,9 +2460,9 @@ class ContexteEcoTab(ttk.Frame):
 
         ttk.Label(shp, text="Couches Shapefile", style="Card.TLabel").grid(row=0, column=0, columnspan=4, sticky="w")
 
-        self._file_row(shp, 1, "üìÅ Zone d'√©tude‚Ä¶", self.ze_shp_var, self._select_ze)
+        self._file_row(shp, 1, "?? Zone d'ÈtudeÖ", self.ze_shp_var, self._select_ze)
 
-        self._file_row(shp, 2, "üìÅ Aire d'√©tude √©largie‚Ä¶", self.ae_shp_var, self._select_ae)
+        self._file_row(shp, 2, "?? Aire d'Ètude ÈlargieÖ", self.ae_shp_var, self._select_ae)
 
         shp.columnconfigure(1, weight=1)
 
@@ -2490,7 +2490,7 @@ class ContexteEcoTab(ttk.Frame):
 
         ttk.Radiobutton(opt, text="AE uniquement", variable=self.cadrage_var, value="AE", style="Card.TRadiobutton").grid(row=1, column=2, sticky="w", padx=(12,0))
 
-        ttk.Checkbutton(opt, text="√âcraser si le PNG existe", variable=self.overwrite_var, style="Card.TCheckbutton").grid(row=2, column=0, columnspan=3, sticky="w", pady=(6,0))
+        ttk.Checkbutton(opt, text="…craser si le PNG existe", variable=self.overwrite_var, style="Card.TCheckbutton").grid(row=2, column=0, columnspan=3, sticky="w", pady=(6,0))
 
 
 
@@ -2518,7 +2518,7 @@ class ContexteEcoTab(ttk.Frame):
 
         ttk.Entry(out_row, textvariable=self.out_dir_var).grid(row=0, column=0, sticky="ew")
 
-        ttk.Button(out_row, text="Parcourir‚Ä¶", command=self._select_out_dir).grid(row=0, column=1, padx=(6,0))
+        ttk.Button(out_row, text="ParcourirÖ", command=self._select_out_dir).grid(row=0, column=1, padx=(6,0))
 
 
 
@@ -2536,7 +2536,7 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-        self.export_button = ttk.Button(opt, text="Lancer l‚Äôexport cartes", style="Accent.TButton", command=self.start_export_thread)
+        self.export_button = ttk.Button(opt, text="Lancer líexport cartes", style="Accent.TButton", command=self.start_export_thread)
 
         self.export_button.grid(row=8, column=0, columnspan=3, sticky="w", pady=(10,0))
 
@@ -2584,7 +2584,7 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-        # Encart ID contexte √©co
+        # Encart ID contexte Èco
 
         idf = ttk.Frame(top, style="Card.TFrame", padding=12)
 
@@ -2594,7 +2594,7 @@ class ContexteEcoTab(ttk.Frame):
 
         ttk.Spinbox(idf, from_=0.0, to=50.0, increment=0.5, textvariable=self.buffer_var, width=6, justify="right").grid(row=0, column=1, sticky="w", padx=(8,0))
 
-        self.id_button = ttk.Button(idf, text="Lancer l‚ÄôID Contexte √©co", style="Accent.TButton", command=self.start_id_thread)
+        self.id_button = ttk.Button(idf, text="Lancer líID Contexte Èco", style="Accent.TButton", command=self.start_id_thread)
 
         self.id_button.grid(row=0, column=2, sticky="w", padx=(12,0))
 
@@ -2620,7 +2620,7 @@ class ContexteEcoTab(ttk.Frame):
 
             idf,
 
-            text="Cartes v√©g√©tation/sols",
+            text="Cartes vÈgÈtation/sols",
 
             style="Accent.TButton",
 
@@ -2646,7 +2646,7 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-        # Champ de requ√™te Wikipedia optionnel (permet d'√©crire la commune √† la main)
+        # Champ de requÍte Wikipedia optionnel (permet d'Ècrire la commune ‡ la main)
 
         ttk.Label(idf, text="Commune (optionnel)", style="Card.TLabel").grid(row=1, column=0, sticky="w", pady=(8,0))
 
@@ -2670,7 +2670,7 @@ class ContexteEcoTab(ttk.Frame):
 
         # Bouton pour ouvrir l'article dans le navigateur
 
-        self.wiki_open_button = ttk.Button(wiki_res, text="Ouvrir Wikip√©dia", command=self.open_wiki_url, state="disabled")
+        self.wiki_open_button = ttk.Button(wiki_res, text="Ouvrir WikipÈdia", command=self.open_wiki_url, state="disabled")
 
         self.wiki_open_button.grid(row=0, column=1, sticky="e", pady=(0,6))
 
@@ -2716,17 +2716,17 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-        # Tableau Cartes v√©g√©tation/sols (3 lignes)
+        # Tableau Cartes vÈgÈtation/sols (3 lignes)
 
         vegsol_res = ttk.Frame(wiki_res, style="Card.TFrame", padding=4)
 
         vegsol_res.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(6,0))
 
-        ttk.Label(vegsol_res, text="Cartes v√©g√©tation/sols", style="Card.TLabel").grid(row=0, column=0, sticky="w", pady=(0,6))
+        ttk.Label(vegsol_res, text="Cartes vÈgÈtation/sols", style="Card.TLabel").grid(row=0, column=0, sticky="w", pady=(0,6))
 
         ttk.Label(vegsol_res, text="Altitude", style="Card.TLabel").grid(row=1, column=0, sticky="nw")
 
-        ttk.Label(vegsol_res, text="V√©g√©tation", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
+        ttk.Label(vegsol_res, text="VÈgÈtation", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
 
         ttk.Label(vegsol_res, text="Sols", style="Card.TLabel").grid(row=3, column=0, sticky="nw")
 
@@ -2782,7 +2782,7 @@ class ContexteEcoTab(ttk.Frame):
         bottom.grid(row=1, column=0, sticky="nsew", pady=(10,0))
         bottom.columnconfigure(0, weight=1)
 
-        self.status_label = ttk.Label(bottom, text="Pr√™t.", style="Status.TLabel")
+        self.status_label = ttk.Label(bottom, text="PrÍt.", style="Status.TLabel")
 
         self.status_label.grid(row=0, column=0, sticky="w")
 
@@ -2820,7 +2820,7 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-        obtn = ttk.Button(bottom, text="üìÇ Ouvrir le dossier de sortie", command=self._open_out_dir)
+        obtn = ttk.Button(bottom, text="?? Ouvrir le dossier de sortie", command=self._open_out_dir)
         obtn.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8,0))
         try:
             ToolTip(obtn, "Ouvrir le dossier cible")
@@ -2843,7 +2843,7 @@ class ContexteEcoTab(ttk.Frame):
 
         ent.configure(state="readonly")
 
-        clear_btn = ttk.Button(parent, text="‚úñ", width=3, command=lambda: var.set(""))
+        clear_btn = ttk.Button(parent, text="?", width=3, command=lambda: var.set(""))
 
         clear_btn.grid(row=row, column=2, sticky="e")
 
@@ -2855,14 +2855,14 @@ class ContexteEcoTab(ttk.Frame):
 
         base = self.ze_shp_var.get() or os.path.expanduser("~")
 
-        path = filedialog.askopenfilename(title="S√©lectionner la zone d'√©tude",
+        path = filedialog.askopenfilename(title="SÈlectionner la zone d'Ètude",
 
                                           initialdir=base if os.path.isdir(base) else os.path.expanduser("~"),
 
                                           filetypes=[("Shapefile ESRI", "*.shp")])
 
         if path:
-            # Normaliser pour l'affichage (sans pr√©fixe long UNC)
+            # Normaliser pour l'affichage (sans prÈfixe long UNC)
             self.ze_shp_var.set(os.path.normpath(path))
 
 
@@ -2871,14 +2871,14 @@ class ContexteEcoTab(ttk.Frame):
 
         base = self.ae_shp_var.get() or os.path.expanduser("~")
 
-        path = filedialog.askopenfilename(title="S√©lectionner l'aire d'√©tude √©largie",
+        path = filedialog.askopenfilename(title="SÈlectionner l'aire d'Ètude Èlargie",
 
                                           initialdir=base if os.path.isdir(base) else os.path.expanduser("~"),
 
                                           filetypes=[("Shapefile ESRI", "*.shp")])
 
         if path:
-            # Normaliser pour l'affichage (sans pr√©fixe long UNC)
+            # Normaliser pour l'affichage (sans prÈfixe long UNC)
             self.ae_shp_var.set(os.path.normpath(path))
 
 
@@ -2909,7 +2909,7 @@ class ContexteEcoTab(ttk.Frame):
 
         except Exception as e:
 
-            messagebox.showerror("Erreur", f"Impossible d‚Äôouvrir le dossier : {e}")
+            messagebox.showerror("Erreur", f"Impossible díouvrir le dossier : {e}")
 
 
 
@@ -2917,15 +2917,15 @@ class ContexteEcoTab(ttk.Frame):
 
         if (not self.wiki_query_var.get().strip()) and (not self.ze_shp_var.get().strip()):
 
-            messagebox.showerror("Erreur", "S√©lectionner la Zone d'√©tude ou saisir une commune.")
+            messagebox.showerror("Erreur", "SÈlectionner la Zone d'Ètude ou saisir une commune.")
 
             return
 
-        print("[Wiki] Bouton Wikip√©dia cliqu√©", file=self.stdout_redirect)
+        print("[Wiki] Bouton WikipÈdia cliquÈ", file=self.stdout_redirect)
 
         self.wiki_button.config(state="disabled")
 
-        # R√©initialiser le tableau et le bouton avant un nouveau scraping
+        # RÈinitialiser le tableau et le bouton avant un nouveau scraping
 
         try:
 
@@ -2985,7 +2985,7 @@ class ContexteEcoTab(ttk.Frame):
 
             if gdf.crs is None:
 
-                raise ValueError("CRS non d√©fini")
+                raise ValueError("CRS non dÈfini")
 
             gdf = gdf.to_crs("EPSG:4326")
 
@@ -3013,11 +3013,11 @@ class ContexteEcoTab(ttk.Frame):
 
                 query = f"{commune} {dep}".strip()
 
-            print(f"[Wiki] Requ√™te : {query}", file=self.stdout_redirect)
+            print(f"[Wiki] RequÍte : {query}", file=self.stdout_redirect)
 
             data = get_wikipedia_extracts(query)
 
-            # Mettre √† jour le tableau Wikipedia (d√®s que les donn√©es sont disponibles)
+            # Mettre ‡ jour le tableau Wikipedia (dËs que les donnÈes sont disponibles)
 
             self._update_wiki_table(data)
 
@@ -3027,21 +3027,21 @@ class ContexteEcoTab(ttk.Frame):
 
             else:
 
-                print(f"[Wiki] Page Wikip√©dia : {data['url']}", file=self.stdout_redirect)
+                print(f"[Wiki] Page WikipÈdia : {data['url']}", file=self.stdout_redirect)
 
                 print("[Wiki] CLIMAT :", file=self.stdout_redirect)
 
-                if data['climat_p1'] != 'Non trouv√©':
+                if data['climat_p1'] != 'Non trouvÈ':
 
                     print(data['climat_p1'], file=self.stdout_redirect)
 
-                if data['climat_p2'] != 'Non trouv√©':
+                if data['climat_p2'] != 'Non trouvÈ':
 
                     print(data['climat_p2'], file=self.stdout_redirect)
 
                 print("[Wiki] OCCUPATION DES SOLS :", file=self.stdout_redirect)
 
-                if data['occupation_p1'] != 'Non trouv√©':
+                if data['occupation_p1'] != 'Non trouvÈ':
 
                     print(data['occupation_p1'], file=self.stdout_redirect)
 
@@ -3067,7 +3067,7 @@ class ContexteEcoTab(ttk.Frame):
 
             url_txt = data.get('url', '')
 
-            # Compat: utiliser les nouvelles cl√©s si pr√©sentes
+            # Compat: utiliser les nouvelles clÈs si prÈsentes
 
             clim_txt2 = data.get('climat') or clim_txt
 
@@ -3083,7 +3083,7 @@ class ContexteEcoTab(ttk.Frame):
 
                     return ''
 
-            # Mettre √† jour aussi les zones scrollables
+            # Mettre ‡ jour aussi les zones scrollables
 
             def _fill(widget, s):
 
@@ -3091,7 +3091,7 @@ class ContexteEcoTab(ttk.Frame):
 
                     widget.delete('1.0', tk.END)
 
-                    s2 = s if (isinstance(s, str) and not s.lower().startswith('non trouv')) else 'Non trouv√©'
+                    s2 = s if (isinstance(s, str) and not s.lower().startswith('non trouv')) else 'Non trouvÈ'
 
                     widget.insert(tk.END, s2)
 
@@ -3111,7 +3111,7 @@ class ContexteEcoTab(ttk.Frame):
 
             self.after(0, lambda: self.wiki_occ_var.set(_norm(occ_txt2)))
 
-            # Mettre √† jour l'URL et l'√©tat du bouton d'ouverture
+            # Mettre ‡ jour l'URL et l'Ètat du bouton d'ouverture
 
             def _upd_url():
 
@@ -3139,11 +3139,11 @@ class ContexteEcoTab(ttk.Frame):
 
         if not self.ze_shp_var.get().strip():
 
-            messagebox.showerror("Erreur", "S√©lectionner la Zone d'√©tude.")
+            messagebox.showerror("Erreur", "SÈlectionner la Zone d'Ètude.")
 
             return
 
-        print("[Cartes] Bouton cartes cliqu√©", file=self.stdout_redirect)
+        print("[Cartes] Bouton cartes cliquÈ", file=self.stdout_redirect)
 
         self.vegsol_button.config(state="disabled")
 
@@ -3167,7 +3167,7 @@ class ContexteEcoTab(ttk.Frame):
 
             if gdf.crs is None:
 
-                raise ValueError("CRS non d√©fini")
+                raise ValueError("CRS non dÈfini")
 
             gdf = gdf.to_crs("EPSG:4326")
 
@@ -3211,7 +3211,7 @@ class ContexteEcoTab(ttk.Frame):
 
                     pass
 
-            # Driver local si pr√©sent
+            # Driver local si prÈsent
 
             local_driver = os.path.join(REPO_ROOT if 'REPO_ROOT' in globals() else os.path.abspath(os.path.join(os.path.dirname(__file__), '..')), 'tools', 'chromedriver.exe')
 
@@ -3227,7 +3227,7 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-            # Nouveau flux automatis√© (import shapefile + scraping pop-up)
+            # Nouveau flux automatisÈ (import shapefile + scraping pop-up)
 
             try:
 
@@ -3237,7 +3237,7 @@ class ContexteEcoTab(ttk.Frame):
 
                 self.vegsol_driver.get("https://floreapp.netlify.app/biblio-patri.html")
 
-                time.sleep(1.2)
+                time.sleep(0.75)
 
 
 
@@ -3253,11 +3253,11 @@ class ContexteEcoTab(ttk.Frame):
 
                     pass
 
-                time.sleep(1.2)
+                time.sleep(0.75)
 
 
 
-                # 5) Cliquer sur Zone d‚Äô√©tude
+                # 5) Cliquer sur Zone díÈtude
 
                 try:
 
@@ -3271,7 +3271,7 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-                # Pr√©parer la liste des fichiers du shapefile
+                # PrÈparer la liste des fichiers du shapefile
 
                 def _from_long_unc(p: str) -> str:
 
@@ -3303,7 +3303,7 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-                # Envoyer les fichiers √† l'input[type=file]
+                # Envoyer les fichiers ‡ l'input[type=file]
 
                 inputs = self.vegsol_driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
 
@@ -3319,11 +3319,11 @@ class ContexteEcoTab(ttk.Frame):
 
                 except Exception as e:
 
-                    print(f"[Cartes] Envoi fichiers √©chou√©: {e}", file=self.stdout_redirect)
+                    print(f"[Cartes] Envoi fichiers ÈchouÈ: {e}", file=self.stdout_redirect)
 
 
 
-                time.sleep(1.2)
+                time.sleep(0.75)
 
 
 
@@ -3351,13 +3351,13 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-                time.sleep(1.2)
+                time.sleep(0.75)
 
 
 
-                # 12) Scraper les √©l√©ments de la pop-up
+                # 12) Scraper les ÈlÈments de la pop-up
 
-                # Attendre la pr√©sence des √©l√©ments de la pop-up
+                # Attendre la prÈsence des ÈlÈments de la pop-up
 
                 try:
 
@@ -3381,7 +3381,7 @@ class ContexteEcoTab(ttk.Frame):
 
                     el = soup.select_one(sel)
 
-                    return el.get_text(" ", strip=True) if el else "Non trouv√©"
+                    return el.get_text(" ", strip=True) if el else "Non trouvÈ"
 
                 alt = _txt("div.altitude-info")
 
@@ -3395,7 +3395,7 @@ class ContexteEcoTab(ttk.Frame):
 
             except Exception as flow_err:
 
-                print(f"[Cartes] Flux import/scraping √©chou√©: {flow_err}", file=self.stdout_redirect)
+                print(f"[Cartes] Flux import/scraping ÈchouÈ: {flow_err}", file=self.stdout_redirect)
 
 
 
@@ -3455,7 +3455,7 @@ class ContexteEcoTab(ttk.Frame):
 
                     print(
 
-                        f"[Cartes] √âtapes {layer_label} √©chou√©es : {fe}",
+                        f"[Cartes] …tapes {layer_label} ÈchouÈes : {fe}",
 
                         file=self.stdout_redirect,
 
@@ -3463,7 +3463,7 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-            _open_layer("Carte de la v√©g√©tation")
+            _open_layer("Carte de la vÈgÈtation")
 
             _open_layer("Carte des sols")
 
@@ -3495,7 +3495,7 @@ class ContexteEcoTab(ttk.Frame):
 
                     widget.delete('1.0', tk.END)
 
-                    s2 = s if (isinstance(s, str) and s.strip()) else 'Non trouv√©'
+                    s2 = s if (isinstance(s, str) and s.strip()) else 'Non trouvÈ'
 
                     widget.insert(tk.END, s2)
 
@@ -3517,13 +3517,13 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-    # --- Boutons ajout√©s ---
+    # --- Boutons ajoutÈs ---
 
     def start_rlt_thread(self):
 
         if not self.ze_shp_var.get().strip():
 
-            messagebox.showerror("Erreur", "S√©lectionner la Zone d'√©tude.")
+            messagebox.showerror("Erreur", "SÈlectionner la Zone d'Ètude.")
 
             return
 
@@ -3541,7 +3541,7 @@ class ContexteEcoTab(ttk.Frame):
 
         if not self.ze_shp_var.get().strip():
 
-            messagebox.showerror("Erreur", "S√©lectionner la Zone d'√©tude.")
+            messagebox.showerror("Erreur", "SÈlectionner la Zone d'Ètude.")
 
             return
 
@@ -3559,7 +3559,7 @@ class ContexteEcoTab(ttk.Frame):
 
         if not self.ze_shp_var.get().strip():
 
-            messagebox.showerror("Erreur", "S√©lectionner la Zone d'√©tude.")
+            messagebox.showerror("Erreur", "SÈlectionner la Zone d'Ètude.")
 
             return
 
@@ -3569,7 +3569,7 @@ class ContexteEcoTab(ttk.Frame):
 
             if gdf.crs is None:
 
-                raise ValueError("CRS non d√©fini")
+                raise ValueError("CRS non dÈfini")
 
             gdf = gdf.to_crs("EPSG:4326")
 
@@ -3585,7 +3585,7 @@ class ContexteEcoTab(ttk.Frame):
 
         except Exception as e:
 
-            messagebox.showerror("Erreur", f"Impossible d‚Äôouvrir Google Maps : {e}")
+            messagebox.showerror("Erreur", f"Impossible díouvrir Google Maps : {e}")
 
 
 
@@ -3599,7 +3599,7 @@ class ContexteEcoTab(ttk.Frame):
 
             if gdf.crs is None:
 
-                raise ValueError("CRS non d√©fini")
+                raise ValueError("CRS non dÈfini")
 
             gdf = gdf.to_crs("EPSG:4326")
 
@@ -3629,7 +3629,7 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-            print(f"[IGN] Lancement Chrome‚Ä¶", file=self.stdout_redirect)
+            print(f"[IGN] Lancement ChromeÖ", file=self.stdout_redirect)
 
             driver = webdriver.Chrome(options=drv_opts)
 
@@ -3651,7 +3651,7 @@ class ContexteEcoTab(ttk.Frame):
 
                 url = URL.format(lon=f"{lon_dd:.6f}", lat=f"{lat_dd:.6f}", layer=layer_val)
 
-                print(f"[IGN] {title} ‚Üí {url}", file=self.stdout_redirect)
+                print(f"[IGN] {title} ? {url}", file=self.stdout_redirect)
 
                 driver.get(url)
 
@@ -3679,7 +3679,7 @@ class ContexteEcoTab(ttk.Frame):
 
                 else:
 
-                    print(f"[IGN] Capture √©chou√©e : {title}", file=self.stdout_redirect)
+                    print(f"[IGN] Capture ÈchouÈe : {title}", file=self.stdout_redirect)
 
 
 
@@ -3689,15 +3689,15 @@ class ContexteEcoTab(ttk.Frame):
 
             if not images:
 
-                print("[IGN] Aucune image ‚Üí pas de doc.", file=self.stdout_redirect)
+                print("[IGN] Aucune image ? pas de doc.", file=self.stdout_redirect)
 
-                messagebox.showwarning("IGN", "Aucune image captur√©e.")
+                messagebox.showwarning("IGN", "Aucune image capturÈe.")
 
                 return
 
 
 
-            print("[IGN] G√©n√©ration du Word‚Ä¶", file=self.stdout_redirect)
+            print("[IGN] GÈnÈration du WordÖ", file=self.stdout_redirect)
 
             doc = Document()
 
@@ -3733,7 +3733,7 @@ class ContexteEcoTab(ttk.Frame):
 
             add_hyperlink(cap_par, "https://remonterletemps.ign.fr/",
 
-                          f"Comparaison temporelle ‚Äî {commune} (source : IGN ‚Äì RemonterLeTemps)")
+                          f"Comparaison temporelle ó {commune} (source : IGN ñ RemonterLeTemps)")
 
 
 
@@ -3787,9 +3787,9 @@ class ContexteEcoTab(ttk.Frame):
 
             doc.save(doc_path)
 
-            print(f"[IGN] Document g√©n√©r√© : {doc_path}", file=self.stdout_redirect)
+            print(f"[IGN] Document gÈnÈrÈ : {doc_path}", file=self.stdout_redirect)
 
-            self._set_status(f"Termin√© ‚Äî {doc_path}")
+            self._set_status(f"TerminÈ ó {doc_path}")
 
         except Exception as e:
 
@@ -3813,7 +3813,7 @@ class ContexteEcoTab(ttk.Frame):
 
             if gdf.crs is None:
 
-                raise ValueError("CRS non d√©fini")
+                raise ValueError("CRS non dÈfini")
 
             gdf = gdf.to_crs("EPSG:4326")
 
@@ -3831,7 +3831,7 @@ class ContexteEcoTab(ttk.Frame):
 
             os.makedirs(download_dir, exist_ok=True)
 
-            print(f"[BV] Coordonn√©es : {lat_dd:.6f}, {lon_dd:.6f}", file=self.stdout_redirect)
+            print(f"[BV] CoordonnÈes : {lat_dd:.6f}, {lon_dd:.6f}", file=self.stdout_redirect)
 
 
 
@@ -3951,7 +3951,7 @@ class ContexteEcoTab(ttk.Frame):
 
         try:
 
-            print("[BV] Attente du t√©l√©chargement du ZIP...", file=self.stdout_redirect)
+            print("[BV] Attente du tÈlÈchargement du ZIP...", file=self.stdout_redirect)
 
             zip_file_path = None
 
@@ -3973,7 +3973,7 @@ class ContexteEcoTab(ttk.Frame):
 
                     if size1 == size2:
 
-                        print(f"[BV] ZIP d√©tect√© : {os.path.basename(zip_file_path)}", file=self.stdout_redirect)
+                        print(f"[BV] ZIP dÈtectÈ : {os.path.basename(zip_file_path)}", file=self.stdout_redirect)
 
                         break
 
@@ -3983,7 +3983,7 @@ class ContexteEcoTab(ttk.Frame):
 
             if not zip_file_path:
 
-                print("[BV] Aucun fichier ZIP trouv√©.", file=self.stdout_redirect)
+                print("[BV] Aucun fichier ZIP trouvÈ.", file=self.stdout_redirect)
 
             else:
 
@@ -4001,13 +4001,13 @@ class ContexteEcoTab(ttk.Frame):
 
                 os.remove(zip_file_path)
 
-                print(f"[BV] D√©compression termin√©e dans '{target_folder_name}'", file=self.stdout_redirect)
+                print(f"[BV] DÈcompression terminÈe dans '{target_folder_name}'", file=self.stdout_redirect)
 
                 self._set_status(f"Bassin versant : {target_path}")
 
         except Exception as e:
 
-            print(f"[BV] Erreur d√©compression : {e}", file=self.stdout_redirect)
+            print(f"[BV] Erreur dÈcompression : {e}", file=self.stdout_redirect)
 
         finally:
 
@@ -4065,7 +4065,7 @@ class ContexteEcoTab(ttk.Frame):
 
         except Exception as e:
 
-            print(f"[Wiki] D√©tection commune √©chou√©e : {e}", file=self.stdout_redirect)
+            print(f"[Wiki] DÈtection commune ÈchouÈe : {e}", file=self.stdout_redirect)
 
             return "Inconnue", ""
 
@@ -4085,7 +4085,7 @@ class ContexteEcoTab(ttk.Frame):
 
         if not self.all_projects:
 
-            ttk.Label(self.scrollable_frame, text="Aucun projet trouv√© ou dossier inaccessible.", foreground="red").pack(anchor="w")
+            ttk.Label(self.scrollable_frame, text="Aucun projet trouvÈ ou dossier inaccessible.", foreground="red").pack(anchor="w")
 
             return
 
@@ -4171,7 +4171,7 @@ class ContexteEcoTab(ttk.Frame):
 
         selected = len(self._selected_projects()); total = len(self.filtered_projects)
 
-        self.status_label.config(text=f"Projets s√©lectionn√©s : {selected} / {total}")
+        self.status_label.config(text=f"Projets sÈlectionnÈs : {selected} / {total}")
 
 
 
@@ -4181,13 +4181,13 @@ class ContexteEcoTab(ttk.Frame):
 
         if self.busy:
 
-            print("Une action est d√©j√† en cours.", file=self.stdout_redirect)
+            print("Une action est dÈj‡ en cours.", file=self.stdout_redirect)
 
             return
 
         if not self.ze_shp_var.get() or not self.ae_shp_var.get():
 
-            messagebox.showerror("Erreur", "S√©lectionnez les deux shapefiles."); return
+            messagebox.showerror("Erreur", "SÈlectionnez les deux shapefiles."); return
 
         if not os.path.isfile(self.ze_shp_var.get()) or not os.path.isfile(self.ae_shp_var.get()):
 
@@ -4197,7 +4197,7 @@ class ContexteEcoTab(ttk.Frame):
 
         if not projets:
 
-            messagebox.showerror("Erreur", "S√©lectionnez au moins un projet."); return
+            messagebox.showerror("Erreur", "SÈlectionnez au moins un projet."); return
 
 
 
@@ -4277,7 +4277,7 @@ class ContexteEcoTab(ttk.Frame):
 
             workers = int(self.workers_var.get())
 
-            # D√©sactive provisoirement le multiprocessing pour √©viter les erreurs _multiprocessing
+            # DÈsactive provisoirement le multiprocessing pour Èviter les erreurs _multiprocessing
 
             workers = workers
 
@@ -4285,7 +4285,7 @@ class ContexteEcoTab(ttk.Frame):
 
             # Forcer au moins 2 workers pour utiliser ProcessPoolExecutor
 
-            # (et donc le Python de QGIS configur√© ci-dessous)
+            # (et donc le Python de QGIS configurÈ ci-dessous)
 
             workers = max(1, workers)
 
@@ -4345,7 +4345,7 @@ class ContexteEcoTab(ttk.Frame):
 
                     self.after(0, ui_update_progress, ok + ko)
 
-                    log_with_time(f"Lot termin√©: {ok} OK, {ko} KO")
+                    log_with_time(f"Lot terminÈ: {ok} OK, {ko} KO")
 
             else:
 
@@ -4353,7 +4353,7 @@ class ContexteEcoTab(ttk.Frame):
 
                     import multiprocessing as mp
 
-                    # Nettoyage de l'environnement h√©rit√© pour √©viter collisions Python 3.12/3.13
+                    # Nettoyage de l'environnement hÈritÈ pour Èviter collisions Python 3.12/3.13
 
                     for _k in ("PYTHONHOME", "PYTHONPATH", "PYTHONSTARTUP"):
 
@@ -4389,7 +4389,7 @@ class ContexteEcoTab(ttk.Frame):
 
                             os.environ["PYTHONPATH"] = os.pathsep.join(py_paths)
 
-                            # Pr√©fixer le PATH avec les dossiers Python QGIS pour la r√©solution des DLLs
+                            # PrÈfixer le PATH avec les dossiers Python QGIS pour la rÈsolution des DLLs
 
                             os.environ["PATH"] = os.pathsep.join([qgis_py_root, qgis_dlls, os.environ.get("PATH", "")])
 
@@ -4399,7 +4399,7 @@ class ContexteEcoTab(ttk.Frame):
 
                         pass
 
-                    # Fixer PYTHONHOME sur le Python de QGIS pour que l'interpr√®te trouve sa stdlib
+                    # Fixer PYTHONHOME sur le Python de QGIS pour que l'interprËte trouve sa stdlib
 
                     try:
 
@@ -4433,13 +4433,13 @@ class ContexteEcoTab(ttk.Frame):
 
                     except Exception as e:
 
-                        log_with_time(f"set_executable √©chec: {e}")
+                        log_with_time(f"set_executable Èchec: {e}")
 
                 except Exception as e:
 
                     log_with_time(f"init multiprocessing: {e}")
 
-                # Ajuster temporairement sys.path pour privil√©gier les libs QGIS
+                # Ajuster temporairement sys.path pour privilÈgier les libs QGIS
 
                 old_syspath = list(sys.path)
 
@@ -4493,7 +4493,7 @@ class ContexteEcoTab(ttk.Frame):
 
                             self.after(0, ui_update_progress, ok + ko)
 
-                            log_with_time(f"Lot termin√©: {ok} OK, {ko} KO")
+                            log_with_time(f"Lot terminÈ: {ok} OK, {ko} KO")
 
                         except Exception as e:
 
@@ -4505,9 +4505,9 @@ class ContexteEcoTab(ttk.Frame):
 
             elapsed = datetime.datetime.now() - start
 
-            log_with_time(f"FIN ‚Äî OK={ok_total} | KO={ko_total} | Attendu={self.total_expected} | Dur√©e={elapsed}")
+            log_with_time(f"FIN ó OK={ok_total} | KO={ko_total} | Attendu={self.total_expected} | DurÈe={elapsed}")
 
-            self.after(0, lambda: self.status_label.config(text=f"Termin√© ‚Äî OK={ok_total} / KO={ko_total}"))
+            self.after(0, lambda: self.status_label.config(text=f"TerminÈ ó OK={ok_total} / KO={ko_total}"))
 
         except Exception as e:
 
@@ -4531,7 +4531,7 @@ class ContexteEcoTab(ttk.Frame):
 
         if self.busy:
 
-            print("Une action est d√©j√† en cours.", file=self.stdout_redirect)
+            print("Une action est dÈj‡ en cours.", file=self.stdout_redirect)
 
             return
 
@@ -4541,7 +4541,7 @@ class ContexteEcoTab(ttk.Frame):
 
         if not ae or not ze:
 
-            messagebox.showerror("Erreur", "S√©lectionnez les deux shapefiles."); return
+            messagebox.showerror("Erreur", "SÈlectionnez les deux shapefiles."); return
 
         if not os.path.isfile(ae) or not os.path.isfile(ze):
 
@@ -4559,11 +4559,11 @@ class ContexteEcoTab(ttk.Frame):
 
         self.progress.start()
 
-        self.status_label.config(text="Analyse en cours‚Ä¶")
+        self.status_label.config(text="Analyse en coursÖ")
 
 
 
-        # Enregistrer des chemins standard (sans pr√©fixe long UNC) dans les pr√©f√©rences
+        # Enregistrer des chemins standard (sans prÈfixe long UNC) dans les prÈfÈrences
         self.prefs.update({
             "ZE_SHP": from_long_unc(ze),
             "AE_SHP": from_long_unc(ae),
@@ -4590,9 +4590,9 @@ class ContexteEcoTab(ttk.Frame):
 
             run_id_context(ae, ze, buffer_km)
 
-            log_with_time("Analyse termin√©e.")
+            log_with_time("Analyse terminÈe.")
 
-            self.after(0, lambda: self.status_label.config(text="Termin√©"))
+            self.after(0, lambda: self.status_label.config(text="TerminÈ"))
 
         except Exception as e:
 
@@ -4634,7 +4634,7 @@ class MainApp:
 
         self.root = root
 
-        self.root.title("Contexte √©co ‚Äî Outils")
+        self.root.title("Contexte Èco ó Outils")
 
         self.root.geometry("1060x760"); self.root.minsize(900, 640)
 
@@ -4656,17 +4656,17 @@ class MainApp:
 
 
 
-        # Header global + bouton th√®me
+        # Header global + bouton thËme
 
         top = ttk.Frame(root, style="Header.TFrame", padding=(12, 8))
 
         top.pack(fill=tk.X)
 
-        ttk.Label(top, text='Contexte √©co ‚Äî Suite d‚Äôoutils', style='Card.TLabel',
+        ttk.Label(top, text='Contexte Èco ó Suite díoutils', style='Card.TLabel',
 
                   font=tkfont.Font(family="Segoe UI", size=16, weight="bold")).pack(side=tk.LEFT)
 
-        btn_theme = ttk.Button(top, text='Changer de th√®me', command=self._toggle_theme)
+        btn_theme = ttk.Button(top, text='Changer de thËme', command=self._toggle_theme)
 
         btn_theme.pack(side=tk.RIGHT)
 
@@ -4686,7 +4686,7 @@ class MainApp:
 
 
 
-        nb.add(self.tab_ctx, text="Contexte √©co")
+        nb.add(self.tab_ctx, text="Contexte Èco")
 
         nb.add(self.tab_plant, text="Pl@ntNet")
 
@@ -4700,7 +4700,7 @@ class MainApp:
 
 
 
-        # Sauvegarde prefs √† la fermeture
+        # Sauvegarde prefs ‡ la fermeture
 
         root.protocol("WM_DELETE_WINDOW", self._on_close)
 
