@@ -1081,6 +1081,210 @@ class ExportCartesTab(ttk.Frame):
 
         self._update_counts()
 
+    def _build_ui(self):
+        # State
+        self.busy = False
+        self.wiki_last_url = ""
+
+        # Vars used elsewhere
+        self.out_dir_var = tk.StringVar(value=self.prefs.get("OUT_DIR", OUT_IMG))
+        # Alias for buffer var used by start_id_thread
+        self.buffer_var = tk.DoubleVar(value=float(self.prefs.get("ID_TAMPON_KM", self.id_buffer_km_var.get())))
+        # Export type
+        self.export_type_var = tk.StringVar(value=self.prefs.get("EXPORT_TYPE", "BOTH"))  # PNG, QGS, BOTH
+        # Wiki query manual override
+        self.wiki_query_var = tk.StringVar(value=self.prefs.get("WIKI_QUERY", ""))
+
+        # Root layout: left controls, right projects, bottom console
+        root = ttk.Frame(self, style="Header.TFrame")
+        root.pack(fill="both", expand=True)
+
+        left = ttk.Frame(root, style="Card.TFrame")
+        right = ttk.Frame(root, style="Card.TFrame")
+        bottom = ttk.Frame(self, style="Card.TFrame")
+
+        left.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
+        right.grid(row=0, column=1, sticky="nsew", padx=6, pady=6)
+        bottom.pack(fill="both", expand=True, padx=6, pady=(0,6))
+
+        root.columnconfigure(0, weight=1)
+        root.columnconfigure(1, weight=2)
+        root.rowconfigure(0, weight=1)
+
+        # --- Left: parameters and actions ---
+        ttk.Label(left, text="Contexte éco — Paramètres", font=self.font_title).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0,8))
+
+        # Shapefile selectors
+        ttk.Label(left, text="Shapefile Zone d'étude (ZE)").grid(row=1, column=0, sticky="w")
+        ze_entry = ttk.Entry(left, textvariable=self.ze_shp_var, width=48, style="Card.TEntry")
+        ze_entry.grid(row=1, column=1, sticky="ew", padx=(6,6))
+        ttk.Button(left, text="Parcourir…", command=lambda: self._browse_file(self.ze_shp_var)).grid(row=1, column=2)
+
+        ttk.Label(left, text="Shapefile Aire d'étude (AE)").grid(row=2, column=0, sticky="w")
+        ae_entry = ttk.Entry(left, textvariable=self.ae_shp_var, width=48, style="Card.TEntry")
+        ae_entry.grid(row=2, column=1, sticky="ew", padx=(6,6))
+        ttk.Button(left, text="Parcourir…", command=lambda: self._browse_file(self.ae_shp_var)).grid(row=2, column=2)
+
+        # Export options
+        opt_frm = ttk.Frame(left)
+        opt_frm.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(8,4))
+        for i in range(6):
+            opt_frm.columnconfigure(i, weight=1)
+
+        ttk.Label(opt_frm, text="DPI").grid(row=0, column=0, sticky="w")
+        ttk.Spinbox(opt_frm, from_=72, to=1200, increment=10, textvariable=self.dpi_var, width=6).grid(row=0, column=1, sticky="w")
+
+        ttk.Label(opt_frm, text="Workers").grid(row=0, column=2, sticky="w")
+        ttk.Spinbox(opt_frm, from_=1, to=max(1, (os.cpu_count() or 2)), textvariable=self.workers_var, width=4).grid(row=0, column=3, sticky="w")
+
+        ttk.Label(opt_frm, text="Marge (fac.)").grid(row=0, column=4, sticky="w")
+        ttk.Spinbox(opt_frm, from_=1.0, to=2.0, increment=0.05, textvariable=self.margin_var, width=6).grid(row=0, column=5, sticky="w")
+
+        ttk.Checkbutton(opt_frm, text="Écraser existants", variable=self.overwrite_var, style="Card.TCheckbutton").grid(row=1, column=0, columnspan=2, sticky="w", pady=(6,0))
+
+        ttk.Label(opt_frm, text="Type d'export").grid(row=1, column=2, sticky="w", pady=(6,0))
+        types = ttk.Frame(opt_frm)
+        types.grid(row=1, column=3, columnspan=3, sticky="w", pady=(6,0))
+        ttk.Radiobutton(types, text="PNG", value="PNG", variable=self.export_type_var, style="Card.TRadiobutton").pack(side="left")
+        ttk.Radiobutton(types, text="QGS", value="QGS", variable=self.export_type_var, style="Card.TRadiobutton").pack(side="left", padx=(8,0))
+        ttk.Radiobutton(types, text="Les deux", value="BOTH", variable=self.export_type_var, style="Card.TRadiobutton").pack(side="left", padx=(8,0))
+
+        # Output directory
+        ttk.Label(left, text="Dossier de sortie").grid(row=4, column=0, sticky="w", pady=(4,0))
+        out_entry = ttk.Entry(left, textvariable=self.out_dir_var, width=48, style="Card.TEntry")
+        out_entry.grid(row=4, column=1, sticky="ew", padx=(6,6), pady=(4,0))
+        ttk.Button(left, text="Choisir…", command=lambda: self._browse_dir(self.out_dir_var)).grid(row=4, column=2, pady=(4,0))
+
+        # Actions: Export, Identification
+        act_frm = ttk.Frame(left)
+        act_frm.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(10,4))
+        act_frm.columnconfigure(0, weight=1)
+        act_frm.columnconfigure(1, weight=1)
+        self.export_button = ttk.Button(act_frm, text="Exporter cartes", style="Accent.TButton", command=self.start_export_thread)
+        self.export_button.grid(row=0, column=0, sticky="ew", padx=(0,6))
+        self.id_button = ttk.Button(act_frm, text="ID Contexte éco", command=self.start_id_thread)
+        self.id_button.grid(row=0, column=1, sticky="ew")
+
+        # ID buffer
+        id_frm = ttk.Frame(left)
+        id_frm.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(4,8))
+        ttk.Label(id_frm, text="Tampon (km)").pack(side="left")
+        ttk.Spinbox(id_frm, from_=0.0, to=20.0, increment=0.5, textvariable=self.buffer_var, width=6).pack(side="left", padx=(6,0))
+
+        # Quick tools: RLT, Maps, BV
+        tools_frm = ttk.Frame(left)
+        tools_frm.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(2,10))
+        self.rlt_button = ttk.Button(tools_frm, text="Remonter le temps (IGN)", command=self.start_rlt_thread)
+        self.rlt_button.pack(side="left")
+        ttk.Button(tools_frm, text="Google Maps", command=self.open_gmaps).pack(side="left", padx=6)
+        self.bassin_button = ttk.Button(tools_frm, text="Bassin versant", command=self.start_bassin_thread)
+        self.bassin_button.pack(side="left")
+
+        # Wikipedia + Veg/Sol scraping controls
+        wiki_frm = ttk.LabelFrame(left, text="Scraping Wikipedia / Veg&Sol")
+        wiki_frm.grid(row=8, column=0, columnspan=3, sticky="ew")
+        ttk.Label(wiki_frm, text="Requête manuelle (facultatif)").grid(row=0, column=0, sticky="w", padx=6, pady=4)
+        ttk.Entry(wiki_frm, textvariable=self.wiki_query_var, width=40).grid(row=0, column=1, sticky="ew", padx=6, pady=4)
+        self.wiki_button = ttk.Button(wiki_frm, text="Lancer scraping", command=lambda: threading.Thread(target=self._run_all_scrapers, daemon=True).start())
+        self.wiki_button.grid(row=1, column=0, sticky="w", padx=6, pady=(0,6))
+        self.wiki_open_button = ttk.Button(wiki_frm, text="Ouvrir la page Wikipédia", command=self._open_wiki_url, state="disabled")
+        self.wiki_open_button.grid(row=1, column=1, sticky="w", padx=6, pady=(0,6))
+        try:
+            ToolTip(self.wiki_button, "Scrape Wikipedia et Veg&Sol en utilisant la ZE/AE")
+        except Exception:
+            pass
+
+        for c in range(3):
+            left.columnconfigure(c, weight=1)
+
+        # --- Right: project list with filter ---
+        ttk.Label(right, text="Projets QGIS (Contexte éco)", font=self.font_title).pack(anchor="w", pady=(0,6))
+        filt_frm = ttk.Frame(right)
+        filt_frm.pack(fill="x", pady=(0,4))
+        ttk.Label(filt_frm, text="Filtrer").pack(side="left")
+        self.filter_var = tk.StringVar(value="")
+        ent = ttk.Entry(filt_frm, textvariable=self.filter_var, width=30)
+        ent.pack(side="left", padx=(6,6))
+        ttk.Button(filt_frm, text="Appliquer", command=self._apply_filter).pack(side="left")
+        ttk.Button(filt_frm, text="Rafraîchir", command=self._populate_projects).pack(side="left", padx=(6,0))
+        ttk.Button(filt_frm, text="Tout", command=lambda: self._select_all(True)).pack(side="left", padx=(12,0))
+        ttk.Button(filt_frm, text="Aucun", command=lambda: self._select_all(False)).pack(side="left", padx=(6,0))
+
+        # Scrollable area
+        canvas = tk.Canvas(right, highlightthickness=0, bd=0)
+        vsb = ttk.Scrollbar(right, orient="vertical", command=canvas.yview)
+        container = ttk.Frame(canvas)
+        container.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        self.scrollable_frame = ttk.Frame(container)
+        self.scrollable_frame.pack(fill="both", expand=True)
+        canvas_frame = canvas.create_window((0, 0), window=container, anchor="nw")
+        canvas.configure(yscrollcommand=vsb.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        vsb.pack(side="right", fill="y")
+
+        def _resize_container(event):
+            canvas.itemconfigure(canvas_frame, width=event.width)
+        canvas.bind("<Configure>", _resize_container)
+
+        # --- Bottom: results + console + progress ---
+        top_bottom = ttk.Frame(bottom)
+        top_bottom.pack(fill="both", expand=True)
+
+        # Results tree (2 columns)
+        res_frm = ttk.Frame(top_bottom)
+        res_frm.pack(side="left", fill="both", expand=False, padx=(0,6))
+        ttk.Label(res_frm, text="Résultats (Wikipédia)").pack(anchor="w")
+        self.results_tree = ttk.Treeview(res_frm, columns=("label", "text"), show="headings", height=6)
+        self.results_tree.heading("label", text="Rubrique")
+        self.results_tree.heading("text", text="Texte")
+        self.results_tree.column("label", width=160, anchor="w")
+        self.results_tree.column("text", width=480, anchor="w")
+        self.results_tree.pack(fill="both", expand=True)
+        # Initialize rows
+        for iid, lbl in (("climat", "Climat"), ("occupation_sols", "Occupation des sols"), ("altitude", "Altitude"), ("vegetation", "Végétation"), ("sols", "Sols")):
+            try:
+                self.results_tree.insert("", "end", iid=iid, values=(lbl, ""))
+            except Exception:
+                pass
+
+        # Console
+        cons_frm = ttk.Frame(top_bottom)
+        cons_frm.pack(side="left", fill="both", expand=True)
+        ttk.Label(cons_frm, text="Console").pack(anchor="w")
+        self.console_text = tk.Text(cons_frm, height=10, wrap="word", font=self.font_mono, state="disabled")
+        self.console_text.pack(fill="both", expand=True)
+        self.stdout_redirect = TextRedirector(self.console_text)
+
+        # Progress + status
+        status_frm = ttk.Frame(bottom)
+        status_frm.pack(fill="x", pady=(6,0))
+        self.progress = ttk.Progressbar(status_frm, mode="determinate")
+        self.progress.pack(fill="x")
+        self.status_label = ttk.Label(status_frm, text="Prêt", style="Status.TLabel")
+        self.status_label.pack(anchor="w")
+
+    # Small helpers for file/directory browsing
+    def _browse_file(self, var: tk.StringVar):
+        try:
+            initial = var.get() or DEFAULT_SHAPE_DIR
+        except Exception:
+            initial = DEFAULT_SHAPE_DIR
+        path = filedialog.askopenfilename(title="Sélectionner un shapefile", initialdir=initial, filetypes=[["Shapefile", ".shp .SHP"], ["Tous", "*.*"]])
+        if path:
+            var.set(path)
+
+    def _browse_dir(self, var: tk.StringVar):
+        try:
+            initial = var.get() or OUT_IMG
+        except Exception:
+            initial = OUT_IMG
+        path = filedialog.askdirectory(title="Choisir le dossier de sortie", initialdir=initial)
+        if path:
+            var.set(path)
+
     def _open_wiki_url(self):
         url = (self.wiki_last_url or "").strip()
         if not url:
