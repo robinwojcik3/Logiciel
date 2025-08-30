@@ -303,7 +303,7 @@ def fetch_wikipedia_info(commune_query: str) -> Tuple[Dict[str, str], webdriver.
             driver = webdriver.Chrome(service=Service(str(local_driver)), options=options)
         else:
             driver = webdriver.Chrome(options=options)
-        driver.maximize_window()
+        driver.minimize_window()
         wait = WebDriverWait(driver, 10)
     except Exception:
         # Impossible d'initialiser Selenium → repli direct HTTP
@@ -435,7 +435,7 @@ def get_wikipedia_extracts(commune_label: str) -> Dict[str, str]:
             driver = webdriver.Chrome(service=Service(str(local_driver)), options=options)
         else:
             driver = webdriver.Chrome(options=options)
-        driver.maximize_window()
+        driver.minimize_window()
         wait = WebDriverWait(driver, 10)
     except Exception:
         # Pas de Selenium: repli MediaWiki API

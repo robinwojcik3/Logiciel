@@ -1386,7 +1386,7 @@ class ExportCartesTab(ttk.Frame):
             if not driver:
                 return
             
-            driver.maximize_window()
+            driver.minimize_window()
             images = []
             viewport = (By.CSS_SELECTOR, "div.ol-viewport")
 
