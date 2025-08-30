@@ -286,6 +286,7 @@ PY_VER    = "Python312"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..')) 
 PREFS_PATH = os.path.join(BASE_DIR, "prefs.json")
+WAIT_TILES_DEFAULT = 0.5
 
 
 
@@ -1483,6 +1484,49 @@ class ExportCartesTab(ttk.Frame):
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible d'ouvrir le dossier: {e}")
 
+    def _browse_file(self, var: tk.StringVar) -> None:
+        """Sélectionne un fichier shapefile et met à jour la variable liée.
+        Persiste aussi la préférence ZE_SHP/AE_SHP selon le champ ciblé."""
+        try:
+            initial_dir = DEFAULT_SHAPE_DIR if os.path.isdir(DEFAULT_SHAPE_DIR) else os.path.dirname(var.get() or "")
+            path = filedialog.askopenfilename(
+                title="Sélectionner un shapefile",
+                initialdir=initial_dir or os.getcwd(),
+                filetypes=(("Shapefile", "*.shp"), ("Tous les fichiers", "*.*")),
+            )
+            if not path:
+                return
+            if not path.lower().endswith(".shp"):
+                messagebox.showerror("Fichier invalide", "Veuillez sélectionner un fichier .shp valide.")
+                return
+            var.set(path)
+            # Mémoriser dans les préférences
+            if var is self.ze_shp_var:
+                self.prefs["ZE_SHP"] = path
+            elif var is self.ae_shp_var:
+                self.prefs["AE_SHP"] = path
+            save_prefs(self.prefs)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Échec de la sélection du shapefile: {e}")
+
+    def _browse_dir(self, var: tk.StringVar) -> None:
+        """Sélectionne un dossier de sortie et met à jour la variable + préférences."""
+        try:
+            initial_dir = var.get() or OUT_IMG
+            path = filedialog.askdirectory(
+                title="Choisir un dossier",
+                initialdir=initial_dir if os.path.isdir(initial_dir) else os.getcwd(),
+            )
+            if not path:
+                return
+            var.set(path)
+            # Persiste OUT_DIR
+            if var is self.out_dir_var:
+                self.prefs["OUT_DIR"] = path
+                save_prefs(self.prefs)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Échec de la sélection du dossier: {e}")
+
     def _get_or_create_driver(self):
         """Initialise et retourne un driver Selenium, en le réutilisant s'il existe déjà."""
         if self.shared_driver:
@@ -2280,8 +2324,11 @@ class ExportCartesTab(ttk.Frame):
         sys.stdout = self.stdout_redirect
 
         try:
-
-            from .id_contexte_eco import run_analysis as run_id_context
+            # Import robuste: relatif (via package) puis absolu (script direct)
+            try:
+                from .id_contexte_eco import run_analysis as run_id_context
+            except Exception:
+                from id_contexte_eco import run_analysis as run_id_context
 
             run_id_context(ae, ze, buffer_km)
 

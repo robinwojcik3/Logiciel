@@ -1,0 +1,13 @@
+{
+  "GEOMETRY": "1536x897+-402+98",
+  "ZE_SHP": "C:\\Users\\utilisateur\\Mon Drive\\1 - Bota & Travail\\+++++++++  BOTA  +++++++++\\---------------------- 2) CARTO terrain\\20-552-30 Gorges de Malaval\\zone etude.shp",
+  "AE_SHP": "C:\\Users\\utilisateur\\Mon Drive\\1 - Bota & Travail\\+++++++++  BOTA  +++++++++\\---------------------- 2) CARTO terrain\\20-552-30 Gorges de Malaval\\aire etude elargie.shp",
+  "CADRAGE_MODE": "BOTH",
+  "OVERWRITE": false,
+  "DPI": 300,
+  "N_WORKERS": 6,
+  "MARGIN_FAC": 1.15,
+  "OUT_DIR": "C:\\Users\\utilisateur\\Mon Drive\\1 - Bota & Travail\\+++++++++  BOTA  +++++++++\\---------------------- 3) BDD\\PYTHON\\2) Contexte éco\\OUTPUT",
+  "EXPORT_TYPE": "BOTH",
+  "ID_TAMPON_KM": 5.0
+}
