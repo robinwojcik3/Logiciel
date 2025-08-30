@@ -1302,6 +1302,7 @@ class ExportCartesTab(ttk.Frame):
         bottom.columnconfigure(0, weight=1)
         bottom.rowconfigure(0, weight=1)
         ttk.Label(bottom, text="Console", style="Subtle.TLabel").grid(row=0, column=0, sticky="w", padx=6, pady=(4,0))
+        ttk.Button(bottom, text="Ouput", command=self._open_output_dir).grid(row=0, column=1, sticky="e", padx=6, pady=(4,0))
         console_frm = ttk.Frame(bottom)
         console_frm.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0,6))
         console_frm.columnconfigure(0, weight=1)
