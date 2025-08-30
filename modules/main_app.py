@@ -3362,7 +3362,17 @@ class ContexteEcoTab(ttk.Frame):
 
                 soil = _txt("div.tooltip-pill.soil-pill")
 
-                self._update_vegsol_table({"altitude": alt, "vegetation": veg, "sol": soil})
+                # Update the consolidated results table
+                payload = {
+                    'altitude': alt if alt != "Non trouvé" else "Non trouvé",
+                    'vegetation': veg if veg != "Non trouvé" else "Non trouvé", 
+                    'sols': soil if soil != "Non trouvé" else "Non trouvé"
+                }
+                self.after(0, self._update_results_tree, payload)
+                
+                print(f"[Cartes] ALTITUDE : {alt}", file=self.stdout_redirect)
+                print(f"[Cartes] VÉGÉTATION : {veg}", file=self.stdout_redirect)
+                print(f"[Cartes] SOLS : {soil}", file=self.stdout_redirect)
 
                 return
 
@@ -3372,125 +3382,17 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-            def _open_layer(layer_label: str) -> None:
-
-                try:
-
-                    wait = WebDriverWait(self.vegsol_driver, 0.5)
-
-                    self.vegsol_driver.execute_script(
-
-                        "window.open('https://floreapp.netlify.app/biblio-patri.html','_blank');"
-
-                    )
-
-                    self.vegsol_driver.switch_to.window(self.vegsol_driver.window_handles[-1])
-
-                    addr = wait.until(EC.element_to_be_clickable((By.ID, "address-input")))
-
-                    addr.click()
-
-                    addr.clear()
-
-                    addr.send_keys(coords_dms)
-
-                    wait.until(
-
-                        EC.element_to_be_clickable((By.ID, "search-address-btn"))
-
-                    ).click()
-
-                    wait.until(
-
-                        EC.element_to_be_clickable(
-
-                            (By.CSS_SELECTOR, "a.leaflet-control-layers-toggle")
-
-                        )
-
-                    ).click()
-
-                    checkbox = wait.until(
-
-                        EC.element_to_be_clickable(
-
-                            (By.XPATH, f"//label[contains(.,'{layer_label}')]/input")
-
-                        )
-
-                    )
-
-                    if not checkbox.is_selected():
-
-                        checkbox.click()
-
-                except Exception as fe:
-
-                    print(
-
-                        f"[Cartes] Étapes {layer_label} échouées : {fe}",
-
-                        file=self.stdout_redirect,
-
-                    )
-
-
-
-            _open_layer("Carte de la végétation")
-
-            _open_layer("Carte des sols")
 
         except Exception as e:
 
             print(f"[Cartes] Erreur : {e}", file=self.stdout_redirect)
 
         finally:
-
-            self.after(0, lambda: self.vegsol_button.config(state="normal"))
-
-
-
-    def _update_vegsol_table(self, data: dict) -> None:
-
-        try:
-
-            alt = data.get('altitude', '')
-
-            veg = data.get('vegetation', '')
-
-            soil = data.get('sol', '')
-
-            def _fill(widget: tk.Text, s: str):
-
-                try:
-
-                    widget.config(state='normal')
-
-                    widget.delete('1.0', tk.END)
-
-                    s2 = s if (isinstance(s, str) and s.strip()) else 'Non trouvé'
-
-                    widget.insert(tk.END, s2)
-
-                    widget.config(state='disabled')
-
-                except Exception:
-
-                    pass
-
-            # Anciens widgets supprimés - utiliser le tableau consolidé à la place
-            # Mettre à jour le tableau avec les résultats
-            self.after(0, self._update_results_tree, {
-                "altitude": alt or 'Non trouvé',
-                "vegetation": veg or 'Non trouvé', 
-                "sols": soil or 'Non trouvé'
-            })
-
-        except Exception:
-
-            pass
-
-
+            try:
+                if hasattr(self, 'vegsol_driver'):
+                    self.vegsol_driver.quit()
+            except Exception:
+                pass
 
     # --- Boutons ajoutés ---
 
