@@ -1509,331 +1509,142 @@ class ExportCartesTab(ttk.Frame):
 
 
     def _run_vegsol(self, driver):
-        # This method now receives the shared driver
-        # and operates in a new tab as orchestrated by _run_all_scrapers.
-
+        # Uses the shared driver in a new tab
         try:
-
             print("[Cartes] Lancement du scraping des cartes", file=self.stdout_redirect)
 
             ze_path = self.ze_shp_var.get()
+            if not ze_path or not os.path.isfile(ze_path):
+                raise ValueError("Shapefile Zone d'étude introuvable")
 
-            gdf = gpd.read_file(ze_path)
+            # 1) Ouvrir l'URL
+            driver.get("https://floreapp.netlify.app/biblio-patri.html")
+            time.sleep(0.75)
 
-            if gdf.crs is None:
+            wait = WebDriverWait(driver, 10)
 
-                raise ValueError("CRS non défini")
-
-            gdf = gdf.to_crs("EPSG:4326")
-
-            centroid = gdf.geometry.unary_union.centroid
-
-            lat, lon = centroid.y, centroid.x
-
-            coords_dms = dd_to_dms(lat, lon)
-
-            options = webdriver.ChromeOptions()
-
-            options.add_experimental_option("excludeSwitches", ["enable-logging"])
-
-            options.add_argument("--log-level=3")
-
-            options.add_argument("--disable-extensions")
-
-            options.add_argument("--disable-gpu")
-
-            options.add_argument("--no-sandbox")
-
-            options.add_argument("--disable-dev-shm-usage")
-
-            # Respect APP_HEADLESS env var (default: visible)
-
+            # 3) Cliquer sur Importer shapefile
             try:
-
-                if os.environ.get("APP_HEADLESS", "0").lower() in ("1", "true", "yes"):
-
-                    options.add_argument("--headless=new")
-
-            except Exception:
-
-                try:
-
-                    if os.environ.get("APP_HEADLESS", "0").lower() in ("1", "true", "yes"):
-
-                        options.add_argument("--headless")
-
-                except Exception:
-
-                    pass
-
-            # Driver local si présent
-
-            local_driver = os.path.join(REPO_ROOT if 'REPO_ROOT' in globals() else os.path.abspath(os.path.join(os.path.dirname(__file__), '..')), 'tools', 'chromedriver.exe')
-
-            if os.path.isfile(local_driver):
-
-                self.vegsol_driver = webdriver.Chrome(service=Service(local_driver), options=options)
-
-            else:
-
-                self.vegsol_driver = webdriver.Chrome(options=options)
-
-            self.vegsol_driver.maximize_window()
-
-
-
-            # Nouveau flux automatisé (import shapefile + scraping pop-up)
-
-            try:
-
-                wait = WebDriverWait(self.vegsol_driver, 10)
-
-                # 1) Ouvrir l'URL
-
-                self.vegsol_driver.get("https://floreapp.netlify.app/biblio-patri.html")
-
-                time.sleep(0.75)
-
-
-
-                # 3) Cliquer sur Importer shapefile
-
-                try:
-
-                    btn_upload = wait.until(EC.element_to_be_clickable((By.ID, "upload-shapefile-btn")))
-
-                    btn_upload.click()
-
-                except Exception:
-
-                    pass
-
-                time.sleep(0.75)
-
-
-
-                # 5) Cliquer sur Zone d’étude
-
-                try:
-
-                    btn_zone = wait.until(EC.element_to_be_clickable((By.ID, "import-zone-btn")))
-
-                    btn_zone.click()
-
-                except Exception:
-
-                    pass
-
-
-
-                # Préparer la liste des fichiers du shapefile
-
-                def _from_long_unc(p: str) -> str:
-
-                    p = p or ""
-
-                    if p.startswith("\\\\?\\UNC"):
-                        return "\\\\" + p[8:]
-
-                    if p.startswith("\\\\?\\"):
-                        return p[4:]
-
-                    return p
-
-
-
-                ze_shp = (self.ze_shp_var.get() or "").strip()
-
-                base_no_ext, _ = os.path.splitext(_from_long_unc(ze_shp))
-
-                exts = [".cpg", ".dbf", ".prj", ".qmd", ".shp", ".shx"]
-
-                files = [base_no_ext + e for e in exts if os.path.isfile(base_no_ext + e)]
-
-                if not files:
-
-                    raise ValueError("Fichiers du shapefile introuvables pour l'import")
-
-
-
-                # Envoyer les fichiers à l'input[type=file]
-
-                inputs = self.vegsol_driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
-
-                target_input = inputs[-1] if inputs else None
-
-                if not target_input:
-
-                    raise RuntimeError("Champ d'import fichier introuvable")
-
-                try:
-
-                    target_input.send_keys("\n".join(files))
-
-                except Exception as e:
-
-                    print(f"[Cartes] Envoi fichiers échoué: {e}", file=self.stdout_redirect)
-
-
-
-                time.sleep(0.75)
-
-
-
-                # 8) Clic droit au centre de la carte
-
-                map_el = wait.until(EC.visibility_of_element_located((By.ID, "map")))
-
-                ActionChains(self.vegsol_driver).move_to_element(map_el).context_click(map_el).perform()
-
-                time.sleep(0.5)
-
-
-
-                # 10) Cliquer sur 'Ressources'
-                print("[Cartes] Recherche du bouton 'Ressources'...", file=self.stdout_redirect)
-                
-                try:
-                    # Essayer plusieurs sélecteurs pour le bouton Ressources
-                    ressources_selectors = [
-                        "//button[contains(.,'Ressources')]",
-                        "//button[contains(text(),'Ressources')]",
-                        "//button[@class='action-button' and contains(.,'Ressources')]",
-                        ".action-button"
-                    ]
-                    
-                    btn_res = None
-                    for selector in ressources_selectors:
-                        try:
-                            if selector.startswith("//"):
-                                btn_res = wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
-                            else:
-                                btn_res = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
-                            print(f"[Cartes] Bouton trouvé avec sélecteur: {selector}", file=self.stdout_redirect)
-                            break
-                        except Exception:
-                            continue
-                    
-                    if btn_res:
-                        print("[Cartes] Clic sur le bouton Ressources...", file=self.stdout_redirect)
-                        btn_res.click()
-                    else:
-                        print("[Cartes] Bouton Ressources non trouvé - recherche de tous les boutons...", file=self.stdout_redirect)
-                        # Debug: lister tous les boutons disponibles
-                        buttons = self.vegsol_driver.find_elements(By.TAG_NAME, "button")
-                        for i, btn in enumerate(buttons):
-                            try:
-                                text = btn.text.strip()
-                                if text:
-                                    print(f"[Cartes] Bouton {i}: '{text}'", file=self.stdout_redirect)
-                            except Exception:
-                                pass
-
-                except Exception as btn_err:
-                    print(f"[Cartes] Erreur bouton Ressources: {btn_err}", file=self.stdout_redirect)
-
-                time.sleep(2.0)  # Attendre plus longtemps pour la popup
-
-
-
-                # 12) Scraper les éléments de la pop-up avec attente améliorée
-                
-                print("[Cartes] Attente de la popup avec les données...", file=self.stdout_redirect)
-                
-                # Attendre plus longtemps pour que la popup se charge complètement
-                time.sleep(2.0)
-                
-                # Essayer plusieurs fois de trouver les éléments
-                alt = veg = soil = "Non trouvé"
-                
-                for attempt in range(3):
-                    try:
-                        print(f"[Cartes] Tentative {attempt + 1} de scraping...", file=self.stdout_redirect)
-                        
-                        html = self.vegsol_driver.page_source
-                        soup = BeautifulSoup(html, "lxml")
-                        
-                        # Debug: afficher les sélecteurs trouvés
-                        altitude_els = soup.select("div.altitude-info")
-                        veg_els = soup.select("div.tooltip-pill.vegetation-pill")
-                        soil_els = soup.select("div.tooltip-pill.soil-pill")
-                        
-                        print(f"[Cartes] Éléments trouvés - Altitude: {len(altitude_els)}, Végétation: {len(veg_els)}, Sols: {len(soil_els)}", file=self.stdout_redirect)
-                        
-                        # Debug: afficher le contenu HTML des éléments trouvés
-                        if altitude_els:
-                            print(f"[Cartes] Contenu altitude HTML: {str(altitude_els[0])[:200]}", file=self.stdout_redirect)
-                        if veg_els:
-                            for i, el in enumerate(veg_els):
-                                print(f"[Cartes] Contenu végétation {i} HTML: {str(el)[:200]}", file=self.stdout_redirect)
-                        if soil_els:
-                            for i, el in enumerate(soil_els):
-                                print(f"[Cartes] Contenu sols {i} HTML: {str(el)[:200]}", file=self.stdout_redirect)
-                        
-                        def _txt(sel):
-                            el = soup.select_one(sel)
-                            if el:
-                                text = el.get_text(" ", strip=True)
-                                print(f"[Cartes] Texte extrait pour {sel}: '{text}'", file=self.stdout_redirect)
-                                return text if text.strip() else "Non trouvé"
-                            return "Non trouvé"
-                        
-                        alt_new = _txt("div.altitude-info")
-                        veg_new = _txt("div.tooltip-pill.vegetation-pill")
-                        soil_new = _txt("div.tooltip-pill.soil-pill")
-                        
-                        # Si on trouve au moins un élément valide, on garde les résultats
-                        if alt_new != "Non trouvé":
-                            alt = alt_new
-                        if veg_new != "Non trouvé":
-                            veg = veg_new
-                        if soil_new != "Non trouvé":
-                            soil = soil_new
-                            
-                        # Si on a trouvé tous les éléments, on peut arrêter
-                        if alt != "Non trouvé" and veg != "Non trouvé" and soil != "Non trouvé":
-                            break
-                            
-                        # Sinon, attendre un peu plus
-                        if attempt < 2:
-                            time.sleep(1.5)
-                            
-                    except Exception as scrape_err:
-                        print(f"[Cartes] Erreur scraping tentative {attempt + 1}: {scrape_err}", file=self.stdout_redirect)
-                        if attempt < 2:
-                            time.sleep(1.5)
-
-                # Update the consolidated results table
-                payload = {
-                    'altitude': alt,
-                    'vegetation': veg, 
-                    'sols': soil
-                }
-                self.after(0, self._update_results_tree, payload)
-                
-                print(f"[Cartes] ALTITUDE : {alt}", file=self.stdout_redirect)
-                print(f"[Cartes] VÉGÉTATION : {veg}", file=self.stdout_redirect)
-                print(f"[Cartes] SOLS : {soil}", file=self.stdout_redirect)
-
+                btn_upload = wait.until(EC.element_to_be_clickable((By.ID, "upload-shapefile-btn")))
+                btn_upload.click()
+                print("[Cartes] Clic sur 'Importer shapefile'", file=self.stdout_redirect)
+            except Exception as e:
+                print(f"[Cartes] Erreur clic import shapefile: {e}", file=self.stdout_redirect)
                 return
 
-            except Exception as flow_err:
+            time.sleep(0.75)
 
-                print(f"[Cartes] Flux import/scraping échoué: {flow_err}", file=self.stdout_redirect)
+            # 5) Cliquer sur Zone d'étude
+            try:
+                btn_zone = wait.until(EC.element_to_be_clickable((By.ID, "import-zone-btn")))
+                btn_zone.click()
+                print("[Cartes] Clic sur 'Zone d'étude'", file=self.stdout_redirect)
+            except Exception as e:
+                print(f"[Cartes] Erreur clic zone d'étude: {e}", file=self.stdout_redirect)
+                return
 
+            # 6) Préparer et envoyer les fichiers shapefile
+            def _from_long_unc(p: str) -> str:
+                p = p or ""
+                if p.startswith("\\\\?\\UNC\\"):
+                    return "\\\\" + p[8:]
+                if p.startswith("\\\\?\\"):
+                    return p[4:]
+                return p
 
+            ze_shp_clean = _from_long_unc(ze_path)
+            base_no_ext, _ = os.path.splitext(ze_shp_clean)
+            exts = [".cpg", ".dbf", ".prj", ".qmd", ".shp", ".shx"]
+            files = [base_no_ext + e for e in exts if os.path.isfile(base_no_ext + e)]
 
+            if not files:
+                raise ValueError("Fichiers du shapefile introuvables pour l'import")
+
+            print(f"[Cartes] Envoi de {len(files)} fichiers shapefile", file=self.stdout_redirect)
+
+            # Envoyer les fichiers à l'input[type=file]
+            try:
+                inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
+                target_input = inputs[-1] if inputs else None
+                if target_input:
+                    target_input.send_keys("\n".join(files))
+                    print("[Cartes] Fichiers shapefile envoyés", file=self.stdout_redirect)
+                else:
+                    print("[Cartes] Champ d'import fichier introuvable", file=self.stdout_redirect)
+            except Exception as e:
+                print(f"[Cartes] Erreur envoi fichiers: {e}", file=self.stdout_redirect)
+
+            time.sleep(0.75)
+
+            # 8) Clic droit au centre de la carte
+            try:
+                map_el = wait.until(EC.visibility_of_element_located((By.ID, "map")))
+                ActionChains(driver).move_to_element(map_el).context_click(map_el).perform()
+                print("[Cartes] Clic droit sur la carte", file=self.stdout_redirect)
+            except Exception as e:
+                print(f"[Cartes] Erreur clic droit carte: {e}", file=self.stdout_redirect)
+
+            time.sleep(0.5)
+
+            # 10) Cliquer sur 'Ressources'
+            try:
+                btn_res = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(.,'Ressources')]")))
+                btn_res.click()
+                print("[Cartes] Clic sur 'Ressources'", file=self.stdout_redirect)
+            except Exception as e:
+                print(f"[Cartes] Erreur clic Ressources: {e}", file=self.stdout_redirect)
+
+            time.sleep(0.75)
+
+            # 12) Scraper les éléments de la pop-up
+            print("[Cartes] Scraping des données de la popup...", file=self.stdout_redirect)
+            
+            alt = veg = soil = "Non trouvé"
+            
+            for attempt in range(3):
+                try:
+                    html = driver.page_source
+                    soup = BeautifulSoup(html, "lxml")
+                    
+                    # Extraire les données selon vos sélecteurs
+                    alt_el = soup.select_one("div.altitude-info")
+                    if alt_el:
+                        alt = alt_el.get_text(" ", strip=True)
+                        
+                    veg_el = soup.select_one("div.tooltip-pill.vegetation-pill")
+                    if veg_el:
+                        veg = veg_el.get_text(" ", strip=True)
+                        
+                    soil_el = soup.select_one("div.tooltip-pill.soil-pill")
+                    if soil_el:
+                        soil = soil_el.get_text(" ", strip=True)
+                    
+                    # Si on a trouvé au moins un élément, on peut arrêter
+                    if alt != "Non trouvé" or veg != "Non trouvé" or soil != "Non trouvé":
+                        break
+                        
+                    if attempt < 2:
+                        time.sleep(1.5)
+                        
+                except Exception as scrape_err:
+                    print(f"[Cartes] Erreur scraping tentative {attempt + 1}: {scrape_err}", file=self.stdout_redirect)
+                    if attempt < 2:
+                        time.sleep(1.5)
+
+            # Mettre à jour le tableau des résultats
+            payload = {
+                'altitude': alt,
+                'vegetation': veg, 
+                'sols': soil
+            }
+            self.after(0, self._update_results_tree, payload)
+            
+            print(f"[Cartes] ALTITUDE : {alt}", file=self.stdout_redirect)
+            print(f"[Cartes] VÉGÉTATION : {veg}", file=self.stdout_redirect)
+            print(f"[Cartes] SOLS : {soil}", file=self.stdout_redirect)
 
         except Exception as e:
-
             print(f"[Cartes] Erreur : {e}", file=self.stdout_redirect)
-
-        finally:
-            try:
-                if hasattr(self, 'vegsol_driver'):
-                    self.vegsol_driver.quit()
-            except Exception:
-                pass
 
     # --- Boutons ajoutés ---
 
