@@ -1347,7 +1347,7 @@ class ExportCartesTab(ttk.Frame):
                 # Setup Chrome options
                 options = webdriver.ChromeOptions()
                 options.add_experimental_option("detach", True)
-                options.add_argument("--start-maximized")
+                options.add_argument("--start-minimized")
                 options.add_experimental_option('excludeSwitches', ['enable-logging'])
 
                 if os.getenv('APP_HEADLESS') == '1':
@@ -1680,50 +1680,17 @@ class ExportCartesTab(ttk.Frame):
                 page_source = driver.page_source
                 soup = BeautifulSoup(page_source, 'html.parser')
 
-                # 1) Altitude - chercher <div class="altitude-info">
+                # 1) Altitude
                 altitude_div = soup.select_one('div.altitude-info')
-                if altitude_div:
-                    alt = altitude_div.get_text(strip=True)
-                    print(f"[Cartes] Altitude trouvée: {alt}", file=self.stdout_redirect)
-                else:
-                    alt = "Non trouvée"
-                    print("[Cartes] Élément altitude non trouvé", file=self.stdout_redirect)
+                alt = altitude_div.get_text(strip=True) if altitude_div else "Non trouvée"
 
-                # 2) Végétation - chercher <div id="profile-veg-pill">
-                vegetation_div = soup.select_one('#profile-veg-pill')
-                if vegetation_div:
-                    veg = vegetation_div.get_text(strip=True)
-                    if veg:
-                        print(f"[Cartes] Végétation trouvée: {veg}", file=self.stdout_redirect)
-                    else:
-                        # Essayer d'attendre que le contenu se charge
-                        time.sleep(1)
-                        page_source = driver.page_source
-                        soup = BeautifulSoup(page_source, 'html.parser')
-                        vegetation_div = soup.select_one('#profile-veg-pill')
-                        veg = vegetation_div.get_text(strip=True) if vegetation_div else "Non trouvée"
-                        print(f"[Cartes] Végétation (2e tentative): {veg}", file=self.stdout_redirect)
-                else:
-                    veg = "Non trouvée"
-                    print("[Cartes] Élément végétation non trouvé", file=self.stdout_redirect)
+                # 2) Végétation
+                vegetation_div = soup.select_one('#vegetation-info')
+                veg = vegetation_div.get_text(strip=True) if vegetation_div else "Non trouvée"
 
-                # 3) Sol - chercher <div id="profile-soil-pill">
-                soil_div = soup.select_one('#profile-soil-pill')
-                if soil_div:
-                    soil = soil_div.get_text(strip=True)
-                    if soil:
-                        print(f"[Cartes] Sol trouvé: {soil}", file=self.stdout_redirect)
-                    else:
-                        # Essayer d'attendre que le contenu se charge
-                        time.sleep(1)
-                        page_source = driver.page_source
-                        soup = BeautifulSoup(page_source, 'html.parser')
-                        soil_div = soup.select_one('#profile-soil-pill')
-                        soil = soil_div.get_text(strip=True) if soil_div else "Non trouvé"
-                        print(f"[Cartes] Sol (2e tentative): {soil}", file=self.stdout_redirect)
-                else:
-                    soil = "Non trouvé"
-                    print("[Cartes] Élément sol non trouvé", file=self.stdout_redirect)
+                # 3) Sol
+                soil_div = soup.select_one('#soil-info')
+                soil = soil_div.get_text(strip=True) if soil_div else "Non trouvé"
                 
                 print(f"[Cartes] RÉSULTATS FINAUX:", file=self.stdout_redirect)
                 print(f"[Cartes] ALTITUDE : {alt}", file=self.stdout_redirect)
@@ -1872,11 +1839,45 @@ class ExportCartesTab(ttk.Frame):
             out_dir = os.path.join(OUT_IMG, "Photo BiodivAURA")
             os.makedirs(out_dir, exist_ok=True)
 
-            # Préparer Selenium (toujours visible pour cette fonctionnalité)
-            driver = self._get_or_create_driver()
-            if not driver:
-                return
+            # Document unique pour toutes les especes
+            doc = Document()
+            try:
+                style_normal = doc.styles['Normal']
+                style_normal.font.name = 'Calibri'
+                style_normal._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
+            except Exception:
+                pass
 
+            # Préparer Selenium (toujours visible pour cette fonctionnalité)
+            driver = None
+            wait = None
+            try:
+                options = webdriver.ChromeOptions()
+                options.add_experimental_option("excludeSwitches", ["enable-logging"]) 
+                options.add_argument("--log-level=3")
+                options.add_argument("--disable-extensions")
+                options.add_argument("--disable-gpu")
+                options.add_argument("--no-sandbox")
+                options.add_argument("--disable-dev-shm-usage")
+                try:
+                    # Ne pas attendre le chargement complet des pages
+                    options.page_load_strategy = 'none'
+                except Exception:
+                    pass
+                # IMPORTANT: ne pas forcer headless ici afin que l'utilisateur voie le navigateur
+                local_driver = os.path.join(REPO_ROOT if 'REPO_ROOT' in globals() else os.path.abspath(os.path.join(os.path.dirname(__file__), '..')), 'tools', 'chromedriver.exe')
+                if os.path.isfile(local_driver):
+                    driver = webdriver.Chrome(service=Service(local_driver), options=options)
+                else:
+                    driver = webdriver.Chrome(options=options)
+                try:
+                    driver.maximize_window()
+                except Exception:
+                    pass
+                # Attentes Selenium courtes mais un peu plus tolérantes (4s)
+                wait = WebDriverWait(driver, 4)
+            except Exception as se_init:
+                print(f"[Biodiv] Selenium init KO: {se_init}", file=self.stdout_redirect)
             print(f"[Biodiv] Scraping de {len(species_list)} espece(s)...", file=self.stdout_redirect)
 
             # Collecter toutes les données d'espèces avec leurs images

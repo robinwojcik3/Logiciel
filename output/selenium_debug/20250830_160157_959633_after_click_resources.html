@@ -1,0 +1,353 @@
+<html lang="fr" data-theme="dark"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analyse Patrimoniale de la Flore</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icons/icon-192.png">
+
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/esri-leaflet@3.0.10/dist/esri-leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <link rel="stylesheet" href="leaflet.groupedlayercontrol.min.css">
+    <script src="leaflet.groupedlayercontrol.min.js"></script>
+    
+    <!-- Bibliothèques pour l'export shapefile -->
+    <script src="https://unpkg.com/proj4@2.9.0/dist/proj4.js"></script>
+    <script src="shapefile.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/shpjs@3.5.0/dist/shp.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/geoportal-extensions-leaflet@latest/dist/GpPluginLeaflet.js"></script>
+
+    <script defer="" src="ui.js"></script>
+    <script defer="" src="biblio-patri.js"></script>
+    <script defer="" src="sw-register.js"></script>
+    <style>
+      .logo-icon { width: 24px; height: auto; }
+      .small-logo { height: 24px; width: auto; }
+      #profile-container {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        display: none;
+        z-index: 1000;
+        gap: 4px;
+        align-items: flex-start;
+        overflow: visible;
+      }
+      #profile-container.expanded {
+        left: 0;
+        right: 0;
+        bottom: 0;
+        flex-direction: column;
+        align-items: stretch;
+      }
+      #profile-canvas {
+        width: 280px;
+        height: 100px;
+        display: block;
+        background: rgba(255,255,255,0.9);
+        border: 1px solid #000;
+        border-radius: 4px;
+      }
+      #profile-container.expanded #profile-canvas {
+        width: 100%;
+      }
+      #profile-info {
+        background: rgba(255,255,255,0.9);
+        border: 1px solid #000;
+        border-radius: 4px;
+        padding: 4px;
+        font-size: 0.8rem;
+        line-height: 1.2;
+        color: #000;
+        white-space: nowrap;
+      }
+      #profile-hover {
+        position: absolute;
+        top: 0;
+        left: 0;
+        transform: translateX(-50%);
+        padding: 4px;
+        font-size: 0.75rem;
+        background: rgba(255,255,255,0.95);
+        border: 1px solid #333;
+        border-radius: 6px;
+        color: #000;
+        max-width: 200px;
+        white-space: normal;
+        word-break: break-word;
+        pointer-events: none;
+        display: none;
+        z-index: 1002;
+        opacity: 0;
+        transition: opacity 0.25s ease-in-out;
+      }
+      .tooltip-alt {
+        font-weight: 600;
+        text-align: center;
+        margin-bottom: 4px;
+      }
+      .tooltip-pill {
+        display: block;
+        padding: 6px 8px;
+        border-radius: 12px;
+        color: #fff;
+        font-size: 0.75rem;
+        line-height: 1.2;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+        margin-top: 2px;
+        word-break: break-word;
+      }
+      .vegetation-pill { background: #2E7D32; }
+      .soil-pill { background: #8D6E63; }
+      #profile-pills {
+        position: absolute;
+        left: 0;
+        bottom: calc(100% + 4px);
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        z-index: 1001;
+      }
+      .fixed-pill {
+        display: inline-block;
+        line-height: 1.2;
+        height: calc(1.2em * 3 + 12px);
+        white-space: normal;
+        overflow: hidden;
+      }
+      #profile-margin-handle {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 6px;
+        cursor: n-resize;
+        background: rgba(0,0,0,0.2);
+      }
+      #profile-resizer {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        width: 12px;
+        height: 12px;
+        cursor: ns-resize;
+        background: rgba(0,0,0,0.2);
+      }
+      .profile-label {
+        position: absolute;
+        background: rgba(255,255,255,0.9);
+        padding: 1px 2px;
+        border-radius: 2px;
+        font-size: 10px;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .profile-popup {
+        position: absolute;
+        z-index: 1001;
+        background: rgba(255,255,255,0.95);
+        border: 1px solid #000;
+        border-radius: 4px;
+        padding: 4px;
+        font-size: 0.8rem;
+        color: #000;
+      }
+      .results-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+      }
+      .resource-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.4rem 0.6rem;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        text-decoration: none;
+        font-size: 0.9rem;
+        color: var(--text);
+        transition: transform .2s;
+      }
+      .resource-btn:hover { transform: scale(1.05); }
+      .resource-icon { width: 24px; height: 24px; margin: 0; }
+      .resources-popup {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+      }
+      .altitude-info {
+        grid-column: 1 / -1;
+        text-align: center;
+        margin-bottom: 0.5rem;
+        font-weight: bold;
+      }
+      .phenology-panel {
+        margin-top: 0.5rem;
+        padding: 0.5rem;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+      }
+      .phenology-select {
+        width: 100%;
+        margin-top: 0.5rem;
+      }
+      .phenology-options {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 0.5rem;
+      }
+      .phenology-label {
+        text-align: center;
+        margin-bottom: 0.5rem;
+      }
+      #import-popup {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+      #import-popup .popup-content {
+        background: var(--card);
+        padding: 1rem;
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        max-width: 90%;
+      }
+    </style>
+<style>
+        #notification-container { position: fixed; top: 1rem; right: 1rem; z-index: 2000; display: flex; flex-direction: column; align-items: flex-end; }
+        .notification { padding: 10px 15px; margin-top: .5rem; border-radius: 4px; color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3); font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        .notification.success { background: #4caf50; }
+        .notification.error { background: #e53935; }
+        #modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 3000; padding: 1rem; }
+        #modal-overlay.show { display: flex; }
+        #modal-overlay .modal-content { background: var(--card, #fff); color: var(--text, #000); padding: 1rem 1.5rem; border-radius: 6px; max-width: 500px; width: 100%; }
+        #modal-overlay .modal-close { float: right; cursor: pointer; background: none; border: none; font-size: 1.5rem; }
+        #spinner-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,.7); display: none; align-items: center; justify-content: center; z-index: 4000; }
+        #spinner-overlay.show { display: flex; }
+        #spinner-overlay .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #4caf50; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style></head>
+<body>
+    <nav class="tabs-container">
+        <div class="tabs">
+            <button class="tab" onclick="window.location.href='index.html'">Identification</button>
+            <button class="tab active">Carto</button>
+            <button class="tab" onclick="window.location.href='phytosocio.html'">Phytosociologie</button>
+        </div>
+    </nav>
+    <div id="section-nav" class="section-nav" style="display: flex; top: 52px;">
+        <button id="scroll-map-btn" class="nav-tab active">Carte</button>
+        <button id="scroll-table-btn" class="nav-tab">Tableau</button>
+        <button id="eco-mode-toggle" class="nav-tab" style="display:none;">Mode comparatif</button>
+    </div>
+    <div class="main-content">
+        <div class="search-controls">
+            <div class="search-group address-group" style="display: none;">
+                <input type="text" id="address-input" placeholder="Saisir une adresse, une ville, un lieu...">
+                <button id="search-address-btn" class="action-button">🔍 Rechercher</button>
+            </div>
+            <div class="button-grid">
+                <button id="use-geolocation-btn" class="action-button">📍 Ma position</button>
+                <button id="draw-polygon-btn" class="action-button">🔶 Zone personnalisée</button>
+                <button id="draw-line-btn" class="action-button">📏 Linéaire</button>
+                <button id="toggle-labels-btn" class="action-button">🏷️ Masquer les étiquettes</button>
+                <button id="upload-shapefile-btn" class="action-button">📁 Importer shapefile</button>
+                <input type="file" id="shapefile-input" multiple="" accept=".zip,.shp,.dbf,.prj,.cpg,.shx,.qmd" style="display: block; visibility: visible; opacity: 1; position: static;">
+            </div>
+            <div id="import-popup" style="display: none;">
+                <div class="popup-content">
+                    <p>Quelle couche souhaitez-vous importer ?</p>
+                    <button id="import-zone-btn" class="action-button">Zone d’étude</button>
+                    <button id="import-aire-btn" class="action-button">Aire d’étude élargie</button>
+                </div>
+            </div>
+            <div class="search-group">
+                <button id="phenology-btn" class="action-button" aria-expanded="false" style="display:none">Phénologie</button>
+                <div id="phenology-panel" class="phenology-panel" hidden="">
+                    <label for="pheno-month" class="phenology-label">Mois</label>
+                    <select id="pheno-month" class="phenology-select" aria-label="Mois">
+                        <option value="0">Toute l'année</option>
+                        <option value="1">Janvier</option>
+                        <option value="2">Février</option>
+                        <option value="3">Mars</option>
+                        <option value="4">Avril</option>
+                        <option value="5">Mai</option>
+                        <option value="6">Juin</option>
+                        <option value="7">Juillet</option>
+                        <option value="8">Août</option>
+                        <option value="9">Septembre</option>
+                        <option value="10">Octobre</option>
+                        <option value="11">Novembre</option>
+                        <option value="12">Décembre</option>
+                    </select>
+                    <div class="phenology-options">
+                        <label><input type="checkbox" id="pheno-include-missing"> inclure manquantes</label>
+                        <button id="pheno-reset-btn" class="action-button">Réinitialiser</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="status" class="status-container" style="display:none;">
+            <span class="progress-label">GBIF</span>
+            <div id="progress-container" style="display: none;"><div id="progress-bar"></div></div>
+            <span id="status-message"></span>
+        </div>
+        <div id="status-shp" class="status-container" style="display:none;">
+            <span class="progress-label">Shapefile</span>
+            <div id="shp-progress-container" style="display: none;"><div id="shp-progress-bar"></div></div>
+            <span id="shp-status-message"></span>
+        </div>
+
+
+
+        <div id="map-table-wrapper">
+            <div id="map" class="leaflet-container leaflet-touch leaflet-retina leaflet-fade-anim leaflet-grab leaflet-touch-drag leaflet-touch-zoom" tabindex="0" style="display: block; --label-font-size: 15px; outline-style: none;">
+                <div id="crosshair" style="display:none;"></div>
+                <div id="profile-container">
+                    <canvas id="profile-canvas" width="280" height="100"></canvas>
+                    <div id="profile-info"></div>
+                    <div id="profile-hover"></div>
+                    <div id="profile-pills">
+                        <div id="profile-veg-pill" class="tooltip-pill vegetation-pill fixed-pill"></div>
+                        <div id="profile-soil-pill" class="tooltip-pill soil-pill fixed-pill"></div>
+                    </div>
+                    <div id="profile-margin-handle"></div>
+                    <div id="profile-resizer"></div>
+                </div>
+            <div class="leaflet-pane leaflet-map-pane" style="transform: translate3d(0px, 0px, 0px);"><div class="leaflet-pane leaflet-tile-pane"><div class="leaflet-layer " style="z-index: 1; opacity: 1;"><div class="leaflet-tile-container leaflet-zoom-animated" style="z-index: 18; transform: translate3d(0px, 0px, 0px) scale(1);"><img alt="" src="https://b.tile.opentopomap.org/15/16920/11785.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(246px, 133px, 0px); opacity: 1;"><img alt="" src="https://c.tile.opentopomap.org/15/16921/11785.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(502px, 133px, 0px); opacity: 1;"><img alt="" src="https://a.tile.opentopomap.org/15/16920/11784.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(246px, -123px, 0px); opacity: 1;"><img alt="" src="https://b.tile.opentopomap.org/15/16921/11784.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(502px, -123px, 0px); opacity: 1;"><img alt="" src="https://c.tile.opentopomap.org/15/16920/11786.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(246px, 389px, 0px); opacity: 1;"><img alt="" src="https://a.tile.opentopomap.org/15/16921/11786.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(502px, 389px, 0px); opacity: 1;"><img alt="" src="https://a.tile.opentopomap.org/15/16919/11785.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-10px, 133px, 0px); opacity: 1;"><img alt="" src="https://a.tile.opentopomap.org/15/16922/11785.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(758px, 133px, 0px); opacity: 1;"><img alt="" src="https://c.tile.opentopomap.org/15/16919/11784.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-10px, -123px, 0px); opacity: 1;"><img alt="" src="https://c.tile.opentopomap.org/15/16922/11784.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(758px, -123px, 0px); opacity: 1;"><img alt="" src="https://b.tile.opentopomap.org/15/16919/11786.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-10px, 389px, 0px); opacity: 1;"><img alt="" src="https://b.tile.opentopomap.org/15/16922/11786.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(758px, 389px, 0px); opacity: 1;"></div></div></div><div class="leaflet-pane leaflet-overlay-pane"><svg pointer-events="none" class="leaflet-zoom-animated" width="1146" height="596" viewBox="-95 -50 1146 596" style="transform: translate3d(-95.1746px, -49.7143px, 0px) scale(1);"><g><path class="leaflet-interactive" stroke="red" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="red" fill-opacity="0" fill-rule="evenodd" d="M518 97L521 105L521 123L507 130L506 138L507 155L512 178L507 201L501 212L473 244L465 256L458 263L455 270L456 301L467 331L480 355L487 380L486 410L483 422L468 424L470 426L457 434L447 434L445 424L467 422L466 417L474 386L473 374L470 363L461 350L451 317L446 313L443 305L442 278L436 265L434 248L440 240L446 235L454 219L466 201L442 172L440 164L451 144L453 133L460 128L462 119L467 110L472 105L476 96L483 91L483 84L487 75L487 63L493 64L493 73L501 75L513 91L516 89L521 93L519 95zM449 258L501 200L506 178L500 157L499 123L510 120L514 113L514 100L495 117L495 122L498 125L497 130L499 137L493 153L498 159L500 165L496 180L482 189L466 211L451 238L440 249L442 263L449 282L448 268zM501 86L491 81L488 93L481 99L467 122L466 129L464 132L459 135L457 146L450 156L446 165L452 175L470 196L478 185L491 177L494 166L487 151L493 137L491 130L492 127L487 118L489 113L501 105L502 102L510 96L506 92z"></path></g></svg></div><div class="leaflet-pane leaflet-shadow-pane"></div><div class="leaflet-pane leaflet-marker-pane"><div class="leaflet-marker-icon user-location-icon leaflet-zoom-animated leaflet-interactive" tabindex="0" role="button" style="margin-left: -10px; margin-top: -10px; width: 20px; height: 20px; transform: translate3d(-3194px, -4930px, 0px); z-index: -4930;">⭐</div></div><div class="leaflet-pane leaflet-tooltip-pane"></div><div class="leaflet-pane leaflet-popup-pane"></div><div class="leaflet-proxy leaflet-zoom-animated" style="transform: translate3d(4.33175e+06px, 3.01708e+06px, 0px) scale(16384);"></div></div><div class="leaflet-control-container"><div class="leaflet-top leaflet-left"><div class="leaflet-control-zoom leaflet-bar leaflet-control"><a class="leaflet-control-zoom-in" href="#" title="Zoom in" role="button" aria-label="Zoom in" aria-disabled="false"><span aria-hidden="true">+</span></a><a class="leaflet-control-zoom-out" href="#" title="Zoom out" role="button" aria-label="Zoom out" aria-disabled="false"><span aria-hidden="true">−</span></a></div></div><div class="leaflet-top leaflet-right"><div class="leaflet-control-layers leaflet-control" aria-haspopup="true"><a class="leaflet-control-layers-toggle" href="#" title="Layers"></a><form class="leaflet-control-layers-list" style="max-height: 300px; overflow-y: auto;"><div class="leaflet-control-layers-base"><label><input type="radio" class="leaflet-control-layers-selector" name="leaflet-base-layers" checked="checked"><span> Topographique</span></label><label><input type="radio" class="leaflet-control-layers-selector" name="leaflet-base-layers"><span> Satellite</span></label><label><input type="radio" class="leaflet-control-layers-selector" name="leaflet-base-layers"><span> Remonter le temps – Photos IGN / Photos – Aujourd’hui</span></label><label><input type="radio" class="leaflet-control-layers-selector" name="leaflet-base-layers"><span> Remonter le temps – Photos IGN / Photos – 2011–2015</span></label><label><input type="radio" class="leaflet-control-layers-selector" name="leaflet-base-layers"><span> Remonter le temps – Photos IGN / Photos – 2006–2010</span></label><label><input type="radio" class="leaflet-control-layers-selector" name="leaflet-base-layers"><span> Remonter le temps – Photos IGN / Photos – 2000–2005</span></label><label><input type="radio" class="leaflet-control-layers-selector" name="leaflet-base-layers"><span> Remonter le temps – Photos IGN / Photos – 1965–1980</span></label><label><input type="radio" class="leaflet-control-layers-selector" name="leaflet-base-layers"><span> Remonter le temps – Photos IGN / Photos – 1950–1965</span></label></div><div class="leaflet-control-layers-separator"></div><div class="leaflet-control-layers-overlays"><div class="leaflet-control-layers-group" id="leaflet-control-layers-group-1"><label class="leaflet-control-layers-group-label"><input type="checkbox" class="leaflet-control-layers-group-selector"><span class="leaflet-control-layers-group-name">Contexte écologique</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Contexte éco</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Corine Land Cover 2018</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Zones humides potentielles</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Carte des sols</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Carte de la végétation</span></label></div><div class="leaflet-control-layers-group" id="leaflet-control-layers-group-2"><label class="leaflet-control-layers-group-label"><input type="checkbox" class="leaflet-control-layers-group-selector"><span class="leaflet-control-layers-group-name">ZNIEFF &amp; Natura 2000</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> ZNIEFF 1</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> ZNIEFF 2</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Sites Natura 2000 (Directive Habitats)</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Sites Natura 2000 (Directive Oiseaux)</span></label></div><div class="leaflet-control-layers-group" id="leaflet-control-layers-group-3"><label class="leaflet-control-layers-group-label"><input type="checkbox" class="leaflet-control-layers-group-selector"><span class="leaflet-control-layers-group-name">Aires protégées</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Aires protégées Géoparcs</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Arrêtés listes de sites d'intérêt géologique</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Arrêtés de protection d’habitats naturels</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Arrêtés de protection de biotope</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Conservatoires d'Espaces Naturel</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Parcs nationaux</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Parcs naturels régionaux</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Périmètres de protection de réserves naturelles</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Réserves biologiques</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Réserves de biosphère</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Réserves intégrales des Parc nationaux</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Réserves nationales de chasse et de faune sauvage</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Réserves naturelles nationales</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Réserves naturelles régionales</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Zones humides d'importance internationale</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Zones de protection renforcée</span></label></div><div class="leaflet-control-layers-group" id="leaflet-control-layers-group-4"><label class="leaflet-control-layers-group-label"><input type="checkbox" class="leaflet-control-layers-group-selector"><span class="leaflet-control-layers-group-name">Mesures compensatoires</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Mesures compensatoires _emprises_polygones</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Mesures compensatoires _emprises_ponctuelles</span></label></div><div class="leaflet-control-layers-group" id="leaflet-control-layers-group-5"><label class="leaflet-control-layers-group-label"><input type="checkbox" class="leaflet-control-layers-group-selector"><span class="leaflet-control-layers-group-name">Référentiels forestiers et sols</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> BD Forêt® v1 (1987-2004)</span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> BD Forêt® v2 (2006-2019)</span></label></div><div class="leaflet-control-layers-group" id="leaflet-control-layers-group-0"><label class="leaflet-control-layers-group-label"><span class="leaflet-control-layers-group-name"></span></label><label><input type="checkbox" class="leaflet-control-layers-selector"><span> Espèces Patrimoniales</span></label><label><input type="checkbox" class="leaflet-control-layers-selector" checked=""><span> Zone d’étude</span></label></div></div></form></div></div><div class="leaflet-bottom leaflet-left"></div><div class="leaflet-bottom leaflet-right"><div class="leaflet-control-attribution leaflet-control"><a href="https://leafletjs.com" title="A JavaScript library for interactive maps"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8" class="leaflet-attribution-flag"><path fill="#4C7BE1" d="M0 0h12v4H0z"></path><path fill="#FFD500" d="M0 4h12v3H0z"></path><path fill="#E0BC00" d="M0 7h12v1H0z"></path></svg> Leaflet</a> <span aria-hidden="true">|</span> Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap (CC-BY-SA), © CNRS EcoLab — Carte de la végétation</div></div></div></div>
+
+            <div id="side-panel">
+                <div id="download-container" style="text-align:center; display:none; margin-bottom:1rem;">
+                    <button id="download-shapefile-btn" class="action-button">⬇️ Shapefile</button>
+                </div>
+
+                <div id="resources-grid" class="results-grid" style="display:none; margin-bottom:1rem;"></div>
+
+                <button id="table-placement-toggle" class="action-button" style="margin-bottom:1rem;">Tableau latéral</button>
+
+                <div id="results" class="results-container"></div>
+            </div>
+        </div>
+    </div>
+
+
+<div id="notification-container"></div><div id="modal-overlay"><div class="modal-content"><button class="modal-close" aria-label="Fermer">×</button><div class="modal-body"></div></div></div><div id="spinner-overlay"><div class="spinner"></div></div></body></html>
