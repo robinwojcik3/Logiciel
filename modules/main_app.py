@@ -3047,83 +3047,76 @@ class ContexteEcoTab(ttk.Frame):
             print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
 
         finally:
-
-            self.after(0, lambda: self.wiki_button.config(state="normal"))
+            def _reenable_btn():
+                try:
+                    btn = getattr(self, 'wiki_button', None) or getattr(self, 'scraping_button', None)
+                    if btn:
+                        btn.config(state="normal")
+                except Exception:
+                    pass
+            self.after(0, _reenable_btn)
 
 
 
     def _update_wiki_table(self, data: dict) -> None:
 
         try:
+            # Collect values from either legacy or new keys
+            clim_txt = data.get('climat') or data.get('climat_p1') or ''
+            occ_txt  = data.get('occup_sols') or data.get('occupation_p1') or ''
+            url_txt  = data.get('url', '')
 
-            clim_txt = data.get('climat_p1', '')
+            payload = {
+                'climat': clim_txt if clim_txt and not str(clim_txt).lower().startswith('non trouv') else 'Non trouvé',
+                'occupation_sols': occ_txt if occ_txt and not str(occ_txt).lower().startswith('non trouv') else 'Non trouvé',
+            }
 
-            occ_txt = data.get('occupation_p1', '')
+            # Update the consolidated results tree on the UI thread
+            self.after(0, self._update_results_tree, payload)
 
-            url_txt = data.get('url', '')
-
-            # Compat: utiliser les nouvelles clés si présentes
-
-            clim_txt2 = data.get('climat') or clim_txt
-
-            occ_txt2 = data.get('occup_sols') or occ_txt
-
-            def _norm(s):
-
-                try:
-
-                    return s if (isinstance(s, str) and not s.lower().startswith('non trouv')) else ''
-
-                except Exception:
-
-                    return ''
-
-            # Mettre à jour aussi les zones scrollables
-
-            def _fill(widget, s):
-
-                try:
-
-                    widget.delete('1.0', tk.END)
-
-                    s2 = s if (isinstance(s, str) and not s.lower().startswith('non trouv')) else 'Non trouvé'
-
-                    widget.insert(tk.END, s2)
-
-                    widget.config(state='disabled')
-
-                    #
-
-                except Exception:
-
-                    pass
-
-            # Anciens widgets supprimés - utiliser le tableau consolidé à la place
-
-            self.after(0, lambda: self.wiki_climat_var.set(_norm(clim_txt2)))
-
-            self.after(0, lambda: self.wiki_occ_var.set(_norm(occ_txt2)))
-
-            # Mettre à jour l'URL et l'état du bouton d'ouverture
-
+            # Store URL and enable the open button if present
             def _upd_url():
-
                 try:
-
                     self.wiki_last_url = url_txt or ""
-
-                    if hasattr(self, 'wiki_open_button'):
-
-                        self.wiki_open_button.config(state=("normal" if self.wiki_last_url else "disabled"))
-
+                    btn = getattr(self, 'wiki_open_button', None) or getattr(self, 'open_scraping_button', None)
+                    if btn:
+                        btn.config(state=("normal" if self.wiki_last_url else "disabled"))
                 except Exception:
-
                     pass
-
             self.after(0, _upd_url)
 
         except Exception:
 
+            pass
+
+
+
+    def _update_results_tree(self, data: dict) -> None:
+        """Update rows in self.results_tree. Keys are expected to be iids:
+        'climat', 'occupation_sols', 'altitude', 'vegetation', 'sols'.
+        """
+        try:
+            if not hasattr(self, 'results_tree'):
+                return
+            labels = {
+                'climat': 'Climat',
+                'occupation_sols': 'Occupation sols',
+                'altitude': 'Altitude',
+                'vegetation': 'Végétation',
+                'sols': 'Sols',
+            }
+            for iid, text in (data or {}).items():
+                if iid not in labels:
+                    continue
+                try:
+                    # Preserve first column label
+                    cur = self.results_tree.item(iid, 'values')
+                    label = cur[0] if (isinstance(cur, (list, tuple)) and len(cur) >= 1) else labels[iid]
+                    self.results_tree.item(iid, values=(label, text))
+                except Exception:
+                    # If row doesn't exist yet, insert it
+                    self.results_tree.insert("", "end", values=(labels[iid], text), iid=iid)
+        except Exception:
             pass
 
 
