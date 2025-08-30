@@ -1344,17 +1344,10 @@ class ExportCartesTab(ttk.Frame):
                 return
             lat_dd, lon_dd = centroid
 
-            # Essayer de récupérer le nom de la commune depuis le shapefile
-            commune = ""
-            try:
-                shp_path = self.ze_shp_var.get()
-                gdf = gpd.read_file(shp_path)
-                for col in ["commune", "nom", "NOM_COM", "NOM"]:
-                    if col in gdf.columns:
-                        commune = str(gdf.iloc[0][col])
-                        break
-            except Exception:
-                pass
+            # Récupérer le nom de la commune et le département
+            commune, dep = self._detect_commune(lat_dd, lon_dd)
+            if dep:
+                commune = f"{commune} ({dep})"
 
             output_dir = os.path.join(self.out_dir_var.get() or OUT_IMG, "Remonter le temps")
             word_filename = "Comparaison_temporelle_Paysage.docx"
@@ -1438,7 +1431,7 @@ class ExportCartesTab(ttk.Frame):
             doc.add_paragraph()
             comment_template = (
                 "Rédige un commentaire synthétique de l'évolution de l'occupation du sol observée "
-                "sur les images aériennes de la zone d'étude, aux différentes dates indiquées "
+                "sur les images aériennes de la commune de {commune}, aux différentes dates indiquées "
                 "(1950–1965, 1965–1980, 2000–2005, aujourd’hui). Concentre-toi sur les grandes "
                 "dynamiques d'aménagement (urbanisation, artificialisation, évolution des milieux "
                 "ouverts ou boisés), en identifiant les principales transformations visibles. "
