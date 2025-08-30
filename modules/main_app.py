@@ -1580,40 +1580,18 @@ class ExportCartesTab(ttk.Frame):
 
             time.sleep(0.75)
 
-            # 5) Cliquer sur Zone d'étude (essayer plusieurs sélecteurs + fallback)
-            clicked_zone = False
+            # 5) Cliquer sur Zone d'étude
             try:
-                selectors = [
-                    (By.ID, "import-zone-btn"),
-                    (By.XPATH, "//button[@id='import-zone-btn']"),
-                    (By.XPATH, "//button[contains(., 'Zone d’étude')]"),  # apostrophe typographique
-                    (By.XPATH, "//button[contains(., " + '"Zone d\'étude"' + ")]"),  # apostrophe simple
-                    (By.XPATH, "//button[contains(normalize-space(.), 'Zone') and contains(@class,'action-button')]")
-                ]
-                for by, sel in selectors:
-                    try:
-                        btn_zone = wait.until(EC.element_to_be_clickable((by, sel)))
-                        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", btn_zone)
-                        try:
-                            btn_zone.click()
-                        except Exception:
-                            driver.execute_script("arguments[0].click();", btn_zone)
-                        print(f"[Cartes] Clic sur 'Zone d'étude' via {by}={sel}", file=self.stdout_redirect)
-                        clicked_zone = True
-                        break
-                    except Exception:
-                        continue
+                btn_zone = wait.until(EC.element_to_be_clickable((By.ID, "import-zone-btn")))
+                btn_zone.click()
+                print("[Cartes] Clic sur 'Zone d'étude'", file=self.stdout_redirect)
             except Exception as e:
-                print(f"[Cartes] Exception pendant la recherche du bouton Zone: {e}", file=self.stdout_redirect)
+                print(f"[Cartes] Erreur clic Zone d'étude: {e}", file=self.stdout_redirect)
+                return
 
-            if not clicked_zone:
-                print("[Cartes] Bouton 'Zone d'étude' non cliquable - on tente l'input fichier directement", file=self.stdout_redirect)
-                try:
-                    self._selenium_debug_dump(driver, "before_file_input_fallback")
-                except Exception:
-                    pass
+            time.sleep(0.75)
 
-            # 6) Préparer et envoyer les fichiers shapefile
+            # 6) Préparer et envoyer automatiquement les fichiers shapefile
             def _from_long_unc(p: str) -> str:
                 p = p or ""
                 if p.startswith("\\\\?\\UNC\\"):
@@ -1630,98 +1608,130 @@ class ExportCartesTab(ttk.Frame):
             if not files:
                 raise ValueError("Fichiers du shapefile introuvables pour l'import")
 
-            print(f"[Cartes] Envoi de {len(files)} fichiers shapefile", file=self.stdout_redirect)
+            print(f"[Cartes] Sélection automatique de {len(files)} fichiers shapefile", file=self.stdout_redirect)
+            for f in files:
+                print(f"[Cartes] - {f}", file=self.stdout_redirect)
 
-            # Envoyer les fichiers à l'input[type=file]
+            # Simuler la sélection de fichiers dans l'explorateur Windows
             try:
-                # Attendre la présence d'au moins un input file
+                # Attendre que l'input file soit disponible
+                file_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='file']")))
+                
+                # Rendre l'input visible pour l'interaction
+                driver.execute_script("""
+                    arguments[0].style.display = 'block';
+                    arguments[0].style.visibility = 'visible';
+                    arguments[0].style.opacity = '1';
+                    arguments[0].style.position = 'static';
+                """, file_input)
+                
+                # Envoyer tous les fichiers en une fois (séparés par \n)
+                file_input.send_keys("\n".join(files))
+                print("[Cartes] Fichiers shapefile sélectionnés automatiquement", file=self.stdout_redirect)
+                
                 try:
-                    wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, "input[type='file']")) > 0)
+                    self._selenium_debug_dump(driver, "after_send_files")
                 except Exception:
                     pass
-
-                inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
-                target_input = inputs[-1] if inputs else None
-                if target_input:
-                    # Assurer la visibilité/cliquabilité de l'input si possible
-                    try:
-                        driver.execute_script("arguments[0].style.display='block'; arguments[0].style.visibility='visible';", target_input)
-                    except Exception:
-                        pass
-                    target_input.send_keys("\n".join(files))
-                    print("[Cartes] Fichiers shapefile envoyés", file=self.stdout_redirect)
-                    try:
-                        self._selenium_debug_dump(driver, "after_send_files")
-                    except Exception:
-                        pass
-                else:
-                    print("[Cartes] Champ d'import fichier introuvable (inputs=0)", file=self.stdout_redirect)
+                    
             except Exception as e:
-                print(f"[Cartes] Erreur envoi fichiers: {e}", file=self.stdout_redirect)
+                print(f"[Cartes] Erreur sélection fichiers: {e}", file=self.stdout_redirect)
 
             time.sleep(0.75)
 
-            # 8) Clic droit au centre de la carte pour activer le profil
+            # 8) Clic droit au milieu de la carte
             try:
                 map_el = wait.until(EC.visibility_of_element_located((By.ID, "map")))
-                # Clic au centre de la carte pour activer le profil
-                ActionChains(driver).move_to_element(map_el).click(map_el).perform()
-                print("[Cartes] Clic sur la carte pour activer le profil", file=self.stdout_redirect)
+                # Clic droit au centre de la carte
+                ActionChains(driver).move_to_element(map_el).context_click(map_el).perform()
+                print("[Cartes] Clic droit sur la carte", file=self.stdout_redirect)
                 try:
-                    self._selenium_debug_dump(driver, "after_map_click")
+                    self._selenium_debug_dump(driver, "after_right_click")
                 except Exception:
                     pass
             except Exception as e:
-                print(f"[Cartes] Erreur clic carte: {e}", file=self.stdout_redirect)
+                print(f"[Cartes] Erreur clic droit carte: {e}", file=self.stdout_redirect)
 
             time.sleep(0.5)
 
-            # 9) Attendre que le profil soit visible et extraire les données
+            # 10) Cliquer sur le bouton 'Ressources'
+            try:
+                btn_resources = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'action-button') and text()='Ressources']")))
+                btn_resources.click()
+                print("[Cartes] Clic sur 'Ressources'", file=self.stdout_redirect)
+                try:
+                    self._selenium_debug_dump(driver, "after_click_resources")
+                except Exception:
+                    pass
+            except Exception as e:
+                print(f"[Cartes] Erreur clic Ressources: {e}", file=self.stdout_redirect)
+
+            time.sleep(0.75)
+
+            # 12) Extraire les 3 éléments de la popup
             alt, veg, soil = "Erreur", "Erreur", "Erreur"
             try:
-                # Attendre que le conteneur de profil soit visible
-                wait.until(EC.visibility_of_element_located((By.ID, "profile-container")))
-                time.sleep(0.75) # Pause de 0.75s pour laisser le profil se charger
+                # Attendre que la popup soit visible
+                time.sleep(0.75)
                 
-                self._selenium_debug_dump(driver, "after_profile_loaded")
+                self._selenium_debug_dump(driver, "after_popup_loaded")
 
-                # Extraire les informations du profil
+                # Extraire les informations de la popup
                 page_source = driver.page_source
                 soup = BeautifulSoup(page_source, 'html.parser')
 
-                # Altitude - chercher dans profile-info ou altitude-info
-                altitude_info = soup.select_one('#profile-info') or soup.select_one('.altitude-info')
-                if altitude_info:
-                    altitude_text = altitude_info.get_text(strip=True)
-                    # Chercher pattern "XXX m" ou "Altitude: XXX m" ou "Montagnard — XXX m"
-                    altitude_match = re.search(r'(\d+)\s*m', altitude_text)
-                    if altitude_match:
-                        alt_num = altitude_match.group(1)
-                        # Extraire aussi le type climatique si présent
-                        climate_match = re.search(r'(Montagnard|Collinéen|Méditerranéen|Alpin)\s*—\s*\d+\s*m', altitude_text)
-                        if climate_match:
-                            alt = f"{climate_match.group(1)} — {alt_num} m"
-                        else:
-                            alt = f"{alt_num} m"
-                    else:
-                        alt = altitude_text if altitude_text else "Non trouvée"
+                # 1) Altitude - chercher <div class="altitude-info">
+                altitude_div = soup.select_one('div.altitude-info')
+                if altitude_div:
+                    alt = altitude_div.get_text(strip=True)
+                    print(f"[Cartes] Altitude trouvée: {alt}", file=self.stdout_redirect)
                 else:
                     alt = "Non trouvée"
+                    print("[Cartes] Élément altitude non trouvé", file=self.stdout_redirect)
 
-                # Végétation - chercher dans profile-veg-pill ou vegetation-pill
-                vegetation_pill = soup.select_one('#profile-veg-pill') or soup.select_one('.vegetation-pill')
-                veg = vegetation_pill.get_text(strip=True) if vegetation_pill and vegetation_pill.get_text(strip=True) else "Non trouvée"
+                # 2) Végétation - chercher <div id="profile-veg-pill">
+                vegetation_div = soup.select_one('#profile-veg-pill')
+                if vegetation_div:
+                    veg = vegetation_div.get_text(strip=True)
+                    if veg:
+                        print(f"[Cartes] Végétation trouvée: {veg}", file=self.stdout_redirect)
+                    else:
+                        # Essayer d'attendre que le contenu se charge
+                        time.sleep(1)
+                        page_source = driver.page_source
+                        soup = BeautifulSoup(page_source, 'html.parser')
+                        vegetation_div = soup.select_one('#profile-veg-pill')
+                        veg = vegetation_div.get_text(strip=True) if vegetation_div else "Non trouvée"
+                        print(f"[Cartes] Végétation (2e tentative): {veg}", file=self.stdout_redirect)
+                else:
+                    veg = "Non trouvée"
+                    print("[Cartes] Élément végétation non trouvé", file=self.stdout_redirect)
 
-                # Sol - chercher dans profile-soil-pill ou soil-pill
-                soil_pill = soup.select_one('#profile-soil-pill') or soup.select_one('.soil-pill')
-                soil = soil_pill.get_text(strip=True) if soil_pill and soil_pill.get_text(strip=True) else "Non trouvé"
+                # 3) Sol - chercher <div id="profile-soil-pill">
+                soil_div = soup.select_one('#profile-soil-pill')
+                if soil_div:
+                    soil = soil_div.get_text(strip=True)
+                    if soil:
+                        print(f"[Cartes] Sol trouvé: {soil}", file=self.stdout_redirect)
+                    else:
+                        # Essayer d'attendre que le contenu se charge
+                        time.sleep(1)
+                        page_source = driver.page_source
+                        soup = BeautifulSoup(page_source, 'html.parser')
+                        soil_div = soup.select_one('#profile-soil-pill')
+                        soil = soil_div.get_text(strip=True) if soil_div else "Non trouvé"
+                        print(f"[Cartes] Sol (2e tentative): {soil}", file=self.stdout_redirect)
+                else:
+                    soil = "Non trouvé"
+                    print("[Cartes] Élément sol non trouvé", file=self.stdout_redirect)
                 
+                print(f"[Cartes] RÉSULTATS FINAUX:", file=self.stdout_redirect)
                 print(f"[Cartes] ALTITUDE : {alt}", file=self.stdout_redirect)
                 print(f"[Cartes] VÉGÉTATION : {veg}", file=self.stdout_redirect)
                 print(f"[Cartes] SOLS : {soil}", file=self.stdout_redirect)
 
             except Exception as e:
-                print(f"[Cartes] Erreur extraction profil: {e}", file=self.stdout_redirect)
+                print(f"[Cartes] Erreur extraction popup: {e}", file=self.stdout_redirect)
 
             # Mettre à jour le tableau des résultats
             payload = {
@@ -1862,45 +1872,11 @@ class ExportCartesTab(ttk.Frame):
             out_dir = os.path.join(OUT_IMG, "Photo BiodivAURA")
             os.makedirs(out_dir, exist_ok=True)
 
-            # Document unique pour toutes les especes
-            doc = Document()
-            try:
-                style_normal = doc.styles['Normal']
-                style_normal.font.name = 'Calibri'
-                style_normal._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
-            except Exception:
-                pass
-
             # Préparer Selenium (toujours visible pour cette fonctionnalité)
-            driver = None
-            wait = None
-            try:
-                options = webdriver.ChromeOptions()
-                options.add_experimental_option("excludeSwitches", ["enable-logging"]) 
-                options.add_argument("--log-level=3")
-                options.add_argument("--disable-extensions")
-                options.add_argument("--disable-gpu")
-                options.add_argument("--no-sandbox")
-                options.add_argument("--disable-dev-shm-usage")
-                try:
-                    # Ne pas attendre le chargement complet des pages
-                    options.page_load_strategy = 'none'
-                except Exception:
-                    pass
-                # IMPORTANT: ne pas forcer headless ici afin que l'utilisateur voie le navigateur
-                local_driver = os.path.join(REPO_ROOT if 'REPO_ROOT' in globals() else os.path.abspath(os.path.join(os.path.dirname(__file__), '..')), 'tools', 'chromedriver.exe')
-                if os.path.isfile(local_driver):
-                    driver = webdriver.Chrome(service=Service(local_driver), options=options)
-                else:
-                    driver = webdriver.Chrome(options=options)
-                try:
-                    driver.maximize_window()
-                except Exception:
-                    pass
-                # Attentes Selenium courtes mais un peu plus tolérantes (4s)
-                wait = WebDriverWait(driver, 4)
-            except Exception as se_init:
-                print(f"[Biodiv] Selenium init KO: {se_init}", file=self.stdout_redirect)
+            driver = self._get_or_create_driver()
+            if not driver:
+                return
+
             print(f"[Biodiv] Scraping de {len(species_list)} espece(s)...", file=self.stdout_redirect)
 
             # Collecter toutes les données d'espèces avec leurs images
