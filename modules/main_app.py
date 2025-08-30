@@ -1300,10 +1300,11 @@ class ExportCartesTab(ttk.Frame):
 
         # --- Bottom: console output ---
         bottom.columnconfigure(0, weight=1)
-        bottom.rowconfigure(0, weight=1)
-        ttk.Label(bottom, text="Console", style="Subtle.TLabel").grid(row=0, column=0, sticky="w", padx=6, pady=(4,0))
+        bottom.rowconfigure(2, weight=1)
+        ttk.Button(bottom, text="Ouput", command=self.open_output_folder).grid(row=0, column=0, sticky="w", padx=6, pady=(4,0))
+        ttk.Label(bottom, text="Console", style="Subtle.TLabel").grid(row=1, column=0, sticky="w", padx=6, pady=(4,0))
         console_frm = ttk.Frame(bottom)
-        console_frm.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0,6))
+        console_frm.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0,6))
         console_frm.columnconfigure(0, weight=1)
         console_frm.rowconfigure(0, weight=1)
         self.console = tk.Text(console_frm, height=10, state="disabled", wrap="word")
@@ -1316,6 +1317,13 @@ class ExportCartesTab(ttk.Frame):
             self.stdout_redirect = TextRedirector(self.console)
         except Exception:
             self.stdout_redirect = sys.stdout
+
+    def open_output_folder(self):
+        path = "C:\\Users\\utilisateur\\Mon Drive\\1 - Bota & Travail\\+++++++++  BOTA  +++++++++\\---------------------- 3) BDD\\PYTHON\\2) Contexte éco\\OUTPUT"
+        try:
+            os.startfile(path)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d'ouvrir le dossier : {e}")
 
     def open_gmaps(self):
         """Ouvre Google Maps centré sur le centroïde de la ZE."""
