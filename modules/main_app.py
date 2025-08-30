@@ -3688,99 +3688,10 @@ class ContexteEcoTab(ttk.Frame):
                                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
                                 },
                             )
-                            if resp.ok:
-                                soup = BeautifulSoup(resp.text, "html.parser")
-                                tag = soup.find("meta", attrs={"property": "og:image"})
-                                if tag and tag.get("content"):
-                                    img_url = tag.get("content")
-                        except Exception:
-                            pass
-                    else:
-                        # Ouvrir la page espèce via recherche Selenium (attentes 1s max)
-                        try:
-                            if "atlas.biodiversite" not in (driver.current_url or ""):
-                                driver.get("https://atlas.biodiversite-auvergne-rhone-alpes.fr/")
-                            inp = wait.until(EC.element_to_be_clickable((By.ID, "searchTaxons")))
-                            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", inp)
-                            inp.clear(); inp.send_keys(sp)
-                            first_result = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".search-results .result-item:first-child")))
-                            driver.execute_script("arguments[0].click();", first_result)
                             try:
-                                wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".species-header, .species-title")))
-                            except Exception:
-                                pass
-                            try:
-                                url_sp = driver.current_url
-                            except Exception:
-                                url_sp = None
-                        except Exception:
-                            url_sp = None
-                        # Extraire l'URL de l'image principale depuis la page ouverte par Selenium
-                        img_url = None
-                        try:
-                            # Essayer quelques sélecteurs probables
-                            selectors = [
-                                ".species-header img",
-                                ".species-title img",
-                                "meta[property='og:image']",
-                                ".gallery img",
-                                "img.card-img-top",
-                            ]
-                            # 1) Tenter via JS og:image (robuste même si images non chargées)
-                            try:
-                                og = driver.execute_script(
-                                    "var m=document.querySelector('meta[property=\\"og:image\\"]'); return m?m.content:null;"
-                                )
-                                if og and isinstance(og, str) and og.startswith("http"):
-                                    img_url = og
-                            except Exception:
-                                pass
-                            # 2) Sinon, tenter plusieurs fois les sélecteurs pendant ~3s
-                            if not img_url:
-                                end_t = time.time() + 3.0
-                                while time.time() < end_t and not img_url:
-                                    for sel in selectors:
-                                        try:
-                                            if sel.startswith("meta["):
-                                                el = driver.find_element(By.CSS_SELECTOR, sel)
-                                                src = el.get_attribute("content")
-                                            else:
-                                                el = driver.find_element(By.CSS_SELECTOR, sel)
-                                                src = el.get_attribute("src")
-                                            if src and src.startswith("http"):
-                                                img_url = src
-                                                break
-                                        except Exception:
-                                            continue
-                                    if not img_url:
-                                        time.sleep(0.3)
-                        except Exception:
-                            img_url = None
-
-                        # Fallback: parser la page avec requests pour og:image si Selenium n'a rien trouvé
-                        if not img_url and url_sp:
-                            try:
-                                resp = requests.get(
-                                    url_sp,
-                                    timeout=8,
-                                    headers={
-                                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-                                    },
-                                )
-                                if resp.ok:
-                                    soup = BeautifulSoup(resp.text, "html.parser")
-                                    tag = soup.find("meta", attrs={"property": "og:image"})
-                                    if tag and tag.get("content"):
-                                        img_url = tag.get("content")
-                            except Exception:
-                                pass
-
-                        # Télécharger l'image si disponible
-                        tmp_path = None
-                        if img_url:
-                            try:
-                                img_resp = requests.get(
-                                    img_url,
+                                if sel.startswith("meta["):
+                                    el = driver.find_element(By.CSS_SELECTOR, sel)
+                                    src = el.get_attribute("content")
                                     stream=True,
                                     timeout=15,
                                     headers={
