@@ -1194,7 +1194,11 @@ class ExportCartesTab(ttk.Frame):
         self.export_button.grid(row=0, column=0, sticky="ew", padx=(0,6))
         self.id_button = ttk.Button(act_frm, text="ID Contexte éco", command=self.start_id_thread)
         self.id_button.grid(row=0, column=1, sticky="ew", padx=(0,6))
-        self.report_button = ttk.Button(act_frm, text="Rapport auto", command=self.start_report_sequence)
+        self.report_button = ttk.Button(
+            act_frm,
+            text="Générer rapport Word",
+            command=self.start_report_sequence,
+        )
         self.report_button.grid(row=0, column=2, sticky="ew")
 
         # ID buffer
@@ -2492,6 +2496,14 @@ class ExportCartesTab(ttk.Frame):
         doc = Document(out_doc)
         xls = pd.ExcelFile(xlsx)
 
+        import unicodedata
+
+        def _norm(text: str) -> str:
+            return ''.join(
+                c for c in unicodedata.normalize('NFD', text)
+                if unicodedata.category(c) != 'Mn'
+            ).upper().strip()
+
         def find_sheets(patterns):
             found = []
             for pat in patterns:
@@ -2501,34 +2513,49 @@ class ExportCartesTab(ttk.Frame):
             return found
 
         table_map = {
-            'TABLEAU NATURA2000': ['Natura 2000'],
-            'TABLEAU ZNIEFF': ['ZNIEFF de Type I', 'ZNIEFF de Type II'],
-            'TABLEAU APPB': ['APPB'],
-            'TABLEAU ENS': ['ENS'],
-            'TABLEAU PNN': ['PNN', 'Parc National', 'PN'],
-            'TABLEAU PRN': ['PRN', 'Parc Naturel Régional', 'PR']
+            _norm('NATURA2000'): ['N2000 ZPS', 'N2000 ZSC', 'Natura 2000'],
+            _norm('ZNIEFF'): ['ZNIEFF de Type I', 'ZNIEFF de Type II'],
+            _norm('APPB'): ['APPB'],
+            _norm('ENS'): ['ENS'],
+            _norm('PNN'): ['Parc Nationaux', 'Parc National', 'PNN'],
+            _norm('PRN'): ['Parc Naturels Régionaux', 'Parc Naturel Régional', 'PRN'],
+            _norm('ZH'): [
+                'ZH 01', 'ZH 26', 'ZH 38', 'ZH 69',
+                'ZH 73', 'ZH 74', 'ZH Bourgogne', 'ZH PACA'
+            ],
+            _norm('PELOUSES'): [
+                'Pelouses sèches 38', 'Pelouses sèches 73', 'Pelouses sèches 74'
+            ],
         }
+
         image_map = {
-            'CARTE NATURA2000': 'Contexte éco - N2000__AE.png',
-            'CARTE ZNIEFF': 'Contexte éco - ZNIEFF__AE.png',
-            'CARTE APPB': 'Contexte éco - APPB__AE.png',
-            'CARTE ENS': 'Contexte éco - ENS__AE.png',
-            'CARTE PNN': 'Contexte éco - Parc National__AE.png',
-            'CARTE PRN': 'Contexte éco - Parc Naturel Régional__AE.png'
+            _norm('NATURA2000'): 'Contexte éco - N2000__AE.png',
+            _norm('ZNIEFF'): 'Contexte éco - ZNIEFF__AE.png',
+            _norm('APPB'): 'Contexte éco - APPB__AE.png',
+            _norm('ENS'): 'Contexte éco - ENS__AE.png',
+            _norm('PNN'): 'Contexte éco - Parc National__AE.png',
+            _norm('PRN'): 'Contexte éco - Parc Naturel Régional__AE.png',
+            _norm('ZH AVEREES'): 'Contexte éco - ZH avérées__AE.png',
+            _norm('ZH MODELISEES'): 'Contexte éco - ZH modélisées__AE.png',
+            _norm('PELOUSES'): 'Contexte éco - Pelouses sèches__AE.png',
         }
 
         for para in list(doc.paragraphs):
             text = para.text.strip()
-            if text in table_map:
-                sheets = find_sheets(table_map[text])
+            if text.startswith('TABLEAU'):
+                key = _norm(text.split(' ', 1)[1])
+                sheets = find_sheets(table_map.get(key, []))
                 dfs = [pd.read_excel(xls, sheet) for sheet in sheets]
                 if dfs:
                     df = pd.concat(dfs, ignore_index=True)
                     self._insert_table_from_df(doc, para, df)
-            elif text in image_map:
-                img_path = os.path.join(OUT_IMG, image_map[text])
-                if os.path.isfile(img_path):
-                    self._insert_image(para, img_path)
+            elif text.startswith('CARTE'):
+                key = _norm(text.split(' ', 1)[1])
+                img_name = image_map.get(key)
+                if img_name:
+                    img_path = os.path.join(OUT_IMG, img_name)
+                    if os.path.isfile(img_path):
+                        self._insert_image(para, img_path)
         doc.save(out_doc)
 
     def _insert_table_from_df(self, doc, paragraph, df):
