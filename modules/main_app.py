@@ -2669,6 +2669,39 @@ class ContexteEcoTab(ttk.Frame):
 
         ttk.Button(proj, text="Aucun", width=6, command=lambda: self._select_all(False)).grid(row=1, column=3, padx=(6,0))
 
+        # Zone défilante pour la liste des projets
+        proj.rowconfigure(2, weight=1)
+        for c in range(4):
+            try:
+                proj.columnconfigure(c, weight=1 if c == 1 else 0)
+            except Exception:
+                pass
+
+        proj_list = ttk.Frame(proj)
+        proj_list.grid(row=2, column=0, columnspan=4, sticky="nsew", pady=(4,0))
+
+        canvas = tk.Canvas(proj_list, highlightthickness=0, borderwidth=0)
+        vscroll = ttk.Scrollbar(proj_list, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vscroll.set)
+        vscroll.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self.scrollable_frame = ttk.Frame(canvas)
+        _proj_win = canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+
+        def _on_proj_frame_config(_e=None):
+            try:
+                canvas.configure(scrollregion=canvas.bbox("all"))
+            except Exception:
+                pass
+        self.scrollable_frame.bind("<Configure>", _on_proj_frame_config)
+
+        def _on_proj_canvas_config(event):
+            try:
+                canvas.itemconfigure(_proj_win, width=event.width)
+            except Exception:
+                pass
+        canvas.bind("<Configure>", _on_proj_canvas_config)
 
         # Panneau pour les résultats (Wikipedia, etc.)
         results_pane = ttk.Frame(right_pane)
