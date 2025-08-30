@@ -2764,7 +2764,7 @@ class ContexteEcoTab(ttk.Frame):
 
         # Tableau Wikipedia (2 lignes, 2 colonnes)
 
-        wiki_res = ttk.Frame(wiki_container, style="Card.TFrame", padding=12)
+        wiki_res = ttk.Frame(self.wiki_container, style="Card.TFrame", padding=12)
 
         wiki_res.pack(fill=tk.BOTH, expand=True, pady=(8,0))
 
