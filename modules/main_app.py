@@ -2670,208 +2670,67 @@ class ContexteEcoTab(ttk.Frame):
         ttk.Button(proj, text="Aucun", width=6, command=lambda: self._select_all(False)).grid(row=1, column=3, padx=(6,0))
 
 
-
-        canvas = tk.Canvas(proj, highlightthickness=0, borderwidth=0)
-
-        scrollbar = ttk.Scrollbar(proj, orient="vertical", command=canvas.yview)
-
-        self.scrollable_frame = ttk.Frame(canvas)
-
-        self.scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-
-        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        canvas.grid(row=2, column=0, columnspan=4, sticky="nsew", pady=(6, 6))
-
-        scrollbar.grid(row=2, column=4, sticky="ns", padx=(6,0))
-
-        proj.rowconfigure(2, weight=1); proj.columnconfigure(1, weight=1)
-
-
-
-        # Encart ID contexte éco
-
-        # Barre d'actions: pane du bas (toujours visible) mais redimensionnable via le séparateur
-        idf = ttk.Frame(pw, style="Card.TFrame", padding=12)
-
-        pw.add(idf, weight=0)
-
-        ttk.Label(idf, text="Tampon ZE (km)", style="Card.TLabel").grid(row=0, column=0, sticky="w")
-
-        ttk.Spinbox(idf, from_=0.0, to=50.0, increment=0.5, textvariable=self.buffer_var, width=6, justify="right").grid(row=0, column=1, sticky="w", padx=(8,0))
-
-        self.id_button = ttk.Button(idf, text="Lancer l’ID Contexte éco", style="Accent.TButton", command=self.start_id_thread)
-
-        self.id_button.grid(row=0, column=2, sticky="w", padx=(12,0))
-
-        self.wiki_button = ttk.Button(
-
-            idf,
-
-            text="Scraper Wikipedia",
-
-            style="Accent.TButton",
-
-            command=self.start_wiki_thread,
-
-        )
-
-        self.wiki_button.grid(row=0, column=3, sticky="w", padx=(12,0))
-
-
-        # Nouveau bouton Photo Biodiv'AURA (a cote de Wikipedia)
-        self.biodiv_button = ttk.Button(
-            idf,
-            text="Photo Biodiv'AURA",
-            style="Accent.TButton",
-            command=self.open_biodiv_dialog,
-        )
-        self.biodiv_button.grid(row=0, column=4, sticky="w", padx=(12,0))
-
-
-        self.vegsol_button = ttk.Button(
-
-            idf,
-
-            text="Cartes végétation/sols",
-
-            style="Accent.TButton",
-
-            command=self.start_vegsol_thread,
-
-        )
-
-        self.vegsol_button.grid(row=0, column=5, sticky="w", padx=(12,0))
-
-        self.rlt_button = ttk.Button(idf, text="Remonter le temps", style="Accent.TButton", command=self.start_rlt_thread)
-
-        self.rlt_button.grid(row=0, column=6, sticky="w", padx=(12,0))
-
-        self.maps_button = ttk.Button(idf, text="Ouvrir Google Maps", style="Accent.TButton", command=self.open_gmaps)
-
-        self.maps_button.grid(row=0, column=7, sticky="w", padx=(12,0))
-
-        self.bassin_button = ttk.Button(idf, text="Bassin versant", style="Accent.TButton", command=self.start_bassin_thread)
-
-        self.bassin_button.grid(row=0, column=8, sticky="w", padx=(12,0))
-
-
-
-
-
-
-        # Tableau Wikipedia (2 lignes, 2 colonnes)
-
-        wiki_res = ttk.Frame(self.wiki_container, style="Card.TFrame", padding=12)
-
-        wiki_res.pack(fill=tk.BOTH, expand=True, pady=(8,0))
-
-        ttk.Label(wiki_res, text="Wikipedia", style="Card.TLabel").grid(row=0, column=0, sticky="w", pady=(0,6))
-
-        # Bouton pour ouvrir l'article dans le navigateur
-
-        self.wiki_open_button = ttk.Button(wiki_res, text="Ouvrir Wikipédia", command=self.open_wiki_url, state="disabled")
-
-        self.wiki_open_button.grid(row=0, column=1, sticky="e", pady=(0,6))
-
-        ttk.Label(wiki_res, text="Climat", style="Card.TLabel").grid(row=1, column=0, sticky="nw")
-
-        ttk.Label(wiki_res, text="Corine Land Cover", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
-
-        # Cellules scrollables pour les textes
-
-        clim_cell = ttk.Frame(wiki_res)
-
-        clim_cell.grid(row=1, column=1, sticky="nsew")
-
-        self.wiki_climat_txt = tk.Text(clim_cell, height=3, wrap=tk.WORD, state='disabled', relief='flat')
-
-        clim_scroll = ttk.Scrollbar(clim_cell, orient="vertical", command=self.wiki_climat_txt.yview)
-
-        self.wiki_climat_txt.configure(yscrollcommand=clim_scroll.set)
-
-        self.wiki_climat_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        clim_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-
-
-        occ_cell = ttk.Frame(wiki_res)
-
-        occ_cell.grid(row=2, column=1, sticky="nsew")
-
-        self.wiki_occ_txt = tk.Text(occ_cell, height=3, wrap=tk.WORD, state='disabled', relief='flat')
-
-        occ_scroll = ttk.Scrollbar(occ_cell, orient="vertical", command=self.wiki_occ_txt.yview)
-
-        self.wiki_occ_txt.configure(yscrollcommand=occ_scroll.set)
-
-        self.wiki_occ_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        occ_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-
-
+        # Panneau pour les résultats (Wikipedia, etc.)
+        results_pane = ttk.Frame(right_pane)
+        right_pane.add(results_pane, weight=1)
+        results_pane.columnconfigure(0, weight=1)
+
+        # Encart Wikipedia
+        wiki_res = ttk.Frame(results_pane, style="Card.TFrame", padding=4)
+        wiki_res.grid(row=0, column=0, sticky="nsew", pady=(6,0))
         wiki_res.columnconfigure(1, weight=1)
 
+        wiki_header = ttk.Frame(wiki_res, style="Card.TFrame")
+        wiki_header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0,6))
+        wiki_header.columnconfigure(1, weight=1)
 
+        self.wiki_button = ttk.Button(wiki_header, text="? Wikipédia", command=self.start_wiki_thread)
+        self.wiki_button.grid(row=0, column=0, sticky="w")
+
+        self.wiki_query_entry = ttk.Entry(wiki_header, textvariable=self.wiki_query_var, width=20)
+        self.wiki_query_entry.grid(row=0, column=1, sticky="ew", padx=8)
+
+        self.wiki_open_button = ttk.Button(wiki_header, text="Ouvrir page", state="disabled", command=self.open_wiki_url)
+        self.wiki_open_button.grid(row=0, column=2, sticky="e")
+
+        ttk.Label(wiki_res, text="Climat", style="Card.TLabel").grid(row=1, column=0, sticky="nw")
+        self.climat_txt = tk.Text(wiki_res, height=4, wrap=tk.WORD, state='disabled', relief='flat')
+        self.climat_txt.grid(row=1, column=1, sticky="nsew")
+
+        ttk.Label(wiki_res, text="Occupation sols", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
+        self.occ_txt = tk.Text(wiki_res, height=4, wrap=tk.WORD, state='disabled', relief='flat')
+        self.occ_txt.grid(row=2, column=1, sticky="nsew")
 
         # Tableau Cartes végétation/sols (3 lignes)
-
-        vegsol_res = ttk.Frame(wiki_res, style="Card.TFrame", padding=4)
-
-        vegsol_res.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(6,0))
-
+        vegsol_res = ttk.Frame(results_pane, style="Card.TFrame", padding=4)
+        vegsol_res.grid(row=1, column=0, sticky="nsew", pady=(6,0))
         ttk.Label(vegsol_res, text="Cartes végétation/sols", style="Card.TLabel").grid(row=0, column=0, sticky="w", pady=(0,6))
 
         ttk.Label(vegsol_res, text="Altitude", style="Card.TLabel").grid(row=1, column=0, sticky="nw")
-
-        ttk.Label(vegsol_res, text="Végétation", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
-
-        ttk.Label(vegsol_res, text="Sols", style="Card.TLabel").grid(row=3, column=0, sticky="nw")
-
-
-
-        alt_cell = ttk.Frame(vegsol_res); alt_cell.grid(row=1, column=1, sticky="nsew")
-
+        alt_cell = ttk.Frame(vegsol_res)
+        alt_cell.grid(row=1, column=1, sticky="nsew")
         self.veg_alt_txt = tk.Text(alt_cell, height=2, wrap=tk.WORD, state='disabled', relief='flat')
-
         alt_scroll = ttk.Scrollbar(alt_cell, orient="vertical", command=self.veg_alt_txt.yview)
-
         self.veg_alt_txt.configure(yscrollcommand=alt_scroll.set)
-
         self.veg_alt_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
         alt_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
-
-
-        veg_cell = ttk.Frame(vegsol_res); veg_cell.grid(row=2, column=1, sticky="nsew")
-
+        ttk.Label(vegsol_res, text="Végétation", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
+        veg_cell = ttk.Frame(vegsol_res)
+        veg_cell.grid(row=2, column=1, sticky="nsew")
         self.veg_veg_txt = tk.Text(veg_cell, height=3, wrap=tk.WORD, state='disabled', relief='flat')
-
         veg_scroll = ttk.Scrollbar(veg_cell, orient="vertical", command=self.veg_veg_txt.yview)
-
         self.veg_veg_txt.configure(yscrollcommand=veg_scroll.set)
-
         self.veg_veg_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
         veg_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
-
-
-        soil_cell = ttk.Frame(vegsol_res); soil_cell.grid(row=3, column=1, sticky="nsew")
-
+        ttk.Label(vegsol_res, text="Sols", style="Card.TLabel").grid(row=3, column=0, sticky="nw")
+        soil_cell = ttk.Frame(vegsol_res)
+        soil_cell.grid(row=3, column=1, sticky="nsew")
         self.veg_soil_txt = tk.Text(soil_cell, height=3, wrap=tk.WORD, state='disabled', relief='flat')
-
         soil_scroll = ttk.Scrollbar(soil_cell, orient="vertical", command=self.veg_soil_txt.yview)
-
         self.veg_soil_txt.configure(yscrollcommand=soil_scroll.set)
-
         self.veg_soil_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
         soil_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
         vegsol_res.columnconfigure(1, weight=1)
