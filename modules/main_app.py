@@ -61,7 +61,9 @@ import webbrowser
 import webbrowser
 import traceback
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox
+import ttkbootstrap as ttk
+from ttkbootstrap import Style
 
 from docx import Document
 from docx.shared import Inches, Cm
@@ -960,11 +962,8 @@ class StyleHelper:
 
         self.prefs = prefs
 
-        self.style = ttk.Style()
-
-        try: self.style.theme_use("clam")
-
-        except Exception: pass
+        # Style moderne avec bordures arrondies grâce à ttkbootstrap
+        self.style = Style(theme="flatly")
 
 
 
@@ -1012,9 +1011,21 @@ class StyleHelper:
 
         # Buttons: compact, consistent
 
-        s.configure("Accent.TButton", padding=(12, 6), background=accent, foreground="#FFFFFF")
+        s.configure(
+            "Accent.TButton",
+            padding=(12, 8),
+            background=accent,
+            foreground="#FFFFFF",
+            borderwidth=0,
+            focusthickness=0,
+            borderradius=8,
+        )
 
-        s.map("Accent.TButton", background=[("active", active_accent)], foreground=[("active", "#FFFFFF")])
+        s.map(
+            "Accent.TButton",
+            background=[("active", active_accent)],
+            foreground=[("active", "#FFFFFF")],
+        )
 
         s.configure("Card.TCheckbutton", background=card_bg, foreground=fg)
 

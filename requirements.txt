@@ -24,3 +24,4 @@ PyQt5==5.15.9
 PyQtWebEngine==5.15.6
 Flask==2.3.3
 Flask-CORS==4.0.0
+ttkbootstrap

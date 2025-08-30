@@ -19,7 +19,8 @@ import tempfile
 import webbrowser
 from typing import Optional, Dict, Any
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import filedialog, messagebox
+import ttkbootstrap as ttk
 from tkinter import font as tkfont
 
 try:
