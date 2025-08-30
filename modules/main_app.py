@@ -70,7 +70,6 @@ from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 
-from openpyxl import load_workbook
 from PIL import Image
 
 from selenium import webdriver
@@ -1336,26 +1335,22 @@ class ExportCartesTab(ttk.Frame):
 
     def _open_rlt_links(self):
         try:
-            # --- Utiliser les chemins et paramètres de l'ancienne version ---
-            excel_path = r"C:\Users\utilisateur\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 3) BDD\TOOL Excel.xlsm"
-            output_dir = r"C:\Users\utilisateur\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 3) BDD\PYTHON\2) Contexte éco\OUTPUT\Remonter le temps"
+            output_dir = os.path.join(BASE_DIR, "output", "Remonter_le_temps")
             word_filename = "Comparaison_temporelle_Paysage.docx"
             os.makedirs(output_dir, exist_ok=True)
 
-            # --- 1. Lecture des données depuis Excel ---
-            print("Lecture des coordonnées depuis le fichier Excel...")
-            tmp_dir = tempfile.mkdtemp(prefix="excel_tmp_")
-            tmp_file = os.path.join(tmp_dir, "copy.xlsm")
-            shutil.copy2(excel_path, tmp_file)
-
-            wb = load_workbook(tmp_file, read_only=True, data_only=True, keep_vba=False)
-            ws = wb["0  PYTHON"]
-            coord_raw = str(ws["H5"].value).strip()
-            commune = str(ws["I5"].value).strip()
-            wb.close()
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-
-            lat_dd, lon_dd = (dms_to_dd(s) for s in re.split(r"\s+|,|\t", coord_raw, maxsplit=1))
+            # --- 1. Récupération des coordonnées depuis le shapefile ---
+            print("Calcul du centroïde depuis le shapefile...")
+            centroid = self._get_centroid_wgs84()
+            if not centroid:
+                return
+            lat_dd, lon_dd = centroid
+            commune = os.path.splitext(os.path.basename(self.ze_shp_var.get()))[0]
+            try:
+                if hasattr(self, '_detect_commune'):
+                    commune, _ = self._detect_commune(lat_dd, lon_dd)
+            except Exception:
+                pass
             print(f"Commune: {commune}, Coordonnées: {lat_dd:.6f}, {lon_dd:.6f}")
 
             # --- 2. Capture des images avec Selenium ---
