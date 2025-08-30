@@ -3629,6 +3629,22 @@ class ContexteEcoTab(ttk.Frame):
             # Collecter toutes les données d'espèces avec leurs images
             species_data = []
             
+            # Charger le mapping TAXREF (nom latin -> CD_NOM) pour construire directement les URLs
+            taxref_map = {}
+            try:
+                repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+                taxref_path = os.path.join(repo_root, "Bases de données", "taxref.json")
+                with open(taxref_path, "r", encoding="utf-8") as f:
+                    taxref_raw = json.load(f)
+                # Normaliser en minuscule; ignorer l'en-tête "nom latin": "CD_NOM"
+                for k, v in taxref_raw.items():
+                    if k.strip().lower() == "nom latin":
+                        continue
+                    taxref_map[k.strip().lower()] = str(v).strip()
+                print(f"[Biodiv] TAXREF charge: {len(taxref_map)} entrées", file=self.stdout_redirect)
+            except Exception as te:
+                print(f"[Biodiv] Impossible de charger TAXREF: {te}", file=self.stdout_redirect)
+            
             # Charger la page principale une seule fois
             print("[Biodiv] Chargement de la page principale...", file=self.stdout_redirect)
             driver.get("https://atlas.biodiversite-auvergne-rhone-alpes.fr/")
@@ -3637,25 +3653,49 @@ class ContexteEcoTab(ttk.Frame):
                 try:
                     print(f"[Biodiv] ({idx}/{len(species_list)}) {sp}", file=self.stdout_redirect)
                     
-                    # Revenir à la page d'accueil pour la recherche si nécessaire (plus rapide que de recharger)
-                    if "atlas.biodiversite" not in driver.current_url:
-                         driver.get("https://atlas.biodiversite-auvergne-rhone-alpes.fr/")
-
-                    inp = wait.until(EC.element_to_be_clickable((By.ID, "searchTaxons")))
-                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", inp)
-
-                    inp.clear()
-                    inp.send_keys(sp)
-                    
-                    # Attendre et cliquer sur le premier résultat
+                    # Essayer d'abord de construire l'URL via TAXREF (nom latin -> CD_NOM)
+                    url_sp = None
+                    cd_nom = None
                     try:
-                        first_result = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".search-results .result-item:first-child")))
-                        driver.execute_script("arguments[0].click();", first_result)
-                        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".species-header"))) # Attendre que la page de l'espèce se charge
+                        key = sp.strip().lower()
+                        cd_nom = taxref_map.get(key)
                     except Exception:
-                        print(f"[Biodiv] Pas de resultat pour {sp}", file=self.stdout_redirect)
-                        species_data.append({'name': sp, 'image_path': None, 'url': None})
-                        continue
+                        cd_nom = None
+
+                    if cd_nom:
+                        # Aller directement sur la page de l'espèce
+                        url_sp = f"https://atlas.biodiversite-auvergne-rhone-alpes.fr/espece/{cd_nom}"
+                        driver.get(url_sp)
+                        try:
+                            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".species-header")))
+                        except Exception:
+                            # Si la page directe échoue, on tombera sur la recherche classique ci-dessous
+                            url_sp = None
+
+                    if not url_sp:
+                        # Fallback: recherche classique si pas dans TAXREF ou échec du chargement direct
+                        if "atlas.biodiversite" not in driver.current_url:
+                            driver.get("https://atlas.biodiversite-auvergne-rhone-alpes.fr/")
+
+                        inp = wait.until(EC.element_to_be_clickable((By.ID, "searchTaxons")))
+                        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", inp)
+
+                        inp.clear()
+                        inp.send_keys(sp)
+
+                        # Attendre et cliquer sur le premier résultat
+                        try:
+                            first_result = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".search-results .result-item:first-child")))
+                            driver.execute_script("arguments[0].click();", first_result)
+                            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".species-header")))
+                            try:
+                                url_sp = driver.current_url
+                            except Exception:
+                                url_sp = None
+                        except Exception:
+                            print(f"[Biodiv] Pas de resultat pour {sp}", file=self.stdout_redirect)
+                            species_data.append({'name': sp, 'image_path': None, 'url': None})
+                            continue
 
                     # Chercher une image de manière plus robuste
                     tmp_path = None
@@ -3679,11 +3719,12 @@ class ContexteEcoTab(ttk.Frame):
                     except Exception as de:
                         print(f"[Biodiv] Telechargement image echoue pour {sp}: {de}", file=self.stdout_redirect)
 
-                    # Récupérer l'URL de la page espèce
-                    try:
-                        url_sp = driver.current_url
-                    except Exception:
-                        url_sp = None
+                    # URL de la page espece (deja calculee si TAXREF)
+                    if not url_sp:
+                        try:
+                            url_sp = driver.current_url
+                        except Exception:
+                            url_sp = None
 
                     species_data.append({
                         'name': sp,
