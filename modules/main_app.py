@@ -2729,39 +2729,34 @@ class ContexteEcoTab(ttk.Frame):
                 pass
         canvas.bind("<Configure>", _on_proj_canvas_config)
 
-        # Panneau pour les résultats (Wikipedia + Végétation/sols côte à côte)
-        results_pane = ttk.Frame(right_pane, style="Card.TFrame", padding=6)
-        right_pane.add(results_pane, weight=1)
         
-        # Layout horizontal pour Wikipedia et Végétation/sols
-        results_horizontal = ttk.Frame(results_pane)
-        results_horizontal.pack(fill=tk.BOTH, expand=True)
+        # En-tête Scraping avec bouton et champ de requête
+        scraping_header = ttk.Frame(right_pane, style="Card.TFrame", padding=12)
+        right_pane.add(scraping_header, weight=0)
         
-        # Wikipedia à gauche
-        wiki_res = ttk.Frame(results_horizontal, style="Card.TFrame", padding=4)
-        wiki_res.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0,2))
+        header_content = ttk.Frame(scraping_header)
+        header_content.pack(fill=tk.X)
         
-        # En-tête Wikipedia compact
-        wiki_header = ttk.Frame(wiki_res)
-        wiki_header.pack(fill=tk.X, pady=(0,4))
-        
-        self.wiki_button = ttk.Button(wiki_header, text="? Wikipedia", command=self.start_wiki_thread)
+        self.wiki_button = ttk.Button(header_content, text="Scraping", command=self.start_consolidated_scraping)
         self.wiki_button.pack(side=tk.LEFT)
         
-        self.wiki_query_entry = ttk.Entry(wiki_header, textvariable=self.wiki_query_var, width=15)
-        self.wiki_query_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+        self.wiki_query_entry = ttk.Entry(header_content, textvariable=self.wiki_query_var, width=20)
+        self.wiki_query_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8,8))
         
-        # Panneau pour les résultats de scraping (remplace les anciens Text)
+        self.wiki_open_button = ttk.Button(header_content, text="Ouvrir", state="disabled", command=self.open_wiki_url)
+        self.wiki_open_button.pack(side=tk.RIGHT)
+        
+        # Panneau pour les résultats de scraping consolidés
         results_frame = ttk.Frame(right_pane, style="Card.TFrame", padding=12)
         right_pane.add(results_frame, weight=1)
 
         ttk.Label(results_frame, text="Résultats du scraping", style="Card.TLabel").pack(anchor="w")
 
-        self.results_tree = ttk.Treeview(results_frame, columns=("Type", "Résultat"), show="headings", height=8)
+        self.results_tree = ttk.Treeview(results_frame, columns=("Type", "Résultat"), show="headings", height=12)
         self.results_tree.heading("Type", text="Type de donnée")
         self.results_tree.heading("Résultat", text="Résultat")
-        self.results_tree.column("Type", width=100, anchor="w")
-        self.results_tree.column("Résultat", width=300, anchor="w")
+        self.results_tree.column("Type", width=120, anchor="w")
+        self.results_tree.column("Résultat", width=400, anchor="w")
 
         # Ajout des items initiaux
         self.results_tree.insert("", "end", values=("Climat", ""), iid="climat")
@@ -2774,32 +2769,6 @@ class ContexteEcoTab(ttk.Frame):
         self.results_tree.configure(yscrollcommand=tree_scroll.set)
         self.results_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=(6, 0))
         tree_scroll.pack(side=tk.RIGHT, fill=tk.Y, pady=(6, 0))
-
-        self.wiki_open_button = ttk.Button(wiki_header, text="Ouvrir", state="disabled", command=self.open_wiki_url)
-        self.wiki_open_button.pack(side=tk.RIGHT)
-        
-        # Végétation/sols à droite
-        vegsol_res = ttk.Frame(results_horizontal, style="Card.TFrame", padding=4)
-        vegsol_res.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(2,0))
-        
-        ttk.Label(vegsol_res, text="Cartes végétation/sols", style="Card.TLabel").pack(anchor="w", pady=(0,4))
-        
-        # Altitude
-        ttk.Label(vegsol_res, text="Altitude:", style="Card.TLabel").pack(anchor="w")
-        self.veg_alt_txt = tk.Text(vegsol_res, height=2, wrap=tk.WORD, state='disabled', relief='flat')
-        self.veg_alt_txt.pack(fill=tk.X, pady=(0,2))
-        
-        # Végétation
-        ttk.Label(vegsol_res, text="Végétation:", style="Card.TLabel").pack(anchor="w")
-        self.veg_veg_txt = tk.Text(vegsol_res, height=2, wrap=tk.WORD, state='disabled', relief='flat')
-        self.veg_veg_txt.pack(fill=tk.X, pady=(0,2))
-        
-        # Sols
-        ttk.Label(vegsol_res, text="Sols:", style="Card.TLabel").pack(anchor="w")
-        self.veg_soil_txt = tk.Text(vegsol_res, height=2, wrap=tk.WORD, state='disabled', relief='flat')
-        self.veg_soil_txt.pack(fill=tk.X)
-
-
 
         # Console + progression (dans le pane du bas)
         
@@ -2938,7 +2907,7 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-    def start_wiki_thread(self):
+    def start_consolidated_scraping(self):
 
         if (not self.wiki_query_var.get().strip()) and (not self.ze_shp_var.get().strip()):
 
@@ -2949,6 +2918,7 @@ class ContexteEcoTab(ttk.Frame):
         print("[Wiki] Bouton Wikipédia cliqué", file=self.stdout_redirect)
 
         self.wiki_button.config(state="disabled")
+        print("[Scraping] Démarrage du scraping consolidé...", file=self.stdout_redirect)
 
         # Réinitialiser le tableau et le bouton avant un nouveau scraping
 
