@@ -1061,6 +1061,7 @@ class ExportCartesTab(ttk.Frame):
         self.commune_var = tk.StringVar(value="")
 
         self.margin_var   = tk.DoubleVar(value=float(self.prefs.get("MARGIN_FAC", MARGIN_FAC_DEFAULT)))
+        self.id_buffer_km_var = tk.DoubleVar(value=float(self.prefs.get("ID_BUFFER_KM", 5.0)))
 
 
 
@@ -1193,23 +1194,29 @@ class ExportCartesTab(ttk.Frame):
 
         ttk.Spinbox(opt, from_=1.00, to=2.00, increment=0.05, textvariable=self.margin_var, width=6, justify="right").grid(row=2, column=5, sticky="w", pady=(8,0))
 
+        ttk.Label(opt, text="Tampon ID (km)", style="Card.TLabel").grid(row=3, column=0, sticky="w", pady=(8,0))
+        ttk.Spinbox(opt, from_=0.0, to=100.0, increment=0.5, textvariable=self.id_buffer_km_var, width=6, justify="right").grid(row=3, column=1, sticky="w", pady=(8,0))
+
+
 
 
         # Actions
 
         act = ttk.Frame(left, style="Card.TFrame", padding=12); act.pack(fill=tk.X, pady=(10,0))
 
-        self.export_button = ttk.Button(act, text="â–¶ Lancer l’export", style="Accent.TButton", command=self.start_export_thread)
+        act.columnconfigure(0, weight=1)
 
-        self.export_button.grid(row=0, column=0, sticky="w")
+        self.export_button = ttk.Button(act, text="▶ Lancer l’export", style="Accent.TButton", command=self.start_export_thread)
+        self.export_button.grid(row=0, column=0, sticky="ew")
 
-        obtn = ttk.Button(act, text="?? Ouvrir le dossier de sortie", command=self._open_out_dir)
-
+        obtn = ttk.Button(act, text="📂 Ouvrir le dossier de sortie", command=self._open_out_dir)
         obtn.grid(row=0, column=1, padx=(10,0)); ToolTip(obtn, OUT_IMG)
 
-        tbtn = ttk.Button(act, text="?? Tester QGIS", command=self._test_qgis_threaded)
-
+        tbtn = ttk.Button(act, text="🧪 Tester QGIS", command=self._test_qgis_threaded)
         tbtn.grid(row=0, column=2, padx=(10,0)); ToolTip(tbtn, "Vérifier l’import QGIS/Qt")
+
+        self.id_contexte_button = ttk.Button(act, text="ID Contexte éco", command=self._start_id_contexte_thread)
+        self.id_contexte_button.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(8, 0))
 
 
 
@@ -1445,19 +1452,44 @@ class ExportCartesTab(ttk.Frame):
 
 
     def _open_out_dir(self):
+        try:
+            os.startfile(os.path.abspath(OUT_IMG))
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d'ouvrir le dossier de sortie :\n{e}")
+
+    def _start_id_contexte_thread(self):
+        # Run analysis in a separate thread to avoid freezing the UI
+        threading.Thread(target=self._run_id_contexte, daemon=True).start()
+
+    def _run_id_contexte(self):
+        self._set_status("Lancement de l'identification des zonages...")
+        self.id_contexte_button.config(state='disabled')
+
+        ae_shp = self.ae_shp_var.get()
+        ze_shp = self.ze_shp_var.get()
+        buffer_km = self.id_buffer_km_var.get()
+
+        if not ae_shp or not ze_shp:
+            messagebox.showerror("Erreur", "Veuillez sélectionner les shapefiles 'Zone d'étude' et 'Aire d'étude élargie'.")
+            self.id_contexte_button.config(state='normal')
+            self._set_status("Prêt.")
+            return
 
         try:
-
-            os.makedirs(OUT_IMG, exist_ok=True); os.startfile(OUT_IMG)
-
+            # This module will print to stdout, which is redirected to our console
+            from modules.id_contexte_eco import run_analysis
+            run_analysis(ae_shp=ae_shp, ze_shp=ze_shp, buffer_km=buffer_km)
+            self._set_status("Identification des zonages terminée.")
         except Exception as e:
-
-            messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier de sortie : {e}")
-
+            print(f"Erreur lors de l'exécution de id_contexte_eco: {e}")
+            traceback.print_exc(file=sys.stdout)
+            self._set_status("Erreur lors de l'identification.")
+        finally:
+            self.id_contexte_button.config(state='normal')
 
 
     def _test_qgis_threaded(self):
-
+        # ... (rest of the code remains the same)
         t = threading.Thread(target=self._test_qgis); t.daemon = True; t.start()
 
 
