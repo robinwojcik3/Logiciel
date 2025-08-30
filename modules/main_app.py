@@ -3691,7 +3691,65 @@ class ContexteEcoTab(ttk.Frame):
                                 url_sp = driver.current_url
                             except Exception:
                                 url_sp = None
-                                    f.write(chunk)
+                        # Extraire l'URL de l'image principale
+                        img_url = None
+                        try:
+                            # Essayer quelques sélecteurs probables
+                            selectors = [
+                                ".species-header img",
+                                ".species-title img",
+                                "meta[property='og:image']",
+                                ".gallery img",
+                                "img.card-img-top",
+                            ]
+                            for sel in selectors:
+                                try:
+                                    if sel.startswith("meta["):
+                                        el = driver.find_element(By.CSS_SELECTOR, sel)
+                                        src = el.get_attribute("content")
+                                    else:
+                                        el = driver.find_element(By.CSS_SELECTOR, sel)
+                                        src = el.get_attribute("src")
+                                    if src and src.startswith("http"):
+                                        img_url = src
+                                        break
+                                except Exception:
+                                    continue
+                        except Exception:
+                            img_url = None
+
+                        # Fallback: parser la page avec requests pour og:image si Selenium n'a rien trouvé
+                        if not img_url and url_sp:
+                            try:
+                                resp = requests.get(url_sp, timeout=10)
+                                if resp.ok:
+                                    soup = BeautifulSoup(resp.text, "html.parser")
+                                    tag = soup.find("meta", attrs={"property": "og:image"})
+                                    if tag and tag.get("content"):
+                                        img_url = tag.get("content")
+                            except Exception:
+                                pass
+
+                        # Télécharger l'image si disponible
+                        tmp_path = None
+                        if img_url:
+                            try:
+                                img_resp = requests.get(img_url, stream=True, timeout=15)
+                                if img_resp.ok:
+                                    safe_name = re.sub(r"[^\w\-]+", "_", sp.strip())[:80]
+                                    ext = os.path.splitext(img_url.split("?")[0])[1] or ".jpg"
+                                    if len(ext) > 6:
+                                        ext = ".jpg"
+                                    tmp_path = os.path.join(out_dir, f"{safe_name}{ext}")
+                                    with open(tmp_path, "wb") as f:
+                                        for chunk in img_resp.iter_content(chunk_size=8192):
+                                            if chunk:
+                                                f.write(chunk)
+                                    print(f"[Biodiv] Image ok: {tmp_path}", file=self.stdout_redirect)
+                                else:
+                                    print(f"[Biodiv] HTTP {img_resp.status_code} pour {img_url}", file=self.stdout_redirect)
+                            except Exception as de_dl:
+                                print(f"[Biodiv] Echec dl image {img_url}: {de_dl}", file=self.stdout_redirect)
                     except Exception as de:
                         print(f"[Biodiv] Telechargement image echoue pour {sp}: {de}", file=self.stdout_redirect)
 
