@@ -1922,47 +1922,6 @@ class ExportCartesTab(ttk.Frame):
 
             self.after(0, lambda: self.export_button.config(state="normal"))
 
-    def _start_id_contexte_thread(self):
-        """Lance l'identification des zonages dans un thread séparé."""
-        if self.busy:
-            print("Une action est déjà en cours.", file=self.stdout_redirect)
-            return
-        threading.Thread(target=self._run_id_contexte, daemon=True).start()
-
-    def _run_id_contexte(self):
-        """Exécute l'identification des zonages."""
-        self.busy = True
-        self.after(0, lambda: self.id_contexte_button.config(state='disabled'))
-        self.after(0, lambda: self.export_button.config(state='disabled'))
-        
-        print("Lancement de l'identification des zonages...", file=self.stdout_redirect)
-
-        ae_shp = self.ae_shp_var.get()
-        ze_shp = self.ze_shp_var.get()
-        buffer_km = self.id_buffer_km_var.get()
-
-        if not ae_shp or not ze_shp:
-            print("Erreur: Veuillez sélectionner les shapefiles 'Zone d'étude' et 'Aire d'étude élargie'.", file=self.stdout_redirect)
-            self._restore_buttons()
-            return
-
-        try:
-            # Import et exécution du module d'identification
-            from modules.id_contexte_eco import run_analysis
-            run_analysis(ae_shp=ae_shp, ze_shp=ze_shp, buffer_km=buffer_km)
-            print("Identification des zonages terminée.", file=self.stdout_redirect)
-        except Exception as e:
-            print(f"Erreur lors de l'exécution de id_contexte_eco: {e}", file=self.stdout_redirect)
-            traceback.print_exc(file=self.stdout_redirect)
-        finally:
-            self._restore_buttons()
-
-    def _restore_buttons(self):
-        """Restaure l'état des boutons après une opération."""
-        self.busy = False
-        self.after(0, lambda: self.id_contexte_button.config(state='normal'))
-        self.after(0, lambda: self.export_button.config(state='normal'))
-
 
 # =========================
 
@@ -2686,7 +2645,7 @@ class ContexteEcoTab(ttk.Frame):
         self.export_button.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(4,0))
         
         # Bouton ID Contexte éco
-        self.id_contexte_button = ttk.Button(left_column, text="ID Contexte éco", command=self._start_id_contexte_thread)
+        self.id_contexte_button = ttk.Button(left_column, text="ID Contexte éco", command=self.start_id_thread)
         self.id_contexte_button.grid(row=14, column=0, columnspan=2, sticky="ew", pady=(4,0))
         
         # Séparateur
