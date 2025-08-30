@@ -3328,45 +3328,64 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-                # 12) Scraper les éléments de la pop-up
-
-                # Attendre la présence des éléments de la pop-up
-
-                try:
-
-                    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.altitude-info")))
-
-                    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.tooltip-pill.vegetation-pill")))
-
-                    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.tooltip-pill.soil-pill")))
-
-                except Exception:
-
-                    pass
-
-
-
-                html = self.vegsol_driver.page_source
-
-                soup = BeautifulSoup(html, "lxml")
-
-                def _txt(sel):
-
-                    el = soup.select_one(sel)
-
-                    return el.get_text(" ", strip=True) if el else "Non trouvé"
-
-                alt = _txt("div.altitude-info")
-
-                veg = _txt("div.tooltip-pill.vegetation-pill")
-
-                soil = _txt("div.tooltip-pill.soil-pill")
+                # 12) Scraper les éléments de la pop-up avec attente améliorée
+                
+                print("[Cartes] Attente de la popup avec les données...", file=self.stdout_redirect)
+                
+                # Attendre plus longtemps pour que la popup se charge complètement
+                time.sleep(2.0)
+                
+                # Essayer plusieurs fois de trouver les éléments
+                alt = veg = soil = "Non trouvé"
+                
+                for attempt in range(3):
+                    try:
+                        print(f"[Cartes] Tentative {attempt + 1} de scraping...", file=self.stdout_redirect)
+                        
+                        html = self.vegsol_driver.page_source
+                        soup = BeautifulSoup(html, "lxml")
+                        
+                        # Debug: afficher les sélecteurs trouvés
+                        altitude_els = soup.select("div.altitude-info")
+                        veg_els = soup.select("div.tooltip-pill.vegetation-pill")
+                        soil_els = soup.select("div.tooltip-pill.soil-pill")
+                        
+                        print(f"[Cartes] Éléments trouvés - Altitude: {len(altitude_els)}, Végétation: {len(veg_els)}, Sols: {len(soil_els)}", file=self.stdout_redirect)
+                        
+                        def _txt(sel):
+                            el = soup.select_one(sel)
+                            return el.get_text(" ", strip=True) if el else "Non trouvé"
+                        
+                        alt_new = _txt("div.altitude-info")
+                        veg_new = _txt("div.tooltip-pill.vegetation-pill")
+                        soil_new = _txt("div.tooltip-pill.soil-pill")
+                        
+                        # Si on trouve au moins un élément valide, on garde les résultats
+                        if alt_new != "Non trouvé":
+                            alt = alt_new
+                        if veg_new != "Non trouvé":
+                            veg = veg_new
+                        if soil_new != "Non trouvé":
+                            soil = soil_new
+                            
+                        # Si on a trouvé tous les éléments, on peut arrêter
+                        if alt != "Non trouvé" and veg != "Non trouvé" and soil != "Non trouvé":
+                            break
+                            
+                        # Sinon, attendre un peu plus
+                        if attempt < 2:
+                            time.sleep(1.5)
+                            
+                    except Exception as scrape_err:
+                        print(f"[Cartes] Erreur scraping tentative {attempt + 1}: {scrape_err}", file=self.stdout_redirect)
+                        if attempt < 2:
+                            time.sleep(1.5)
 
                 # Update the consolidated results table
                 payload = {
-                    'altitude': alt if alt != "Non trouvé" else "Non trouvé",
-                    'vegetation': veg if veg != "Non trouvé" else "Non trouvé", 
-                    'sols': soil if soil != "Non trouvé" else "Non trouvé"
+                    'altitude': alt,
+                    'vegetation': veg, 
+                    'sols': soil
                 }
                 self.after(0, self._update_results_tree, payload)
                 
