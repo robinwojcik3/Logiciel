@@ -1643,7 +1643,7 @@ class ExportCartesTab(ttk.Frame):
                 btn_res = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(.,'Ressources')]")))
                 btn_res.click()
                 print("[Cartes] Clic sur 'Ressources'", file=self.stdout_redirect)
-                time.sleep(0.5) # Courte pause pour laisser le temps au popup de s'initialiser
+                time.sleep(0.75) # Pause de 0.75s comme demandé pour l'initialisation du popup
                 # Attendre que le popup de ressources se charge avec les données.
                 # On attend que le conteneur du popup soit présent et que la pillule de végétation contienne du texte.
                 wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".leaflet-popup-content")))
