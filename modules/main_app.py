@@ -2612,6 +2612,25 @@ class ContexteEcoTab(ttk.Frame):
         self.export_button = ttk.Button(left_column, text="Lancer export", style="Accent.TButton", command=self.start_export_thread)
         self.export_button.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(4,0))
         
+        # Séparateur
+        ttk.Separator(left_column, orient='horizontal').grid(row=14, column=0, columnspan=2, sticky="ew", pady=6)
+        
+        # Actions supplémentaires
+        ttk.Label(left_column, text="Actions", style="Card.TLabel").grid(row=15, column=0, columnspan=2, sticky="w", pady=(0,2))
+        
+        # Boutons d'actions sur 2 colonnes
+        self.bassin_button = ttk.Button(left_column, text="Bassin versant", command=self.start_bassin_thread)
+        self.bassin_button.grid(row=16, column=0, sticky="ew", pady=1, padx=(0,2))
+        
+        self.biodiv_button = ttk.Button(left_column, text="Photo Biodiv", command=self.open_biodiv_dialog)
+        self.biodiv_button.grid(row=16, column=1, sticky="ew", pady=1, padx=(2,0))
+        
+        self.gmaps_button = ttk.Button(left_column, text="Google Maps", command=self.open_google_maps)
+        self.gmaps_button.grid(row=17, column=0, sticky="ew", pady=1, padx=(0,2))
+        
+        self.remonter_button = ttk.Button(left_column, text="Remonter temps", command=self.open_remonter_temps)
+        self.remonter_button.grid(row=17, column=1, sticky="ew", pady=1, padx=(2,0))
+        
         left_column.columnconfigure(1, weight=1)
         
         # Colonne droite: Projets + Résultats
@@ -3837,11 +3856,63 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
+    def open_google_maps(self):
+        """Ouvre Google Maps avec le centroïde de la zone d'étude"""
+        ze_path = self.ze_shp_var.get()
+        if not ze_path or not os.path.isfile(ze_path):
+            messagebox.showerror("Erreur", "Veuillez d'abord sélectionner un shapefile pour la Zone d'étude.")
+            return
+        
+        try:
+            import geopandas as gpd
+            gdf = gpd.read_file(ze_path)
+            if gdf.crs is None:
+                messagebox.showwarning("Avertissement", "Le shapefile n'a pas de CRS défini.")
+            
+            # Reproject to WGS84 for lat/lon
+            gdf_wgs84 = gdf.to_crs("EPSG:4326")
+            centroid = gdf_wgs84.geometry.unary_union.centroid
+            lat, lon = centroid.y, centroid.x
+            
+            url = f"https://www.google.com/maps/@{lat},{lon},15z"
+            import webbrowser
+            webbrowser.open(url)
+            print(f"[Maps] Ouverture Google Maps: {lat:.6f}, {lon:.6f}", file=self.stdout_redirect)
+            
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Erreur lors de l'ouverture de Google Maps : {e}")
+
+    def open_remonter_temps(self):
+        """Ouvre Remonter le temps avec le centroïde de la zone d'étude"""
+        ze_path = self.ze_shp_var.get()
+        if not ze_path or not os.path.isfile(ze_path):
+            messagebox.showerror("Erreur", "Veuillez d'abord sélectionner un shapefile pour la Zone d'étude.")
+            return
+        
+        try:
+            import geopandas as gpd
+            gdf = gpd.read_file(ze_path)
+            if gdf.crs is None:
+                messagebox.showwarning("Avertissement", "Le shapefile n'a pas de CRS défini.")
+            
+            # Reproject to WGS84 for lat/lon
+            gdf_wgs84 = gdf.to_crs("EPSG:4326")
+            centroid = gdf_wgs84.geometry.unary_union.centroid
+            lat, lon = centroid.y, centroid.x
+            
+            url = f"https://remonterletemps.ign.fr/comparer/basic?x={lon}&y={lat}&z=15&layer1=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&layer2=ORTHOIMAGERY.ORTHOPHOTOS&mode=vSlider"
+            import webbrowser
+            webbrowser.open(url)
+            print(f"[Temps] Ouverture Remonter le temps: {lat:.6f}, {lon:.6f}", file=self.stdout_redirect)
+            
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Erreur lors de l'ouverture de Remonter le temps : {e}")
+
     def start_bassin_thread(self):
 
         if not self.ze_shp_var.get().strip():
 
-            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
+            messagebox.showerror("Erreur", "Veuillez d'abord sélectionner un shapefile pour la Zone d'étude.")
 
             return
 
@@ -4862,8 +4933,12 @@ class ContexteEcoTab(ttk.Frame):
         self.busy = True
 
         self.export_button.config(state="disabled")
-
-        self.id_button.config(state="disabled")
+        # Certaines configurations n'affichent pas le bouton d'identification
+        try:
+            if hasattr(self, 'id_button') and self.id_button:
+                self.id_button.config(state="disabled")
+        except Exception:
+            pass
 
         self.progress.config(mode="indeterminate")
 
@@ -4925,8 +5000,11 @@ class ContexteEcoTab(ttk.Frame):
     def _run_finished(self):
 
         self.export_button.config(state="normal")
-
-        self.id_button.config(state="normal")
+        try:
+            if hasattr(self, 'id_button') and self.id_button:
+                self.id_button.config(state="normal")
+        except Exception:
+            pass
 
         self.busy = False
 
