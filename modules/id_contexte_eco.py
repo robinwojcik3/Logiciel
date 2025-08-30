@@ -33,12 +33,19 @@ def log_with_time(message):
     print(f"[{now}] {message}")
 
 
-def run_analysis(ae_shp: str, ze_shp: str, buffer_km: float = 5.0):
+def run_analysis(
+    ae_shp: str,
+    ze_shp: str,
+    buffer_km: float = 5.0,
+    output_excel: str | None = None,
+):
     """Lance l'analyse d'identification des zonages à partir des shapefiles.
 
     :param ae_shp: chemin vers la couche "Aire d'étude élargie"
     :param ze_shp: chemin vers la couche "Zone d'étude"
     :param buffer_km: distance du tampon autour de la ZE en kilomètres
+    :param output_excel: fichier Excel de sortie (optionnel)
+    :returns: chemin absolu du fichier Excel généré
     """
     log_with_time("Démarrage du script d'identification des zonages...")
 
@@ -314,9 +321,16 @@ def run_analysis(ae_shp: str, ze_shp: str, buffer_km: float = 5.0):
     ]
 
     # Dossier de sortie et nom du fichier Excel
-    dossier_sortie = r"C:\USERS\UTILISATEUR\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 3) BDD\PYTHON\2) Contexte éco\OUTPUT"
-    nom_fichier_sortie = 'ID zonages.xlsx'
-    chemin_sortie = os.path.join(dossier_sortie, nom_fichier_sortie)
+    if output_excel is None:
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        dossier_sortie = os.path.join(project_root, "output")
+        nom_fichier_sortie = "ID_zonages.xlsx"
+        chemin_sortie = os.path.join(dossier_sortie, nom_fichier_sortie)
+    else:
+        chemin_sortie = os.path.abspath(output_excel)
+        dossier_sortie = os.path.dirname(chemin_sortie)
+
+    os.makedirs(dossier_sortie, exist_ok=True)
 
     # Vérifier si le fichier Excel existe déjà et le supprimer s'il existe
     if os.path.exists(chemin_sortie):
@@ -325,7 +339,7 @@ def run_analysis(ae_shp: str, ze_shp: str, buffer_km: float = 5.0):
             log_with_time(f"Le fichier existant '{chemin_sortie}' a été supprimé et sera remplacé par le nouvel export.")
         except Exception as e:
             log_with_time(f"Erreur lors de la suppression du fichier existant '{chemin_sortie}': {e}")
-            return
+            return None
 
     # Fonction pour traiter une couche individuelle et écrire dans son propre onglet
     def process_single_layer(couche, writer):
@@ -739,9 +753,10 @@ def run_analysis(ae_shp: str, ze_shp: str, buffer_km: float = 5.0):
 
     except Exception as e:
         log_with_time(f"Erreur lors de l'écriture dans le fichier Excel : {e}")
-        return
+        return None
 
     log_with_time(f"\nLes résultats ont été exportés avec succès dans le fichier Excel : {chemin_sortie}")
+    return chemin_sortie
 
 
 if __name__ == '__main__':

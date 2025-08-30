@@ -24,6 +24,8 @@ Voir aussi `docs/INSTALL.md` pour les détails et prérequis non‑Python (QGIS/
 - `modules/`: logique métier (UI, export QGIS, scraping Wikipédia, etc.).
 - `requirements.txt`: dépendances Python installées dans `.venv` (dans le dépôt).
 - `scripts/`: scripts d’installation/ lancement (`setup.ps1`, `run.ps1`).
+- `scripts/generate_contexte_eco_report.py` : enchaîne l'identification des zonages,
+  l'export des cartes et la création d'un rapport Word.
 - `docs/INSTALL.md`: procédure d’installation isolée.
 - Ressources: `Shapefile_Flore_Patri/`, `Template word  Contexte éco/`, etc.
 
