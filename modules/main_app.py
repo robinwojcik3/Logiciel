@@ -3603,9 +3603,30 @@ class ContexteEcoTab(ttk.Frame):
             except Exception:
                 pass
 
-            # Préparer Selenium (mais en lazy: on ne lance le navigateur qu'en cas de besoin)
+            # Préparer Selenium (toujours visible pour cette fonctionnalité)
             driver = None
             wait = None
+            try:
+                options = webdriver.ChromeOptions()
+                options.add_experimental_option("excludeSwitches", ["enable-logging"]) 
+                options.add_argument("--log-level=3")
+                options.add_argument("--disable-extensions")
+                options.add_argument("--disable-gpu")
+                options.add_argument("--no-sandbox")
+                options.add_argument("--disable-dev-shm-usage")
+                # IMPORTANT: ne pas forcer headless ici afin que l'utilisateur voie le navigateur
+                local_driver = os.path.join(REPO_ROOT if 'REPO_ROOT' in globals() else os.path.abspath(os.path.join(os.path.dirname(__file__), '..')), 'tools', 'chromedriver.exe')
+                if os.path.isfile(local_driver):
+                    driver = webdriver.Chrome(service=Service(local_driver), options=options)
+                else:
+                    driver = webdriver.Chrome(options=options)
+                try:
+                    driver.maximize_window()
+                except Exception:
+                    pass
+                wait = WebDriverWait(driver, 8)
+            except Exception as se_init:
+                print(f"[Biodiv] Selenium init KO: {se_init}", file=self.stdout_redirect)
             print(f"[Biodiv] Scraping de {len(species_list)} espece(s)...", file=self.stdout_redirect)
 
             # Collecter toutes les données d'espèces avec leurs images
@@ -3652,93 +3673,24 @@ class ContexteEcoTab(ttk.Frame):
                         # Construire simplement l'URL; on utilisera requests pour récupérer l'image
                         url_sp = f"https://atlas.biodiversite-auvergne-rhone-alpes.fr/espece/{cd_nom}"
 
-                    if not url_sp:
-                        # Fallback: recherche classique (Selenium) uniquement si nécessaire
-                        if driver is None:
-                            options = webdriver.ChromeOptions()
-                            options.add_experimental_option("excludeSwitches", ["enable-logging"])
-                            options.add_argument("--log-level=3")
-                            options.add_argument("--disable-extensions")
-                            options.add_argument("--disable-gpu")
-                            options.add_argument("--no-sandbox")
-                            options.add_argument("--disable-dev-shm-usage")
-                            try:
-                                if os.environ.get("APP_HEADLESS", "0").lower() in ("1", "true", "yes"):
-                                    options.add_argument("--headless=new")
-                            except Exception:
-                                pass
-
-                            local_driver = os.path.join(REPO_ROOT if 'REPO_ROOT' in globals() else os.path.abspath(os.path.join(os.path.dirname(__file__), '..')), 'tools', 'chromedriver.exe')
-                            if os.path.isfile(local_driver):
-                                driver = webdriver.Chrome(service=Service(local_driver), options=options)
-                            else:
-                                driver = webdriver.Chrome(options=options)
-                            wait = WebDriverWait(driver, 5)
-
-                        if "atlas.biodiversite" not in (driver.current_url or ""):
-                            driver.get("https://atlas.biodiversite-auvergne-rhone-alpes.fr/")
-
-                        try:
+                    # Ouvrir la page espèce avec Selenium (via URL directe si disponible, sinon via recherche)
+                    try:
+                        if url_sp:
+                            driver.get(url_sp)
+                            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".species-header, .species-title")))
+                        else:
+                            if "atlas.biodiversite" not in (driver.current_url or ""):
+                                driver.get("https://atlas.biodiversite-auvergne-rhone-alpes.fr/")
                             inp = wait.until(EC.element_to_be_clickable((By.ID, "searchTaxons")))
                             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", inp)
-                            inp.clear()
-                            inp.send_keys(sp)
-
-                            # Attendre et cliquer sur le premier résultat
+                            inp.clear(); inp.send_keys(sp)
                             first_result = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".search-results .result-item:first-child")))
                             driver.execute_script("arguments[0].click();", first_result)
-                            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".species-header")))
+                            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".species-header, .species-title")))
                             try:
                                 url_sp = driver.current_url
                             except Exception:
                                 url_sp = None
-                        except Exception:
-                            print(f"[Biodiv] Pas de resultat pour {sp}", file=self.stdout_redirect)
-                            species_data.append({'name': sp, 'image_path': None, 'url': None})
-                            continue
-
-                    # Chercher une image de manière plus rapide (requests) si URL connue, sinon via Selenium
-                    tmp_path = None
-                    try:
-                        img_url = None
-                        if url_sp:
-                            # Fast path: parser la page avec requests + BeautifulSoup
-                            try:
-                                pr = requests.get(url_sp, timeout=5)
-                                if pr.ok:
-                                    soup = BeautifulSoup(pr.text, "lxml")
-                                    img_tag = soup.select_one(".species-photo img") or soup.select_one(".photo-gallery img")
-                                    if img_tag and img_tag.get("src"):
-                                        img_url = img_tag.get("src")
-                            except Exception:
-                                img_url = None
-
-                        if not img_url:
-                            # Fallback via Selenium si déjà lancé (et naviguer vers la page si connue)
-                            if driver is not None:
-                                try:
-                                    if url_sp:
-                                        driver.get(url_sp)
-                                        if wait is not None:
-                                            try:
-                                                wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".species-header")))
-                                            except Exception:
-                                                pass
-                                    img_elems = driver.find_elements(By.CSS_SELECTOR, ".species-photo img")
-                                    if not img_elems:
-                                        img_elems = driver.find_elements(By.CSS_SELECTOR, ".photo-gallery img")
-                                    if img_elems:
-                                        img_url = img_elems[0].get_attribute("src")
-                                except Exception:
-                                    img_url = None
-
-                        if img_url and img_url.startswith("http"):
-                            print(f"[Biodiv] Image trouvee: {img_url[:80]}...", file=self.stdout_redirect)
-                            r = requests.get(img_url, stream=True, timeout=6)
-                            r.raise_for_status()
-                            tmp_path = os.path.join(tempfile.gettempdir(), f"biodiv_{int(time.time()*1000)}_{idx}.jpg")
-                            with open(tmp_path, 'wb') as f:
-                                for chunk in r.iter_content(1024):
                                     f.write(chunk)
                     except Exception as de:
                         print(f"[Biodiv] Telechargement image echoue pour {sp}: {de}", file=self.stdout_redirect)
