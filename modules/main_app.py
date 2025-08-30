@@ -98,6 +98,7 @@ import traceback
 import subprocess
 
 import geopandas as gpd
+import pandas as pd
 from bs4 import BeautifulSoup
 
 # --- Helper functions for Word document generation ---
@@ -263,7 +264,7 @@ SUBPATH    = r"Espace_RWO\CARTO ROBIN"
 
 
 
-OUT_IMG    = r"C:\Users\utilisateur\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 3) BDD\PYTHON\2) Contexte éco\OUTPUT"
+OUT_IMG    = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'output'))
 
 
 
@@ -1099,6 +1100,9 @@ class ExportCartesTab(ttk.Frame):
         # State
         self.busy = False
         self.wiki_last_url = ""
+        self._after_run_callback = None
+        self._report_active = False
+        self._report_iter = None
 
         # Vars used elsewhere
         self.out_dir_var = tk.StringVar(value=self.prefs.get("OUT_DIR", OUT_IMG))
@@ -1185,10 +1189,13 @@ class ExportCartesTab(ttk.Frame):
         act_frm.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(10,4))
         act_frm.columnconfigure(0, weight=1)
         act_frm.columnconfigure(1, weight=1)
+        act_frm.columnconfigure(2, weight=1)
         self.export_button = ttk.Button(act_frm, text="Exporter cartes", style="Accent.TButton", command=self.start_export_thread)
         self.export_button.grid(row=0, column=0, sticky="ew", padx=(0,6))
         self.id_button = ttk.Button(act_frm, text="ID Contexte éco", command=self.start_id_thread)
-        self.id_button.grid(row=0, column=1, sticky="ew")
+        self.id_button.grid(row=0, column=1, sticky="ew", padx=(0,6))
+        self.report_button = ttk.Button(act_frm, text="Rapport auto", command=self.start_report_sequence)
+        self.report_button.grid(row=0, column=2, sticky="ew")
 
         # ID buffer
         id_frm = ttk.Frame(left)
@@ -2414,15 +2421,136 @@ class ExportCartesTab(ttk.Frame):
 
 
     def _run_finished(self):
+        if not getattr(self, '_report_active', False):
+            self.export_button.config(state="normal")
+            try:
+                if hasattr(self, 'id_button') and self.id_button:
+                    self.id_button.config(state="normal")
+            except Exception:
+                pass
+            try:
+                if hasattr(self, 'report_button') and self.report_button:
+                    self.report_button.config(state="normal")
+            except Exception:
+                pass
+            self.busy = False
+        cb = getattr(self, '_after_run_callback', None)
+        if cb:
+            self._after_run_callback = None
+            self.after(0, cb)
 
-        self.export_button.config(state="normal")
+    # ---------- Rapport automatique ----------
+
+    def start_report_sequence(self):
+        if self.busy:
+            print("Une action est déjà en cours.", file=self.stdout_redirect)
+            return
+        self._report_active = True
+        self._report_iter = iter(['id', 'export', 'word'])
+        self.export_button.config(state="disabled")
         try:
             if hasattr(self, 'id_button') and self.id_button:
-                self.id_button.config(state="normal")
+                self.id_button.config(state="disabled")
         except Exception:
             pass
+        self.report_button.config(state="disabled")
+        self.busy = True
+        self._run_next_report_step()
 
-        self.busy = False
+    def _run_next_report_step(self):
+        try:
+            step = next(self._report_iter)
+        except StopIteration:
+            self._report_active = False
+            self._run_finished()
+            self.status_label.config(text="Terminé")
+            return
+        if step == 'id':
+            self._after_run_callback = self._run_next_report_step
+            self.start_id_thread()
+        elif step == 'export':
+            self._after_run_callback = self._run_next_report_step
+            self.start_export_thread()
+        elif step == 'word':
+            try:
+                self.generate_report()
+            except Exception as e:
+                print(f"Erreur génération rapport: {e}", file=self.stdout_redirect)
+                self.after(0, lambda msg=str(e): messagebox.showerror("Erreur", msg))
+            self._run_next_report_step()
+
+    def generate_report(self):
+        xlsx = os.path.join(OUT_IMG, 'ID zonages.xlsx')
+        if not os.path.isfile(xlsx):
+            raise FileNotFoundError("Fichier d'analyse introuvable")
+        tpl_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'Template word  Contexte éco'))
+        tpl_path = os.path.join(tpl_dir, '1 Template Contexte éco.docx')
+        if not os.path.isfile(tpl_path):
+            raise FileNotFoundError("Template Word introuvable")
+        out_doc = os.path.join(OUT_IMG, f"Rapport Contexte eco {datetime.datetime.now():%Y%m%d_%H%M%S}.docx")
+        shutil.copy(tpl_path, out_doc)
+        doc = Document(out_doc)
+        xls = pd.ExcelFile(xlsx)
+
+        def find_sheets(patterns):
+            found = []
+            for pat in patterns:
+                for name in xls.sheet_names:
+                    if pat.lower() in name.lower():
+                        found.append(name)
+            return found
+
+        table_map = {
+            'TABLEAU NATURA2000': ['Natura 2000'],
+            'TABLEAU ZNIEFF': ['ZNIEFF de Type I', 'ZNIEFF de Type II'],
+            'TABLEAU APPB': ['APPB'],
+            'TABLEAU ENS': ['ENS'],
+            'TABLEAU PNN': ['PNN', 'Parc National', 'PN'],
+            'TABLEAU PRN': ['PRN', 'Parc Naturel Régional', 'PR']
+        }
+        image_map = {
+            'CARTE NATURA2000': 'Contexte éco - N2000__AE.png',
+            'CARTE ZNIEFF': 'Contexte éco - ZNIEFF__AE.png',
+            'CARTE APPB': 'Contexte éco - APPB__AE.png',
+            'CARTE ENS': 'Contexte éco - ENS__AE.png',
+            'CARTE PNN': 'Contexte éco - Parc National__AE.png',
+            'CARTE PRN': 'Contexte éco - Parc Naturel Régional__AE.png'
+        }
+
+        for para in list(doc.paragraphs):
+            text = para.text.strip()
+            if text in table_map:
+                sheets = find_sheets(table_map[text])
+                dfs = [pd.read_excel(xls, sheet) for sheet in sheets]
+                if dfs:
+                    df = pd.concat(dfs, ignore_index=True)
+                    self._insert_table_from_df(doc, para, df)
+            elif text in image_map:
+                img_path = os.path.join(OUT_IMG, image_map[text])
+                if os.path.isfile(img_path):
+                    self._insert_image(para, img_path)
+        doc.save(out_doc)
+
+    def _insert_table_from_df(self, doc, paragraph, df):
+        table = doc.add_table(rows=df.shape[0] + 1, cols=df.shape[1])
+        table.style = 'Table Grid'
+        for j, col in enumerate(df.columns):
+            table.cell(0, j).text = str(col)
+        for i, row in df.iterrows():
+            for j, val in enumerate(row):
+                table.cell(i + 1, j).text = str(val)
+        parent = paragraph._p.getparent()
+        idx = parent.index(paragraph._p)
+        parent.insert(idx + 1, table._tbl)
+        parent.remove(paragraph._p)
+
+    def _insert_image(self, paragraph, img_path):
+        img_par = paragraph.insert_paragraph_before()
+        run = img_par.add_run()
+        run.add_picture(img_path, width=Cm(16))
+        img_par.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        parent = paragraph._p.getparent()
+        parent.remove(paragraph._p)
 
 
 

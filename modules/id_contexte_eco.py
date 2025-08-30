@@ -314,7 +314,8 @@ def run_analysis(ae_shp: str, ze_shp: str, buffer_km: float = 5.0):
     ]
 
     # Dossier de sortie et nom du fichier Excel
-    dossier_sortie = r"C:\USERS\UTILISATEUR\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 3) BDD\PYTHON\2) Contexte éco\OUTPUT"
+    dossier_sortie = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'output'))
+    os.makedirs(dossier_sortie, exist_ok=True)
     nom_fichier_sortie = 'ID zonages.xlsx'
     chemin_sortie = os.path.join(dossier_sortie, nom_fichier_sortie)
 
