@@ -1251,6 +1251,10 @@ class ExportCartesTab(ttk.Frame):
 
         proj.rowconfigure(2, weight=1); proj.columnconfigure(1, weight=1)
 
+        # Conteneur des résultats (Wikipedia + Cartes végétation/sols) sous la liste des projets
+        self.wiki_container = ttk.Frame(right_pane)
+        right_pane.add(self.wiki_container, weight=1)
+
         # Molette pour la liste des projets
         def _mw_proj(e):
             try:
@@ -2642,9 +2646,12 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-        proj = ttk.Frame(hpw)
+        # Panneau droit scindé verticalement: Projets au-dessus, Résultats (Wikipedia, veg/sols) en dessous
+        right_pane = ttk.Panedwindow(hpw, orient=tk.VERTICAL)
+        hpw.add(right_pane, weight=2)
 
-        hpw.add(proj, weight=1)
+        proj = ttk.Frame(right_pane)
+        right_pane.add(proj, weight=2)
 
         ttk.Label(proj, text="Projets QGIS", style="Card.TLabel").grid(row=0, column=0, columnspan=4, sticky="w")
 
@@ -2757,9 +2764,9 @@ class ContexteEcoTab(ttk.Frame):
 
         # Tableau Wikipedia (2 lignes, 2 colonnes)
 
-        wiki_res = ttk.Frame(top, style="Card.TFrame", padding=12)
+        wiki_res = ttk.Frame(wiki_container, style="Card.TFrame", padding=12)
 
-        wiki_res.pack(fill=tk.X, pady=(8,0))
+        wiki_res.pack(fill=tk.BOTH, expand=True, pady=(8,0))
 
         ttk.Label(wiki_res, text="Wikipedia", style="Card.TLabel").grid(row=0, column=0, sticky="w", pady=(0,6))
 
