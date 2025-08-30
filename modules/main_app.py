@@ -2550,135 +2550,106 @@ class ContexteEcoTab(ttk.Frame):
         top.bind("<Enter>", _bind_wheel)
         top.bind("<Leave>", _unbind_wheel)
 
-        # Sélecteurs shapefiles
+        # Layout horizontal principal
+        main_horizontal = ttk.Frame(top)
+        main_horizontal.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+        
+        # Colonne gauche: Shapefiles + Options d'export
+        left_column = ttk.Frame(main_horizontal, style="Card.TFrame", padding=8)
+        left_column.pack(side=tk.LEFT, fill=tk.Y, padx=(0,4))
+        
+        # Sélecteurs shapefiles (plus compact)
+        ttk.Label(left_column, text="Couches Shapefile", style="Card.TLabel").grid(row=0, column=0, columnspan=2, sticky="w", pady=(0,4))
+        self._file_row(left_column, 1, "Zone d'étude", self.ze_shp_var, self._select_ze)
+        self._file_row(left_column, 2, "Aire élargie", self.ae_shp_var, self._select_ae)
+        
+        # Commune sur une ligne
+        self.identify_commune_button = ttk.Button(left_column, text="ID Commune", command=self._identify_commune)
+        self.identify_commune_button.grid(row=3, column=0, sticky="w", pady=(4,0))
+        commune_label = ttk.Label(left_column, textvariable=self.commune_var, style="Card.TLabel", wraplength=200)
+        commune_label.grid(row=3, column=1, sticky="w", padx=(4,0), pady=(4,0))
+        
+        # Séparateur
+        ttk.Separator(left_column, orient='horizontal').grid(row=4, column=0, columnspan=2, sticky="ew", pady=6)
+        
+        # Options d'export compactes
+        ttk.Label(left_column, text="Export", style="Card.TLabel").grid(row=5, column=0, columnspan=2, sticky="w", pady=(0,2))
+        
+        # Cadrage horizontal
+        cadrage_frame = ttk.Frame(left_column)
+        cadrage_frame.grid(row=6, column=0, columnspan=2, sticky="ew", pady=1)
+        ttk.Label(cadrage_frame, text="Cadrage:", style="Card.TLabel").pack(side=tk.LEFT)
+        ttk.Radiobutton(cadrage_frame, text="AE+ZE", variable=self.cadrage_var, value="BOTH", style="Card.TRadiobutton").pack(side=tk.LEFT, padx=2)
+        ttk.Radiobutton(cadrage_frame, text="ZE", variable=self.cadrage_var, value="ZE", style="Card.TRadiobutton").pack(side=tk.LEFT, padx=2)
+        ttk.Radiobutton(cadrage_frame, text="AE", variable=self.cadrage_var, value="AE", style="Card.TRadiobutton").pack(side=tk.LEFT, padx=2)
+        
+        # Paramètres sur 2 colonnes
+        ttk.Label(left_column, text="DPI:", style="Card.TLabel").grid(row=7, column=0, sticky="w", pady=1)
+        ttk.Spinbox(left_column, from_=72, to=1200, textvariable=self.dpi_var, width=8).grid(row=7, column=1, sticky="w", pady=1)
+        
+        ttk.Label(left_column, text="Workers:", style="Card.TLabel").grid(row=8, column=0, sticky="w", pady=1)
+        ttk.Spinbox(left_column, from_=1, to=max(1, (os.cpu_count() or 2)), textvariable=self.workers_var, width=8).grid(row=8, column=1, sticky="w", pady=1)
+        
+        ttk.Label(left_column, text="Marge:", style="Card.TLabel").grid(row=9, column=0, sticky="w", pady=1)
+        ttk.Spinbox(left_column, from_=1.00, to=2.00, increment=0.05, textvariable=self.margin_var, width=8).grid(row=9, column=1, sticky="w", pady=1)
+        
+        ttk.Checkbutton(left_column, text="Écraser PNG", variable=self.overwrite_var, style="Card.TCheckbutton").grid(row=10, column=0, columnspan=2, sticky="w", pady=2)
+        
+        # Dossier de sortie
+        ttk.Label(left_column, text="Sortie:", style="Card.TLabel").grid(row=11, column=0, sticky="w", pady=1)
+        out_frame = ttk.Frame(left_column)
+        out_frame.grid(row=11, column=1, sticky="ew", pady=1)
+        ttk.Entry(out_frame, textvariable=self.out_dir_var, width=20).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(out_frame, text="...", command=self._select_out_dir, width=3).pack(side=tk.RIGHT, padx=(2,0))
+        
+        # Type d'export
+        exp_frame = ttk.Frame(left_column)
+        exp_frame.grid(row=12, column=0, columnspan=2, sticky="ew", pady=2)
+        ttk.Radiobutton(exp_frame, text="PNG+QGIS", variable=self.export_type_var, value="BOTH", style="Card.TRadiobutton").pack(side=tk.LEFT)
+        ttk.Radiobutton(exp_frame, text="PNG", variable=self.export_type_var, value="PNG", style="Card.TRadiobutton").pack(side=tk.LEFT, padx=4)
+        ttk.Radiobutton(exp_frame, text="QGIS", variable=self.export_type_var, value="QGS", style="Card.TRadiobutton").pack(side=tk.LEFT)
+        
+        self.export_button = ttk.Button(left_column, text="Lancer export", style="Accent.TButton", command=self.start_export_thread)
+        self.export_button.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(4,0))
+        
+        left_column.columnconfigure(1, weight=1)
+        
+        # Colonne droite: Projets + Résultats
+        right_column = ttk.Frame(main_horizontal)
+        right_column.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(4,0))
 
-        shp = ttk.Frame(top, style="Card.TFrame", padding=12)
+        # Panedwindow vertical dans la colonne droite: Projets au-dessus, Résultats en dessous
+        right_pane = ttk.Panedwindow(right_column, orient=tk.VERTICAL)
+        right_pane.pack(fill=tk.BOTH, expand=True)
 
-        shp.pack(fill=tk.X)
-
-        ttk.Label(shp, text="Couches Shapefile", style="Card.TLabel").grid(row=0, column=0, columnspan=4, sticky="w")
-
-        self._file_row(shp, 1, "?? Zone d'étude…", self.ze_shp_var, self._select_ze)
-
-        self._file_row(shp, 2, "?? Aire d'étude élargie…", self.ae_shp_var, self._select_ae)
-
-        # Bouton pour identifier la commune
-        self.identify_commune_button = ttk.Button(shp, text="Identifier commune", command=self._identify_commune)
-        self.identify_commune_button.grid(row=3, column=0, sticky="w", pady=(10, 0))
-        commune_label = ttk.Label(shp, textvariable=self.commune_var, style="Card.TLabel", wraplength=300)
-        commune_label.grid(row=3, column=1, columnspan=3, sticky="w", padx=(10, 0), pady=(10, 0))
-
-        shp.columnconfigure(1, weight=1)
-
-
-
-        # Encart Export cartes
-
-        exp = ttk.Frame(top, style="Card.TFrame", padding=12)
-
-        exp.pack(fill=tk.BOTH, expand=True, pady=(10,0))
-
-        # Panedwindow horizontal pour permettre de redimensionner entre options et liste des projets
-        hpw = ttk.Panedwindow(exp, orient=tk.HORIZONTAL)
-        hpw.pack(fill=tk.BOTH, expand=True)
-
-        opt = ttk.Frame(hpw)
-
-        hpw.add(opt, weight=1)
-
-        ttk.Label(opt, text="Cadrage", style="Card.TLabel").grid(row=0, column=0, columnspan=3, sticky="w")
-
-        ttk.Radiobutton(opt, text="AE + ZE", variable=self.cadrage_var, value="BOTH", style="Card.TRadiobutton").grid(row=1, column=0, sticky="w")
-
-        ttk.Radiobutton(opt, text="ZE uniquement", variable=self.cadrage_var, value="ZE", style="Card.TRadiobutton").grid(row=1, column=1, sticky="w", padx=(12,0))
-
-        ttk.Radiobutton(opt, text="AE uniquement", variable=self.cadrage_var, value="AE", style="Card.TRadiobutton").grid(row=1, column=2, sticky="w", padx=(12,0))
-
-        ttk.Checkbutton(opt, text="Écraser si le PNG existe", variable=self.overwrite_var, style="Card.TCheckbutton").grid(row=2, column=0, columnspan=3, sticky="w", pady=(6,0))
-
-
-
-        ttk.Label(opt, text="DPI", style="Card.TLabel").grid(row=3, column=0, sticky="w", pady=(6,0))
-
-        ttk.Spinbox(opt, from_=72, to=1200, textvariable=self.dpi_var, width=6, justify="right").grid(row=3, column=1, sticky="w", pady=(6,0))
-
-        ttk.Label(opt, text="Workers", style="Card.TLabel").grid(row=4, column=0, sticky="w", pady=(6,0))
-
-        ttk.Spinbox(opt, from_=1, to=max(1, (os.cpu_count() or 2)), textvariable=self.workers_var, width=6, justify="right").grid(row=4, column=1, sticky="w", pady=(6,0))
-
-        ttk.Label(opt, text="Marge", style="Card.TLabel").grid(row=5, column=0, sticky="w", pady=(6,0))
-
-        ttk.Spinbox(opt, from_=1.00, to=2.00, increment=0.05, textvariable=self.margin_var, width=6, justify="right").grid(row=5, column=1, sticky="w", pady=(6,0))
-
-
-
-        ttk.Label(opt, text="Dossier de sortie", style="Card.TLabel").grid(row=6, column=0, sticky="w", pady=(6,0))
-
-        out_row = ttk.Frame(opt)
-
-        out_row.grid(row=6, column=1, columnspan=2, sticky="ew")
-
-        out_row.columnconfigure(0, weight=1)
-
-        ttk.Entry(out_row, textvariable=self.out_dir_var).grid(row=0, column=0, sticky="ew")
-
-        ttk.Button(out_row, text="Parcourir…", command=self._select_out_dir).grid(row=0, column=1, padx=(6,0))
-
-
-
-        ttk.Label(opt, text="Exporter", style="Card.TLabel").grid(row=7, column=0, sticky="w", pady=(6,0))
-
-        exp_row = ttk.Frame(opt)
-
-        exp_row.grid(row=7, column=1, columnspan=2, sticky="w")
-
-        ttk.Radiobutton(exp_row, text="PNG + QGIS", variable=self.export_type_var, value="BOTH", style="Card.TRadiobutton").pack(side=tk.LEFT)
-
-        ttk.Radiobutton(exp_row, text="PNG uniquement", variable=self.export_type_var, value="PNG", style="Card.TRadiobutton").pack(side=tk.LEFT, padx=(8,0))
-
-        ttk.Radiobutton(exp_row, text="QGIS uniquement", variable=self.export_type_var, value="QGS", style="Card.TRadiobutton").pack(side=tk.LEFT, padx=(8,0))
-
-
-
-        self.export_button = ttk.Button(opt, text="Lancer l’export cartes", style="Accent.TButton", command=self.start_export_thread)
-
-        self.export_button.grid(row=8, column=0, columnspan=3, sticky="w", pady=(10,0))
-
-
-
-        # Panneau droit scindé verticalement: Projets au-dessus, Résultats (Wikipedia, veg/sols) en dessous
-        right_pane = ttk.Panedwindow(hpw, orient=tk.VERTICAL)
-        hpw.add(right_pane, weight=2)
-
-        proj = ttk.Frame(right_pane)
+        proj = ttk.Frame(right_pane, style="Card.TFrame", padding=6)
         right_pane.add(proj, weight=2)
 
-        ttk.Label(proj, text="Projets QGIS", style="Card.TLabel").grid(row=0, column=0, columnspan=4, sticky="w")
-
-        ttk.Label(proj, text="Filtrer", style="Card.TLabel").grid(row=1, column=0, sticky="w", pady=(6,6))
-
+        # En-tête projets plus compact
+        proj_header = ttk.Frame(proj)
+        proj_header.grid(row=0, column=0, sticky="ew", pady=(0,4))
+        proj_header.columnconfigure(1, weight=1)
+        
+        ttk.Label(proj_header, text="Projets QGIS", style="Card.TLabel").grid(row=0, column=0, sticky="w")
+        
+        # Filtre et boutons sur une ligne
+        filter_frame = ttk.Frame(proj_header)
+        filter_frame.grid(row=0, column=1, sticky="e")
+        
         self.filter_var = tk.StringVar()
-
-        fe = ttk.Entry(proj, textvariable=self.filter_var, width=32)
-
-        fe.grid(row=1, column=1, sticky="w", pady=(6,6))
-
+        ttk.Label(filter_frame, text="Filtrer:", style="Card.TLabel").pack(side=tk.LEFT, padx=(0,2))
+        fe = ttk.Entry(filter_frame, textvariable=self.filter_var, width=20)
+        fe.pack(side=tk.LEFT, padx=2)
         fe.bind("<KeyRelease>", lambda _e: self._apply_filter())
-
-        ttk.Button(proj, text="Tout", width=6, command=lambda: self._select_all(True)).grid(row=1, column=2, padx=(8,0))
-
-        ttk.Button(proj, text="Aucun", width=6, command=lambda: self._select_all(False)).grid(row=1, column=3, padx=(6,0))
+        ttk.Button(filter_frame, text="Tout", width=5, command=lambda: self._select_all(True)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(filter_frame, text="Aucun", width=5, command=lambda: self._select_all(False)).pack(side=tk.LEFT, padx=2)
 
         # Zone défilante pour la liste des projets
-        proj.rowconfigure(2, weight=1)
-        for c in range(4):
-            try:
-                proj.columnconfigure(c, weight=1 if c == 1 else 0)
-            except Exception:
-                pass
+        proj.rowconfigure(1, weight=1)
+        proj.columnconfigure(0, weight=1)
 
         proj_list = ttk.Frame(proj)
-        proj_list.grid(row=2, column=0, columnspan=4, sticky="nsew", pady=(4,0))
+        proj_list.grid(row=1, column=0, sticky="nsew", pady=(2,0))
 
         canvas = tk.Canvas(proj_list, highlightthickness=0, borderwidth=0)
         vscroll = ttk.Scrollbar(proj_list, orient="vertical", command=canvas.yview)
@@ -2703,70 +2674,63 @@ class ContexteEcoTab(ttk.Frame):
                 pass
         canvas.bind("<Configure>", _on_proj_canvas_config)
 
-        # Panneau pour les résultats (Wikipedia, etc.)
-        results_pane = ttk.Frame(right_pane)
+        # Panneau pour les résultats (Wikipedia + Végétation/sols côte à côte)
+        results_pane = ttk.Frame(right_pane, style="Card.TFrame", padding=6)
         right_pane.add(results_pane, weight=1)
-        results_pane.columnconfigure(0, weight=1)
-
-        # Encart Wikipedia
-        wiki_res = ttk.Frame(results_pane, style="Card.TFrame", padding=4)
-        wiki_res.grid(row=0, column=0, sticky="nsew", pady=(6,0))
-        wiki_res.columnconfigure(1, weight=1)
-
-        wiki_header = ttk.Frame(wiki_res, style="Card.TFrame")
-        wiki_header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0,6))
-        wiki_header.columnconfigure(1, weight=1)
-
-        self.wiki_button = ttk.Button(wiki_header, text="? Wikipédia", command=self.start_wiki_thread)
-        self.wiki_button.grid(row=0, column=0, sticky="w")
-
-        self.wiki_query_entry = ttk.Entry(wiki_header, textvariable=self.wiki_query_var, width=20)
-        self.wiki_query_entry.grid(row=0, column=1, sticky="ew", padx=8)
-
-        self.wiki_open_button = ttk.Button(wiki_header, text="Ouvrir page", state="disabled", command=self.open_wiki_url)
-        self.wiki_open_button.grid(row=0, column=2, sticky="e")
-
-        ttk.Label(wiki_res, text="Climat", style="Card.TLabel").grid(row=1, column=0, sticky="nw")
-        self.climat_txt = tk.Text(wiki_res, height=4, wrap=tk.WORD, state='disabled', relief='flat')
-        self.climat_txt.grid(row=1, column=1, sticky="nsew")
-
-        ttk.Label(wiki_res, text="Occupation sols", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
-        self.occ_txt = tk.Text(wiki_res, height=4, wrap=tk.WORD, state='disabled', relief='flat')
-        self.occ_txt.grid(row=2, column=1, sticky="nsew")
-
-        # Tableau Cartes végétation/sols (3 lignes)
-        vegsol_res = ttk.Frame(results_pane, style="Card.TFrame", padding=4)
-        vegsol_res.grid(row=1, column=0, sticky="nsew", pady=(6,0))
-        ttk.Label(vegsol_res, text="Cartes végétation/sols", style="Card.TLabel").grid(row=0, column=0, sticky="w", pady=(0,6))
-
-        ttk.Label(vegsol_res, text="Altitude", style="Card.TLabel").grid(row=1, column=0, sticky="nw")
-        alt_cell = ttk.Frame(vegsol_res)
-        alt_cell.grid(row=1, column=1, sticky="nsew")
-        self.veg_alt_txt = tk.Text(alt_cell, height=2, wrap=tk.WORD, state='disabled', relief='flat')
-        alt_scroll = ttk.Scrollbar(alt_cell, orient="vertical", command=self.veg_alt_txt.yview)
-        self.veg_alt_txt.configure(yscrollcommand=alt_scroll.set)
-        self.veg_alt_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        alt_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        ttk.Label(vegsol_res, text="Végétation", style="Card.TLabel").grid(row=2, column=0, sticky="nw")
-        veg_cell = ttk.Frame(vegsol_res)
-        veg_cell.grid(row=2, column=1, sticky="nsew")
-        self.veg_veg_txt = tk.Text(veg_cell, height=3, wrap=tk.WORD, state='disabled', relief='flat')
-        veg_scroll = ttk.Scrollbar(veg_cell, orient="vertical", command=self.veg_veg_txt.yview)
-        self.veg_veg_txt.configure(yscrollcommand=veg_scroll.set)
-        self.veg_veg_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        veg_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        ttk.Label(vegsol_res, text="Sols", style="Card.TLabel").grid(row=3, column=0, sticky="nw")
-        soil_cell = ttk.Frame(vegsol_res)
-        soil_cell.grid(row=3, column=1, sticky="nsew")
-        self.veg_soil_txt = tk.Text(soil_cell, height=3, wrap=tk.WORD, state='disabled', relief='flat')
-        soil_scroll = ttk.Scrollbar(soil_cell, orient="vertical", command=self.veg_soil_txt.yview)
-        self.veg_soil_txt.configure(yscrollcommand=soil_scroll.set)
-        self.veg_soil_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        soil_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        vegsol_res.columnconfigure(1, weight=1)
+        
+        # Layout horizontal pour Wikipedia et Végétation/sols
+        results_horizontal = ttk.Frame(results_pane)
+        results_horizontal.pack(fill=tk.BOTH, expand=True)
+        
+        # Wikipedia à gauche
+        wiki_res = ttk.Frame(results_horizontal, style="Card.TFrame", padding=4)
+        wiki_res.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0,2))
+        
+        # En-tête Wikipedia compact
+        wiki_header = ttk.Frame(wiki_res)
+        wiki_header.pack(fill=tk.X, pady=(0,4))
+        
+        self.wiki_button = ttk.Button(wiki_header, text="? Wikipedia", command=self.start_wiki_thread)
+        self.wiki_button.pack(side=tk.LEFT)
+        
+        self.wiki_query_entry = ttk.Entry(wiki_header, textvariable=self.wiki_query_var, width=15)
+        self.wiki_query_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+        
+        self.wiki_open_button = ttk.Button(wiki_header, text="Ouvrir", state="disabled", command=self.open_wiki_url)
+        self.wiki_open_button.pack(side=tk.RIGHT)
+        
+        # Résultats Wikipedia compacts
+        wiki_content = ttk.Frame(wiki_res)
+        wiki_content.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(wiki_content, text="Climat:", style="Card.TLabel").pack(anchor="w")
+        self.climat_txt = tk.Text(wiki_content, height=3, wrap=tk.WORD, state='disabled', relief='flat')
+        self.climat_txt.pack(fill=tk.BOTH, expand=True, pady=(0,2))
+        
+        ttk.Label(wiki_content, text="Occupation sols:", style="Card.TLabel").pack(anchor="w")
+        self.occ_txt = tk.Text(wiki_content, height=3, wrap=tk.WORD, state='disabled', relief='flat')
+        self.occ_txt.pack(fill=tk.BOTH, expand=True)
+        
+        # Végétation/sols à droite
+        vegsol_res = ttk.Frame(results_horizontal, style="Card.TFrame", padding=4)
+        vegsol_res.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(2,0))
+        
+        ttk.Label(vegsol_res, text="Cartes végétation/sols", style="Card.TLabel").pack(anchor="w", pady=(0,4))
+        
+        # Altitude
+        ttk.Label(vegsol_res, text="Altitude:", style="Card.TLabel").pack(anchor="w")
+        self.veg_alt_txt = tk.Text(vegsol_res, height=2, wrap=tk.WORD, state='disabled', relief='flat')
+        self.veg_alt_txt.pack(fill=tk.X, pady=(0,2))
+        
+        # Végétation
+        ttk.Label(vegsol_res, text="Végétation:", style="Card.TLabel").pack(anchor="w")
+        self.veg_veg_txt = tk.Text(vegsol_res, height=2, wrap=tk.WORD, state='disabled', relief='flat')
+        self.veg_veg_txt.pack(fill=tk.X, pady=(0,2))
+        
+        # Sols
+        ttk.Label(vegsol_res, text="Sols:", style="Card.TLabel").pack(anchor="w")
+        self.veg_soil_txt = tk.Text(vegsol_res, height=2, wrap=tk.WORD, state='disabled', relief='flat')
+        self.veg_soil_txt.pack(fill=tk.X)
 
 
 
