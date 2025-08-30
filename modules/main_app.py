@@ -29,8 +29,7 @@ Onglet « Identification Pl@ntNet » :
 
 
 Pré-requis Python : qgis (environnement QGIS), selenium, pillow, python-docx,
-
-openpyxl (non utilisé ici), chromedriver dans PATH.
+chromedriver dans PATH.
 
 """
 
@@ -40,7 +39,6 @@ import os
 
 import sys
 
-import re
 
 import json
 
@@ -70,7 +68,6 @@ from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 
-from openpyxl import load_workbook
 from PIL import Image
 
 from selenium import webdriver
@@ -102,16 +99,6 @@ import geopandas as gpd
 from bs4 import BeautifulSoup
 
 # --- Helper functions for Word document generation ---
-def dms_to_dd(text: str) -> float:
-    pat = r'(\d{1,3})[°d]\s*(\d{1,2})[\'m]\s*([\d\.]+)[\"s]?\s*([NSEW])'
-    alt = r"(\d{1,3})\s+(\d{1,2})\s+([\d\.]+)\s*([NSEW])"
-    m = re.search(pat, text, re.I) or re.search(alt, text, re.I)
-    if not m:
-        raise ValueError(f"Format DMS invalide : {text}")
-    deg, mn, sc, hemi = m.groups()
-    dd = float(deg) + float(mn)/60 + float(sc)/3600
-    return -dd if hemi.upper() in ("S", "W") else dd
-
 def add_hyperlink(paragraph, url: str, text: str, italic: bool = True):
     """
     Ajoute un lien hypertexte cliquable (python-docx ne fournit pas
@@ -851,90 +838,6 @@ def discover_projects() -> List[str]:
 
 # =========================
 
-def dms_to_dd(text: str) -> float:
-
-    pat = r"(\d{1,3})[°d]\s*(\d{1,2})['m]\s*([\d\.]+)[\"s]?\s*([NSEW])"
-
-    alt = r"(\d{1,3})\s+(\d{1,2})\s+([\d\.]+)\s*([NSEW])"
-
-    m = re.search(pat, text, re.I) or re.search(alt, text, re.I)
-
-    if not m:
-
-        raise ValueError(f"Format DMS invalide : {text}")
-
-    deg, mn, sc, hemi = m.groups()
-
-    dd = float(deg) + float(mn)/60 + float(sc)/3600
-
-    return -dd if hemi.upper() in ("S", "W") else dd
-
-
-
-def dd_to_dms(lat: float, lon: float) -> str:
-
-    """Convertit des coordonnées décimales en DMS (degrés, minutes, secondes)."""
-
-    def _convert(value: float, positive: str, negative: str) -> str:
-
-        hemi = positive if value >= 0 else negative
-
-        value = abs(value)
-
-        deg = int(value)
-
-        minutes_full = (value - deg) * 60
-
-        minutes = int(minutes_full)
-
-        seconds = (minutes_full - minutes) * 60
-
-        return f"{deg}°{minutes:02d}'{seconds:04.1f}\"{hemi}"
-
-
-
-    return f"{_convert(lat, 'N', 'S')} {_convert(lon, 'E', 'W')}"
-
-
-
-def add_hyperlink(paragraph, url: str, text: str, italic: bool = True):
-
-    part = paragraph.part
-
-    r_id = part.relate_to(
-
-        url,
-
-        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
-
-        is_external=True
-
-    )
-
-    fld_simple = OxmlElement('w:hyperlink')
-
-    fld_simple.set(qn('r:id'), r_id)
-
-
-
-    run = OxmlElement('w:r')
-
-    r_pr = OxmlElement('w:rPr')
-
-    if italic:
-
-        i = OxmlElement('w:i')
-
-        r_pr.append(i)
-
-    u = OxmlElement('w:u')
-
-    u.set(qn('w:val'), 'single')
-
-    r_pr.append(u)
-
-    run.append(r_pr)
-
     run_text = OxmlElement('w:t')
 
     run_text.text = text
@@ -1336,26 +1239,23 @@ class ExportCartesTab(ttk.Frame):
 
     def _open_rlt_links(self):
         try:
-            # --- Utiliser les chemins et paramètres de l'ancienne version ---
-            excel_path = r"C:\Users\utilisateur\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 3) BDD\TOOL Excel.xlsm"
-            output_dir = r"C:\Users\utilisateur\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 3) BDD\PYTHON\2) Contexte éco\OUTPUT\Remonter le temps"
+            # --- Coordonnées depuis le shapefile sélectionné ---
+            centroid = self._get_centroid_wgs84()
+            if not centroid:
+                return
+            lat_dd, lon_dd = centroid  # _get_centroid_wgs84 retourne (lat, lon)
+
+            commune = "Inconnue"
+            if hasattr(self, "_detect_commune"):
+                try:
+                    commune, _ = self._detect_commune(lat_dd, lon_dd)
+                except Exception:
+                    pass
+
+            output_dir = os.path.join(OUT_IMG, "Remonter le temps")
             word_filename = "Comparaison_temporelle_Paysage.docx"
             os.makedirs(output_dir, exist_ok=True)
 
-            # --- 1. Lecture des données depuis Excel ---
-            print("Lecture des coordonnées depuis le fichier Excel...")
-            tmp_dir = tempfile.mkdtemp(prefix="excel_tmp_")
-            tmp_file = os.path.join(tmp_dir, "copy.xlsm")
-            shutil.copy2(excel_path, tmp_file)
-
-            wb = load_workbook(tmp_file, read_only=True, data_only=True, keep_vba=False)
-            ws = wb["0  PYTHON"]
-            coord_raw = str(ws["H5"].value).strip()
-            commune = str(ws["I5"].value).strip()
-            wb.close()
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-
-            lat_dd, lon_dd = (dms_to_dd(s) for s in re.split(r"\s+|,|\t", coord_raw, maxsplit=1))
             print(f"Commune: {commune}, Coordonnées: {lat_dd:.6f}, {lon_dd:.6f}")
 
             # --- 2. Capture des images avec Selenium ---
