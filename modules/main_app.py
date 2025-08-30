@@ -2669,9 +2669,9 @@ class ContexteEcoTab(ttk.Frame):
         
         left_column.columnconfigure(1, weight=1)
         
-        # Colonne droite: Projets + Résultats - expansion complète
+        # Colonne droite: Projets + Résultats - occupe tout l'espace restant (suppression marge droite)
         right_column = ttk.Frame(main_horizontal)
-        right_column.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(4,0))
+        right_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=0)
 
         # Panedwindow vertical dans la colonne droite: Projets au-dessus, Résultats en dessous
         right_pane = ttk.Panedwindow(right_column, orient=tk.VERTICAL)
