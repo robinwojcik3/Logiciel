@@ -70,6 +70,12 @@ from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 
+# Génération automatique du rapport Word Contexte éco
+try:
+    from .contexte_report import generate_word_report
+except Exception:
+    from contexte_report import generate_word_report
+
 from PIL import Image
 
 from selenium import webdriver
@@ -1185,10 +1191,13 @@ class ExportCartesTab(ttk.Frame):
         act_frm.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(10,4))
         act_frm.columnconfigure(0, weight=1)
         act_frm.columnconfigure(1, weight=1)
+        act_frm.columnconfigure(2, weight=1)
         self.export_button = ttk.Button(act_frm, text="Exporter cartes", style="Accent.TButton", command=self.start_export_thread)
         self.export_button.grid(row=0, column=0, sticky="ew", padx=(0,6))
         self.id_button = ttk.Button(act_frm, text="ID Contexte éco", command=self.start_id_thread)
-        self.id_button.grid(row=0, column=1, sticky="ew")
+        self.id_button.grid(row=0, column=1, sticky="ew", padx=(0,6))
+        self.report_button = ttk.Button(act_frm, text="Rapport Word", command=self.start_report_thread)
+        self.report_button.grid(row=0, column=2, sticky="ew")
 
         # ID buffer
         id_frm = ttk.Frame(left)
@@ -2050,6 +2059,67 @@ class ExportCartesTab(ttk.Frame):
         t.start()
 
 
+    def start_report_thread(self):
+
+        if self.busy:
+
+            print("Une action est déjà en cours.", file=self.stdout_redirect)
+
+            return
+
+        ae = to_long_unc(os.path.normpath(self.ae_shp_var.get().strip()))
+        ze = to_long_unc(os.path.normpath(self.ze_shp_var.get().strip()))
+
+        if not ae or not ze:
+
+            messagebox.showerror("Erreur", "Sélectionnez les deux shapefiles."); return
+
+        if not os.path.isfile(ae) or not os.path.isfile(ze):
+
+            messagebox.showerror("Erreur", "Un shapefile est introuvable."); return
+
+        projets = self._selected_projects()
+
+        if not projets:
+
+            messagebox.showerror("Erreur", "Sélectionnez au moins un projet."); return
+
+        self.busy = True
+
+        self.export_button.config(state="disabled")
+        try:
+            if hasattr(self, 'id_button') and self.id_button:
+                self.id_button.config(state="disabled")
+        except Exception:
+            pass
+        try:
+            if hasattr(self, 'report_button') and self.report_button:
+                self.report_button.config(state="disabled")
+        except Exception:
+            pass
+
+        self.progress.config(mode="indeterminate")
+
+        self.progress.start()
+
+        self.status_label.config(text="Génération du rapport…")
+
+        self.prefs.update({
+            "ZE_SHP": from_long_unc(ze),
+            "AE_SHP": from_long_unc(ae),
+            "ID_TAMPON_KM": float(self.buffer_var.get()),
+            "OUT_DIR": self.out_dir_var.get(),
+        }); save_prefs(self.prefs)
+
+        t = threading.Thread(
+            target=self._run_report_logic,
+            args=(ae, ze, float(self.buffer_var.get()), projets),
+            daemon=True,
+        )
+
+        t.start()
+
+
 
     def _run_export_logic(self, projets: List[str]):
 
@@ -2318,6 +2388,53 @@ class ExportCartesTab(ttk.Frame):
             self.after(0, self._run_finished)
 
 
+    def _run_report_logic(self, ae: str, ze: str, buffer_km: float, projets: List[str]):
+
+        old_stdout = sys.stdout
+
+        sys.stdout = self.stdout_redirect
+
+        try:
+            # Étape 1 : identification des zonages
+            try:
+                from .id_contexte_eco import run_analysis as run_id_context
+            except Exception:
+                from id_contexte_eco import run_analysis as run_id_context
+
+            excel_path = run_id_context(ae, ze, buffer_km)
+            log_with_time("Analyse terminée.")
+
+            # Étape 2 : export des cartes
+            self._run_export_logic(projets)
+
+            # Après l'export, on désactive de nouveau les boutons
+            self.busy = True
+            self.after(0, lambda: (
+                self.export_button.config(state="disabled"),
+                self.id_button.config(state="disabled"),
+                self.report_button.config(state="disabled"),
+            ))
+
+            out_dir = self.out_dir_var.get() or OUT_IMG
+            os.makedirs(out_dir, exist_ok=True)
+
+            # Étape 3 : génération du Word
+            output_docx = os.path.join(out_dir, "rapport_contexte_eco.docx")
+            generate_word_report(excel_path, out_dir, output_docx)
+            log_with_time("Rapport Word généré.")
+            self.after(0, lambda: self.status_label.config(text="Rapport généré"))
+
+        except Exception as e:
+            log_with_time(f"Erreur: {e}")
+            _err = str(e)
+            self.after(0, lambda msg=_err: messagebox.showerror("Erreur", msg))
+
+        finally:
+            sys.stdout = old_stdout
+            self.after(0, lambda: (self.progress.stop(), self.progress.config(mode="determinate", value=0)))
+            self.after(0, self._run_finished)
+
+
 
     # ---------- Lancement ID contexte ----------
 
@@ -2419,6 +2536,11 @@ class ExportCartesTab(ttk.Frame):
         try:
             if hasattr(self, 'id_button') and self.id_button:
                 self.id_button.config(state="normal")
+        except Exception:
+            pass
+        try:
+            if hasattr(self, 'report_button') and self.report_button:
+                self.report_button.config(state="normal")
         except Exception:
             pass
 

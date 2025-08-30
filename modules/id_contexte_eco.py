@@ -742,6 +742,7 @@ def run_analysis(ae_shp: str, ze_shp: str, buffer_km: float = 5.0):
         return
 
     log_with_time(f"\nLes résultats ont été exportés avec succès dans le fichier Excel : {chemin_sortie}")
+    return chemin_sortie
 
 
 if __name__ == '__main__':
