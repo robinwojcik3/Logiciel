@@ -99,6 +99,7 @@ import subprocess
 
 import geopandas as gpd
 from bs4 import BeautifulSoup
+import pandas as pd
 
 # --- Helper functions for Word document generation ---
 def dms_to_dd(text: str) -> float:
@@ -1185,10 +1186,13 @@ class ExportCartesTab(ttk.Frame):
         act_frm.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(10,4))
         act_frm.columnconfigure(0, weight=1)
         act_frm.columnconfigure(1, weight=1)
+        act_frm.columnconfigure(2, weight=1)
         self.export_button = ttk.Button(act_frm, text="Exporter cartes", style="Accent.TButton", command=self.start_export_thread)
         self.export_button.grid(row=0, column=0, sticky="ew", padx=(0,6))
         self.id_button = ttk.Button(act_frm, text="ID Contexte éco", command=self.start_id_thread)
         self.id_button.grid(row=0, column=1, sticky="ew")
+        self.report_button = ttk.Button(act_frm, text="Rapport Contexte éco", command=self.start_report_thread)
+        self.report_button.grid(row=0, column=2, sticky="ew", padx=(6,0))
 
         # ID buffer
         id_frm = ttk.Frame(left)
@@ -2051,7 +2055,7 @@ class ExportCartesTab(ttk.Frame):
 
 
 
-    def _run_export_logic(self, projets: List[str]):
+    def _run_export_logic(self, projets: List[str], finalize: bool = True):
 
         old_stdout = sys.stdout
 
@@ -2315,7 +2319,8 @@ class ExportCartesTab(ttk.Frame):
 
             sys.stdout = old_stdout
 
-            self.after(0, self._run_finished)
+            if finalize:
+                self.after(0, self._run_finished)
 
 
 
@@ -2413,12 +2418,243 @@ class ExportCartesTab(ttk.Frame):
 
 
 
+    # ---------- Rapport complet ----------
+
+    def start_report_thread(self):
+
+        if self.busy:
+
+            print("Une action est déjà en cours.", file=self.stdout_redirect)
+
+            return
+
+        ae = to_long_unc(os.path.normpath(self.ae_shp_var.get().strip()))
+
+        ze = to_long_unc(os.path.normpath(self.ze_shp_var.get().strip()))
+
+        if not ae or not ze:
+
+            messagebox.showerror("Erreur", "Sélectionnez les deux shapefiles."); return
+
+        if not os.path.isfile(ae) or not os.path.isfile(ze):
+
+            messagebox.showerror("Erreur", "Un shapefile est introuvable."); return
+
+        projets = self._selected_projects()
+
+        if not projets:
+
+            messagebox.showerror("Erreur", "Sélectionnez au moins un projet."); return
+
+        self.busy = True
+
+        self.export_button.config(state="disabled")
+        try:
+            if hasattr(self, 'id_button') and self.id_button:
+                self.id_button.config(state="disabled")
+        except Exception:
+            pass
+        try:
+            if hasattr(self, 'report_button') and self.report_button:
+                self.report_button.config(state="disabled")
+        except Exception:
+            pass
+
+        self.progress.config(mode="indeterminate")
+        self.progress.start()
+        self.status_label.config(text="Rapport en cours…")
+
+        self.prefs.update({
+            "ZE_SHP": from_long_unc(ze),
+            "AE_SHP": from_long_unc(ae),
+            "CADRAGE_MODE": self.cadrage_var.get(),
+            "OVERWRITE": bool(self.overwrite_var.get()),
+            "DPI": int(self.dpi_var.get()),
+            "N_WORKERS": int(self.workers_var.get()),
+            "MARGIN_FAC": float(self.margin_var.get()),
+            "OUT_DIR": self.out_dir_var.get(),
+            "EXPORT_TYPE": self.export_type_var.get(),
+            "ID_TAMPON_KM": float(self.buffer_var.get()),
+        }); save_prefs(self.prefs)
+
+        mode = self.cadrage_var.get()
+
+        exp_type = self.export_type_var.get()
+
+        png_exports = 2 if (exp_type in ("PNG", "BOTH") and mode == "BOTH") else (1 if exp_type in ("PNG", "BOTH") else 0)
+
+        qgs_exports = 1 if exp_type in ("QGS", "BOTH") else 0
+
+        per_project = png_exports + qgs_exports
+
+        self.total_expected = per_project * len(projets)
+
+        self.progress_done = 0
+
+        t = threading.Thread(target=self._run_full_report_logic, args=(ae, ze, projets, float(self.buffer_var.get())), daemon=True)
+
+        t.start()
+
+
+    def _run_full_report_logic(self, ae: str, ze: str, projets: List[str], buffer_km: float):
+
+        old_stdout = sys.stdout
+
+        sys.stdout = self.stdout_redirect
+
+        try:
+            try:
+                from .id_contexte_eco import run_analysis as run_id_context
+            except Exception:
+                from id_contexte_eco import run_analysis as run_id_context
+
+            run_id_context(ae, ze, buffer_km)
+
+            log_with_time("Analyse terminée.")
+
+            self.after(0, lambda: (self.progress.stop(), self.progress.config(mode="determinate", maximum=max(1, self.total_expected), value=0)))
+
+            self.after(0, lambda: self.status_label.config(text=f"Progression : 0/{self.total_expected}"))
+
+            self._run_export_logic(projets, finalize=False)
+
+            self.after(0, lambda: self.status_label.config(text="Génération du Word…"))
+
+            self._generate_word_report()
+
+            log_with_time("Rapport Word généré.")
+
+            self.after(0, lambda: self.status_label.config(text="Terminé"))
+
+        except Exception as e:
+
+            log_with_time(f"Erreur: {e}")
+
+            _err = str(e)
+
+            self.after(0, lambda msg=_err: messagebox.showerror("Erreur", msg))
+
+        finally:
+
+            sys.stdout = old_stdout
+
+            self.after(0, lambda: (self.progress.stop(), self.progress.config(mode="determinate", value=0)))
+
+            self.after(0, self._run_finished)
+
+
+    def _generate_word_report(self):
+
+        out_dir = self.out_dir_var.get() or OUT_IMG
+
+        template_dir = os.path.join(BASE_DIR, "Template word  Contexte éco")
+        template_path = os.path.join(template_dir, "1 Template Contexte éco.docx")
+
+        if not os.path.isfile(template_path):
+            log_with_time("Template Word introuvable")
+            return
+
+        report_path = os.path.join(out_dir, "Rapport Contexte éco.docx")
+
+        try:
+            shutil.copyfile(template_path, report_path)
+        except Exception as e:
+            log_with_time(f"Copie du template impossible: {e}")
+            return
+
+        try:
+            xls_path = os.path.join(out_dir, "ID zonages.xlsx")
+            xls = pd.ExcelFile(xls_path)
+        except Exception as e:
+            log_with_time(f"Fichier Excel introuvable: {e}")
+            xls = None
+
+        doc = Document(report_path)
+
+        table_cfg = {
+            "TABLEAU NATURA2000": ["Natura 2000", "N2000 ZPS", "N2000 ZSC"],
+            "TABLEAU ZNIEFF": ["ZNIEFF de Type I", "ZNIEFF de Type II"],
+            "TABLEAU APPB": ["APPB"],
+            "TABLEAU ENS": ["ENS"],
+            "TABLEAU PNN": ["Parcs", "Parc National"],
+            "TABLEAU PRN": ["Parcs", "Parc Naturel Régional"],
+        }
+
+        image_cfg = {
+            "CARTE NATURA2000": "Contexte éco - N2000__AE.png",
+            "CARTE ZNIEFF": "Contexte éco - ZNIEFF__AE.png",
+            "CARTE APPB": "Contexte éco - APPB__AE.png",
+            "CARTE ENS": "Contexte éco - ENS__AE.png",
+            "CARTE PNN": "Contexte éco - Parc National__AE.png",
+            "CARTE PRN": "Contexte éco - Parc Naturel Régional__AE.png",
+        }
+
+        for paragraph in self._iter_paragraphs(doc):
+            txt = paragraph.text.strip()
+            if xls and txt in table_cfg:
+                sheets = table_cfg[txt]
+                df_all = None
+                for sh in sheets:
+                    if sh in xls.sheet_names:
+                        df = pd.read_excel(xls, sheet_name=sh)
+                        if df_all is None:
+                            df_all = df
+                        else:
+                            df_all = pd.concat([df_all, df], ignore_index=True)
+                if df_all is not None and not df_all.empty:
+                    self._replace_paragraph_with_table(doc, paragraph, df_all)
+            elif txt in image_cfg:
+                img_path = os.path.join(out_dir, image_cfg[txt])
+                if os.path.isfile(img_path):
+                    self._replace_paragraph_with_image(doc, paragraph, img_path)
+
+        doc.save(report_path)
+
+
+    def _iter_paragraphs(self, doc):
+        for p in doc.paragraphs:
+            yield p
+        for tbl in doc.tables:
+            for row in tbl.rows:
+                for cell in row.cells:
+                    for p in cell.paragraphs:
+                        yield p
+
+
+    def _replace_paragraph_with_table(self, doc, paragraph, df):
+        rows, cols = df.shape
+        table = doc.add_table(rows=rows + 1, cols=cols)
+        table.style = "Table Grid"
+        for j, col in enumerate(df.columns):
+            table.cell(0, j).text = str(col)
+        for i, row in df.iterrows():
+            for j, col in enumerate(df.columns):
+                table.cell(i + 1, j).text = str(row[col])
+        paragraph._p.addnext(table._tbl)
+        paragraph._element.getparent().remove(paragraph._element)
+
+
+    def _replace_paragraph_with_image(self, doc, paragraph, image_path: str):
+        new_paragraph = doc.add_paragraph()
+        run = new_paragraph.add_run()
+        try:
+            run.add_picture(image_path, width=Cm(15))
+        except Exception as e:
+            log_with_time(f"Insertion image impossible: {e}")
+        paragraph._p.addnext(new_paragraph._p)
+        paragraph._element.getparent().remove(paragraph._element)
+
     def _run_finished(self):
 
         self.export_button.config(state="normal")
         try:
             if hasattr(self, 'id_button') and self.id_button:
                 self.id_button.config(state="normal")
+        except Exception:
+            pass
+        try:
+            if hasattr(self, 'report_button') and self.report_button:
+                self.report_button.config(state="normal")
         except Exception:
             pass
 
