@@ -1056,6 +1056,10 @@ class ExportCartesTab(ttk.Frame):
 
         self.workers_var  = tk.IntVar(value=int(self.prefs.get("N_WORKERS", N_WORKERS_DEFAULT)))
 
+        self.wait_tiles_var = tk.DoubleVar(value=float(self.prefs.get("WAIT_TILES", WAIT_TILES_DEFAULT)))
+
+        self.commune_var = tk.StringVar(value="")
+
         self.margin_var   = tk.DoubleVar(value=float(self.prefs.get("MARGIN_FAC", MARGIN_FAC_DEFAULT)))
 
 
@@ -1149,7 +1153,15 @@ class ExportCartesTab(ttk.Frame):
 
         self._file_row(shp, 1, "?? Zone d'étude…", self.ze_shp_var, lambda: self._select_shapefile('ZE'))
 
-        self._file_row(shp, 2, "?? Aire d'étude élargie…", self.ae_shp_var, lambda: self._select_shapefile('AE'))
+        self._file_row(shp, 2, "📍 Aire d'étude élargie…", self.ae_shp_var, lambda: self._select_shapefile('AE'))
+
+        # Bouton pour identifier la commune
+        commune_row = ttk.Frame(shp)
+        commune_row.grid(row=3, column=0, columnspan=3, sticky="w", pady=(10,0))
+        self.identify_commune_button = ttk.Button(commune_row, text="Identifier commune", command=self._identify_commune)
+        self.identify_commune_button.pack(side=tk.LEFT)
+        commune_label = ttk.Label(commune_row, textvariable=self.commune_var, style="Card.TLabel", wraplength=300)
+        commune_label.pack(side=tk.LEFT, padx=(10,0))
 
         shp.columnconfigure(1, weight=1)
 
@@ -2434,7 +2446,38 @@ class ContexteEcoTab(ttk.Frame):
 
         self._update_counts()
 
+    def _identify_commune(self):
+        ze_path = self.ze_shp_var.get()
+        if not ze_path or not os.path.isfile(ze_path):
+            messagebox.showerror("Erreur", "Veuillez d'abord sélectionner un shapefile pour la Zone d'étude.")
+            return
 
+        try:
+            self.commune_var.set("Identification en cours...")
+            self.update_idletasks()
+
+            gdf = gpd.read_file(ze_path)
+            if gdf.crs is None:
+                messagebox.showwarning("Avertissement", "Le shapefile n'a pas de système de coordonnées (CRS) défini. L'identification pourrait être imprécise.")
+            
+            # Reproject to WGS84 for lat/lon
+            gdf_wgs84 = gdf.to_crs("EPSG:4326")
+            
+            # Use unary_union to handle multi-part geometries before getting the centroid
+            centroid = gdf_wgs84.geometry.unary_union.centroid
+            lat, lon = centroid.y, centroid.x
+            
+            # Use the existing detection method
+            commune, _ = self._detect_commune(lat, lon)
+            
+            if commune and commune != "Inconnue":
+                self.commune_var.set(f"{commune}")
+            else:
+                self.commune_var.set("Commune non trouvée")
+
+        except Exception as e:
+            self.commune_var.set("Erreur d'identification")
+            messagebox.showerror("Erreur", f"Une erreur est survenue lors de l'identification de la commune :\n{e}")
 
     # ---------- Construction UI ----------
 
@@ -2698,17 +2741,6 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-        # Champ de requête Wikipedia optionnel (permet d'écrire la commune à la main)
-
-        ttk.Label(idf, text="Commune (optionnel)", style="Card.TLabel").grid(row=1, column=0, sticky="w", pady=(8,0))
-
-        wiki_q_row = ttk.Frame(idf)
-
-        wiki_q_row.grid(row=1, column=1, columnspan=3, sticky="ew", pady=(8,0))
-
-        wiki_q_row.columnconfigure(0, weight=1)
-
-        ttk.Entry(wiki_q_row, textvariable=self.wiki_query_var).grid(row=0, column=0, sticky="ew")
 
 
 
