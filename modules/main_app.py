@@ -4585,8 +4585,11 @@ class ContexteEcoTab(ttk.Frame):
         self.busy = True
 
         self.export_button.config(state="disabled")
-
-        self.id_button.config(state="disabled")
+        try:
+            if hasattr(self, 'id_button') and self.id_button:
+                self.id_button.config(state="disabled")
+        except Exception:
+            pass
 
         mode = self.cadrage_var.get()
 
