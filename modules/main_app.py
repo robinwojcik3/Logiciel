@@ -1300,10 +1300,17 @@ class ExportCartesTab(ttk.Frame):
 
         # --- Bottom: console output ---
         bottom.columnconfigure(0, weight=1)
-        bottom.rowconfigure(0, weight=1)
+        bottom.columnconfigure(1, weight=0)
+        bottom.rowconfigure(1, weight=1)
         ttk.Label(bottom, text="Console", style="Subtle.TLabel").grid(row=0, column=0, sticky="w", padx=6, pady=(4,0))
+        btn_output = ttk.Button(bottom, text="Output", command=self._open_output_dir)
+        btn_output.grid(row=0, column=1, sticky="e", padx=6, pady=(4,0))
+        try:
+            ToolTip(btn_output, "Ouvrir le dossier d'export")
+        except Exception:
+            pass
         console_frm = ttk.Frame(bottom)
-        console_frm.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0,6))
+        console_frm.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=6, pady=(0,6))
         console_frm.columnconfigure(0, weight=1)
         console_frm.rowconfigure(0, weight=1)
         self.console = tk.Text(console_frm, height=10, state="disabled", wrap="word")
