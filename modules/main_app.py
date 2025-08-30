@@ -1194,7 +1194,7 @@ class ExportCartesTab(ttk.Frame):
         self.export_button.grid(row=0, column=0, sticky="ew", padx=(0,6))
         self.id_button = ttk.Button(act_frm, text="ID Contexte éco", command=self.start_id_thread)
         self.id_button.grid(row=0, column=1, sticky="ew", padx=(0,6))
-        self.report_button = ttk.Button(act_frm, text="Rapport auto", command=self.start_report_sequence)
+        self.report_button = ttk.Button(act_frm, text="Générer rapport Word", command=self.start_report_sequence)
         self.report_button.grid(row=0, column=2, sticky="ew")
 
         # ID buffer
@@ -2501,12 +2501,14 @@ class ExportCartesTab(ttk.Frame):
             return found
 
         table_map = {
-            'TABLEAU NATURA2000': ['Natura 2000'],
+            'TABLEAU NATURA2000': ['N2000', 'Natura 2000'],
             'TABLEAU ZNIEFF': ['ZNIEFF de Type I', 'ZNIEFF de Type II'],
             'TABLEAU APPB': ['APPB'],
             'TABLEAU ENS': ['ENS'],
-            'TABLEAU PNN': ['PNN', 'Parc National', 'PN'],
-            'TABLEAU PRN': ['PRN', 'Parc Naturel Régional', 'PR']
+            'TABLEAU PNN': ['Parc Nationaux', 'Parc National', 'PNN', 'PN'],
+            'TABLEAU PRN': ['Parc Naturels Régionaux', 'Parc Naturel Régional', 'PRN', 'PR'],
+            'TABLEAU ZH': ['ZH'],
+            'TABLEAU PELOUSES': ['Pelouses sèches'],
         }
         image_map = {
             'CARTE NATURA2000': 'Contexte éco - N2000__AE.png',
@@ -2514,11 +2516,13 @@ class ExportCartesTab(ttk.Frame):
             'CARTE APPB': 'Contexte éco - APPB__AE.png',
             'CARTE ENS': 'Contexte éco - ENS__AE.png',
             'CARTE PNN': 'Contexte éco - Parc National__AE.png',
-            'CARTE PRN': 'Contexte éco - Parc Naturel Régional__AE.png'
+            'CARTE PRN': 'Contexte éco - Parc Naturel Régional__AE.png',
+            'CARTE ZH': 'Contexte éco - ZH__AE.png',
+            'CARTE PELOUSES': 'Contexte éco - Pelouses sèches__AE.png',
         }
 
         for para in list(doc.paragraphs):
-            text = para.text.strip()
+            text = para.text.strip().upper()
             if text in table_map:
                 sheets = find_sheets(table_map[text])
                 dfs = [pd.read_excel(xls, sheet) for sheet in sheets]
