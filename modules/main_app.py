@@ -1342,8 +1342,14 @@ class ExportCartesTab(ttk.Frame):
             print("Cancel scraping due to browser start failure", file=self.stdout_redirect)
             return
         try:
+            # Wikipedia scraping in first tab
             self._run_wiki(driver)
+            
+            # VegSol scraping in new tab
+            driver.execute_script("window.open('about:blank', '_blank');")
+            driver.switch_to.window(driver.window_handles[-1])
             self._run_vegsol(driver)
+            
         except Exception as e:
             print(f"Scraping error: {e}", file=self.stdout_redirect)
         finally:
@@ -3313,6 +3319,33 @@ class ExportCartesTab(ttk.Frame):
         self.busy = False
 
 
+
+# =========================
+# Onglets PlantNet et Biodiv (stubs)
+# =========================
+class PlantNetTab(ttk.Frame):
+    def __init__(self, parent, style_helper, prefs):
+        super().__init__(parent)
+        self.style_helper = style_helper
+        self.prefs = prefs
+        
+        # Simple placeholder UI
+        ttk.Label(self, text="Pl@ntNet - Identification des plantes", 
+                 font=("Segoe UI", 15, "bold")).pack(pady=20)
+        ttk.Label(self, text="Fonctionnalité à venir...", 
+                 style="Card.TLabel").pack(pady=10)
+
+class BiodivTab(ttk.Frame):
+    def __init__(self, parent, style_helper, prefs):
+        super().__init__(parent)
+        self.style_helper = style_helper
+        self.prefs = prefs
+        
+        # Simple placeholder UI
+        ttk.Label(self, text="Biodiv'AURA - Base de données", 
+                 font=("Segoe UI", 15, "bold")).pack(pady=20)
+        ttk.Label(self, text="Fonctionnalité à venir...", 
+                 style="Card.TLabel").pack(pady=10)
 
 # =========================
 # App principale avec Notebook
