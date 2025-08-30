@@ -1520,6 +1520,10 @@ class ExportCartesTab(ttk.Frame):
             # 1) Ouvrir l'URL
             driver.get("https://floreapp.netlify.app/biblio-patri.html")
             time.sleep(0.75)
+            try:
+                self._selenium_debug_dump(driver, "after_nav")
+            except Exception:
+                pass
 
             wait = WebDriverWait(driver, 10)
 
@@ -1528,20 +1532,48 @@ class ExportCartesTab(ttk.Frame):
                 btn_upload = wait.until(EC.element_to_be_clickable((By.ID, "upload-shapefile-btn")))
                 btn_upload.click()
                 print("[Cartes] Clic sur 'Importer shapefile'", file=self.stdout_redirect)
+                try:
+                    self._selenium_debug_dump(driver, "after_click_import")
+                except Exception:
+                    pass
             except Exception as e:
                 print(f"[Cartes] Erreur clic import shapefile: {e}", file=self.stdout_redirect)
                 return
 
             time.sleep(0.75)
 
-            # 5) Cliquer sur Zone d'étude
+            # 5) Cliquer sur Zone d'étude (essayer plusieurs sélecteurs + fallback)
+            clicked_zone = False
             try:
-                btn_zone = wait.until(EC.element_to_be_clickable((By.ID, "import-zone-btn")))
-                btn_zone.click()
-                print("[Cartes] Clic sur 'Zone d'étude'", file=self.stdout_redirect)
+                selectors = [
+                    (By.ID, "import-zone-btn"),
+                    (By.XPATH, "//button[@id='import-zone-btn']"),
+                    (By.XPATH, "//button[contains(., 'Zone d’étude')]"),  # apostrophe typographique
+                    (By.XPATH, "//button[contains(., " + '"Zone d\'étude"' + ")]"),  # apostrophe simple
+                    (By.XPATH, "//button[contains(normalize-space(.), 'Zone') and contains(@class,'action-button')]")
+                ]
+                for by, sel in selectors:
+                    try:
+                        btn_zone = wait.until(EC.element_to_be_clickable((by, sel)))
+                        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", btn_zone)
+                        try:
+                            btn_zone.click()
+                        except Exception:
+                            driver.execute_script("arguments[0].click();", btn_zone)
+                        print(f"[Cartes] Clic sur 'Zone d'étude' via {by}={sel}", file=self.stdout_redirect)
+                        clicked_zone = True
+                        break
+                    except Exception:
+                        continue
             except Exception as e:
-                print(f"[Cartes] Erreur clic zone d'étude: {e}", file=self.stdout_redirect)
-                return
+                print(f"[Cartes] Exception pendant la recherche du bouton Zone: {e}", file=self.stdout_redirect)
+
+            if not clicked_zone:
+                print("[Cartes] Bouton 'Zone d'étude' non cliquable - on tente l'input fichier directement", file=self.stdout_redirect)
+                try:
+                    self._selenium_debug_dump(driver, "before_file_input_fallback")
+                except Exception:
+                    pass
 
             # 6) Préparer et envoyer les fichiers shapefile
             def _from_long_unc(p: str) -> str:
@@ -1564,13 +1596,28 @@ class ExportCartesTab(ttk.Frame):
 
             # Envoyer les fichiers à l'input[type=file]
             try:
+                # Attendre la présence d'au moins un input file
+                try:
+                    wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, "input[type='file']")) > 0)
+                except Exception:
+                    pass
+
                 inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
                 target_input = inputs[-1] if inputs else None
                 if target_input:
+                    # Assurer la visibilité/cliquabilité de l'input si possible
+                    try:
+                        driver.execute_script("arguments[0].style.display='block'; arguments[0].style.visibility='visible';", target_input)
+                    except Exception:
+                        pass
                     target_input.send_keys("\n".join(files))
                     print("[Cartes] Fichiers shapefile envoyés", file=self.stdout_redirect)
+                    try:
+                        self._selenium_debug_dump(driver, "after_send_files")
+                    except Exception:
+                        pass
                 else:
-                    print("[Cartes] Champ d'import fichier introuvable", file=self.stdout_redirect)
+                    print("[Cartes] Champ d'import fichier introuvable (inputs=0)", file=self.stdout_redirect)
             except Exception as e:
                 print(f"[Cartes] Erreur envoi fichiers: {e}", file=self.stdout_redirect)
 
@@ -1581,6 +1628,10 @@ class ExportCartesTab(ttk.Frame):
                 map_el = wait.until(EC.visibility_of_element_located((By.ID, "map")))
                 ActionChains(driver).move_to_element(map_el).context_click(map_el).perform()
                 print("[Cartes] Clic droit sur la carte", file=self.stdout_redirect)
+                try:
+                    self._selenium_debug_dump(driver, "after_context_click")
+                except Exception:
+                    pass
             except Exception as e:
                 print(f"[Cartes] Erreur clic droit carte: {e}", file=self.stdout_redirect)
 
@@ -1591,45 +1642,38 @@ class ExportCartesTab(ttk.Frame):
                 btn_res = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(.,'Ressources')]")))
                 btn_res.click()
                 print("[Cartes] Clic sur 'Ressources'", file=self.stdout_redirect)
+                # Attendre que le popup de ressources se charge avec les données.
+                # On attend que le conteneur du popup soit présent et que la pillule de végétation contienne du texte.
+                wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".leaflet-popup-content")))
+                wait.until(EC.text_to_be_present_in_element((By.CSS_SELECTOR, ".vegetation-pill"), "."))
+                self._selenium_debug_dump(driver, "after_resources_click_and_wait")
+
+                # Extraire les informations du popup
+                page_source = driver.page_source
+                soup = BeautifulSoup(page_source, 'html.parser')
+
+                # Altitude
+                altitude_info = soup.select_one('.altitude-info')
+                if altitude_info:
+                    altitude_text = altitude_info.get_text(strip=True)
+                    altitude_match = re.search(r'Altitude: (\d+)m', altitude_text)
+                    alt = int(altitude_match.group(1)) if altitude_match else "Non trouvée"
+                else:
+                    alt = "Non trouvée"
+
+                # Végétation et Sol - Utilise les sélecteurs de classe robustes
+                vegetation_pill = soup.select_one('.vegetation-pill')
+                veg = vegetation_pill.get_text(strip=True) if vegetation_pill and vegetation_pill.get_text(strip=True) else "Non trouvée"
+
+                soil_pill = soup.select_one('.soil-pill')
+                soil = soil_pill.get_text(strip=True) if soil_pill and soil_pill.get_text(strip=True) else "Non trouvé"
+                
+                print(f"[Cartes] ALTITUDE : {alt}", file=self.stdout_redirect)
+                print(f"[Cartes] VÉGÉTATION : {veg}", file=self.stdout_redirect)
+                print(f"[Cartes] SOLS : {soil}", file=self.stdout_redirect)
+
             except Exception as e:
                 print(f"[Cartes] Erreur clic Ressources: {e}", file=self.stdout_redirect)
-
-            time.sleep(0.75)
-
-            # 12) Scraper les éléments de la pop-up
-            print("[Cartes] Scraping des données de la popup...", file=self.stdout_redirect)
-            
-            alt = veg = soil = "Non trouvé"
-            
-            for attempt in range(3):
-                try:
-                    html = driver.page_source
-                    soup = BeautifulSoup(html, "lxml")
-                    
-                    # Extraire les données selon vos sélecteurs
-                    alt_el = soup.select_one("div.altitude-info")
-                    if alt_el:
-                        alt = alt_el.get_text(" ", strip=True)
-                        
-                    veg_el = soup.select_one("div.tooltip-pill.vegetation-pill")
-                    if veg_el:
-                        veg = veg_el.get_text(" ", strip=True)
-                        
-                    soil_el = soup.select_one("div.tooltip-pill.soil-pill")
-                    if soil_el:
-                        soil = soil_el.get_text(" ", strip=True)
-                    
-                    # Si on a trouvé au moins un élément, on peut arrêter
-                    if alt != "Non trouvé" or veg != "Non trouvé" or soil != "Non trouvé":
-                        break
-                        
-                    if attempt < 2:
-                        time.sleep(1.5)
-                        
-                except Exception as scrape_err:
-                    print(f"[Cartes] Erreur scraping tentative {attempt + 1}: {scrape_err}", file=self.stdout_redirect)
-                    if attempt < 2:
-                        time.sleep(1.5)
 
             # Mettre à jour le tableau des résultats
             payload = {
@@ -1639,12 +1683,36 @@ class ExportCartesTab(ttk.Frame):
             }
             self.after(0, self._update_results_tree, payload)
             
-            print(f"[Cartes] ALTITUDE : {alt}", file=self.stdout_redirect)
-            print(f"[Cartes] VÉGÉTATION : {veg}", file=self.stdout_redirect)
-            print(f"[Cartes] SOLS : {soil}", file=self.stdout_redirect)
-
         except Exception as e:
             print(f"[Cartes] Erreur : {e}", file=self.stdout_redirect)
+            try:
+                self._selenium_debug_dump(driver, "exception")
+            except Exception:
+                pass
+
+    def _selenium_debug_dump(self, driver, tag: str) -> None:
+        """Capture a screenshot and HTML dump for debugging under output/selenium_debug.
+        Safe to call anywhere; logs target paths.
+        """
+        try:
+            out_dir = os.path.join("output", "selenium_debug")
+            os.makedirs(out_dir, exist_ok=True)
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            base = os.path.join(out_dir, f"{ts}_{tag}")
+            # Screenshot
+            try:
+                driver.save_screenshot(base + ".png")
+            except Exception as e:
+                print(f"[Debug] Screenshot failed: {e}", file=self.stdout_redirect)
+            # HTML dump
+            try:
+                with open(base + ".html", "w", encoding="utf-8") as f:
+                    f.write(driver.page_source or "")
+            except Exception as e:
+                print(f"[Debug] HTML dump failed: {e}", file=self.stdout_redirect)
+            print(f"[Debug] Dump written: {base}.png/.html", file=self.stdout_redirect)
+        except Exception:
+            pass
 
     # --- Boutons ajoutés ---
 
