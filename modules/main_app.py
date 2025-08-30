@@ -98,6 +98,7 @@ import traceback
 import subprocess
 
 import geopandas as gpd
+import pandas as pd
 from bs4 import BeautifulSoup
 
 # --- Helper functions for Word document generation ---
@@ -142,6 +143,35 @@ def add_hyperlink(paragraph, url: str, text: str, italic: bool = True):
     paragraph._p.append(fld_simple)
 
 
+
+
+# ---- Helpers pour insertion dans les rapports Word ----
+def insert_table_at_marker(doc: Document, marker: str, df: pd.DataFrame) -> None:
+    """Remplace un paragraphe contenant *marker* par un tableau issu de *df*."""
+    for para in doc.paragraphs:
+        if marker in para.text:
+            rows, cols = df.shape
+            table = doc.add_table(rows=rows + 1, cols=cols)
+            table.style = "Table Grid"
+            for j, col in enumerate(df.columns):
+                table.cell(0, j).text = str(col)
+            for i, row in enumerate(df.itertuples(index=False), start=1):
+                for j, val in enumerate(row):
+                    table.cell(i, j).text = str(val)
+            para._p.addnext(table._tbl)
+            para._p.getparent().remove(para._p)
+            break
+
+
+def insert_image_at_marker(doc: Document, marker: str, img_path: str, width_cm: float = 12.0) -> None:
+    """Remplace un paragraphe contenant *marker* par l'image fournie."""
+    for para in doc.paragraphs:
+        if marker in para.text:
+            para.text = ""
+            run = para.add_run()
+            run.add_picture(img_path, width=Cm(width_cm))
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            break
 
 
 # ==== Imports supplémentaires pour l'onglet Contexte éco ====
@@ -1099,6 +1129,8 @@ class ExportCartesTab(ttk.Frame):
         # State
         self.busy = False
         self.wiki_last_url = ""
+        self.report_mode = False
+        self.report_stage = None
 
         # Vars used elsewhere
         self.out_dir_var = tk.StringVar(value=self.prefs.get("OUT_DIR", OUT_IMG))
@@ -1185,10 +1217,13 @@ class ExportCartesTab(ttk.Frame):
         act_frm.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(10,4))
         act_frm.columnconfigure(0, weight=1)
         act_frm.columnconfigure(1, weight=1)
+        act_frm.columnconfigure(2, weight=1)
         self.export_button = ttk.Button(act_frm, text="Exporter cartes", style="Accent.TButton", command=self.start_export_thread)
         self.export_button.grid(row=0, column=0, sticky="ew", padx=(0,6))
         self.id_button = ttk.Button(act_frm, text="ID Contexte éco", command=self.start_id_thread)
         self.id_button.grid(row=0, column=1, sticky="ew")
+        self.report_button = ttk.Button(act_frm, text="Rapport Contexte éco", command=self.start_report_thread)
+        self.report_button.grid(row=0, column=2, sticky="ew", padx=(6,0))
 
         # ID buffer
         id_frm = ttk.Frame(left)
@@ -2319,6 +2354,69 @@ class ExportCartesTab(ttk.Frame):
 
 
 
+    def _generate_report_doc(self):
+        """Assemble le rapport Word à partir des exports précédents."""
+        try:
+            template_dir = os.path.join(BASE_DIR, "Template word  Contexte éco")
+            template_file = os.path.join(template_dir, "1 Template Contexte éco.docx")
+            doc = Document(template_file)
+
+            xlsx_path = os.path.join(OUT_IMG, "ID zonages.xlsx")
+            dfs = {}
+            if os.path.isfile(xlsx_path):
+                try:
+                    dfs = pd.read_excel(xlsx_path, sheet_name=None)
+                except Exception:
+                    dfs = {}
+
+            def _concat(keys):
+                frames = [df for name, df in dfs.items() if any(k in name.lower() for k in keys)]
+                return pd.concat(frames) if frames else None
+
+            table_map = {
+                "TABLEAU NATURA2000": _concat(["natura 2000", "n2000"]),
+                "TABLEAU ZNIEFF": _concat(["znieff"]),
+                "TABLEAU APPB": _concat(["appb"]),
+                "TABLEAU ENS": _concat(["ens"]),
+                "TABLEAU PNN": _concat(["pnn", "parc national", "pn"]),
+                "TABLEAU PRN": _concat(["prn", "parc regional", "pnr"]),
+            }
+            for marker, df in table_map.items():
+                if df is not None and not df.empty:
+                    insert_table_at_marker(doc, marker, df)
+
+            img_map = {
+                "CARTE NATURA2000": os.path.join(OUT_IMG, "Contexte éco - N2000__AE.png"),
+                "CARTE ZNIEFF": os.path.join(OUT_IMG, "Contexte éco - ZNIEFF__AE.png"),
+                "CARTE APPB": os.path.join(OUT_IMG, "Contexte éco - APPB__AE.png"),
+                "CARTE ENS": os.path.join(OUT_IMG, "Contexte éco - ENS__AE.png"),
+                "CARTE PNN": os.path.join(OUT_IMG, "Contexte éco - Parc National__AE.png"),
+            }
+            for marker, path in img_map.items():
+                if os.path.isfile(path):
+                    insert_image_at_marker(doc, marker, path)
+
+            out_path = os.path.join(OUT_IMG, f"Contexte_eco_{datetime.datetime.now():%Y%m%d_%H%M%S}.docx")
+            doc.save(out_path)
+            messagebox.showinfo("Succès", f"Rapport généré :\n{out_path}")
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Génération du rapport impossible : {e}")
+
+
+    def start_report_thread(self):
+        """Chaîne ID contexte, export carto puis génération du rapport."""
+        if self.busy:
+            print("Une action est déjà en cours.", file=self.stdout_redirect)
+            return
+        self.report_mode = True
+        self.report_stage = "ID"
+        try:
+            if hasattr(self, 'report_button') and self.report_button:
+                self.report_button.config(state="disabled")
+        except Exception:
+            pass
+        self.start_id_thread()
+
     # ---------- Lancement ID contexte ----------
 
     def start_id_thread(self):
@@ -2414,15 +2512,27 @@ class ExportCartesTab(ttk.Frame):
 
 
     def _run_finished(self):
+        self.busy = False
+        if self.report_mode and self.report_stage == "ID":
+            self.start_export_thread()
+            if self.busy:
+                self.report_stage = "EXPORT"
+                return
+            else:
+                self.report_mode = False
+        elif self.report_mode and self.report_stage == "EXPORT":
+            self.report_stage = None
+            self.report_mode = False
+            self._generate_report_doc()
 
         self.export_button.config(state="normal")
         try:
             if hasattr(self, 'id_button') and self.id_button:
                 self.id_button.config(state="normal")
+            if hasattr(self, 'report_button') and self.report_button:
+                self.report_button.config(state="normal")
         except Exception:
             pass
-
-        self.busy = False
 
 
 
