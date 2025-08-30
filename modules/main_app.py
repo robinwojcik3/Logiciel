@@ -1556,10 +1556,11 @@ class ExportCartesTab(ttk.Frame):
                 raise ValueError("Shapefile Zone d'étude introuvable")
 
             # 1) Ouvrir l'URL
-            driver.get("https://floreapp.netlify.app/biblio-patri.html")
-            time.sleep(0.75)
-            try:
-                self._selenium_debug_dump(driver, "after_nav")
+            url = f"file:///{html_path.replace('\\', '/')}"
+            # Ouvre dans un nouvel onglet et bascule dessus
+            driver.execute_script(f"window.open('{url}', '_blank');")
+            driver.switch_to.window(driver.window_handles[-1])
+            self._debug_dump(driver, "after_nav")
             except Exception:
                 pass
 
@@ -2123,7 +2124,7 @@ class ExportCartesTab(ttk.Frame):
             
             # Reproject to WGS84 for lat/lon
             gdf_wgs84 = gdf.to_crs("EPSG:4326")
-            centroid = gdf_wgs84.geometry.unary_union.centroid
+            centroid = gdf_wgs84.geometry.union_all().centroid
             lat, lon = centroid.y, centroid.x
             
             url = f"https://www.google.com/maps/@{lat},{lon},15z"
@@ -2149,7 +2150,7 @@ class ExportCartesTab(ttk.Frame):
             
             # Reproject to WGS84 for lat/lon
             gdf_wgs84 = gdf.to_crs("EPSG:4326")
-            centroid = gdf_wgs84.geometry.unary_union.centroid
+            centroid = gdf_wgs84.geometry.union_all().centroid
             lat, lon = centroid.y, centroid.x
             
             url = f"https://remonterletemps.ign.fr/comparer/basic?x={lon}&y={lat}&z=15&layer1=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&layer2=ORTHOIMAGERY.ORTHOPHOTOS&mode=vSlider"
@@ -2191,7 +2192,7 @@ class ExportCartesTab(ttk.Frame):
 
             gdf = gdf.to_crs("EPSG:4326")
 
-            centroid = gdf.geometry.unary_union.centroid
+            centroid = gdf.geometry.union_all().centroid
 
             lat, lon = centroid.y, centroid.x
 
@@ -2224,14 +2225,15 @@ class ExportCartesTab(ttk.Frame):
             ze_path = self.ze_shp_var.get()
             gdf = gpd.read_file(ze_path)
             if gdf.crs is None:
-                raise ValueError("CRS non défini")
-            gdf = gdf.to_crs("EPSG:4326")
-            centroid = gdf.geometry.unary_union.centroid
-            lat_dd, lon_dd = centroid.y, centroid.x
-            commune, _dep = self._detect_commune(lat_dd, lon_dd)
-            wait_s = WAIT_TILES_DEFAULT
-            out_dir = OUTPUT_DIR_RLT
-            os.makedirs(out_dir, exist_ok=True)
+               # Extraire le centroïde de la zone d'étude
+            if not gdf.empty:
+                centroid = gdf.geometry.union_all().centroid
+                lat_dd, lon_dd = centroid.y, centroid.x
+                commune, _dep = self._detect_commune(lat_dd, lon_dd)
+                wait_s = WAIT_TILES_DEFAULT
+                out_dir = OUTPUT_DIR_RLT
+                os.makedirs(out_dir, exist_ok=True)
+                comment_txt = COMMENT_TEMPLATE.format(commune=commune)
             comment_txt = COMMENT_TEMPLATE.format(commune=commune)
 
             # Use shared driver or create new one if not provided
