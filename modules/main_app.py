@@ -2488,8 +2488,12 @@ class ContexteEcoTab(ttk.Frame):
         # La console (row=2) peut aussi grandir pour afficher les logs confortablement
         self.grid_rowconfigure(2, weight=1)
         self.grid_columnconfigure(0, weight=1)
-        top_container = ttk.Frame(self)
-        top_container.grid(row=0, column=0, sticky="nsew")
+        # Panedwindow vertical pour permettre de redimensionner entre le haut (contenu) et le bas (console)
+        pw = ttk.Panedwindow(self, orient=tk.VERTICAL)
+        pw.grid(row=0, column=0, sticky="nsew", rowspan=3)
+
+        top_container = ttk.Frame(pw)
+        pw.add(top_container, weight=3)
 
         # Zone défilante verticale sans barre horizontale (tout le contenu
         # s'adapte en largeur au canevas pour éviter le défilement latéral)
@@ -2570,13 +2574,13 @@ class ContexteEcoTab(ttk.Frame):
 
         exp.pack(fill=tk.BOTH, expand=True, pady=(10,0))
 
-        exp.columnconfigure(0, weight=1); exp.columnconfigure(1, weight=1)
+        # Panedwindow horizontal pour permettre de redimensionner entre options et liste des projets
+        hpw = ttk.Panedwindow(exp, orient=tk.HORIZONTAL)
+        hpw.pack(fill=tk.BOTH, expand=True)
 
+        opt = ttk.Frame(hpw)
 
-
-        opt = ttk.Frame(exp)
-
-        opt.grid(row=0, column=0, sticky="nsew", padx=(0,8))
+        hpw.add(opt, weight=1)
 
         ttk.Label(opt, text="Cadrage", style="Card.TLabel").grid(row=0, column=0, columnspan=3, sticky="w")
 
@@ -2638,9 +2642,9 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-        proj = ttk.Frame(exp)
+        proj = ttk.Frame(hpw)
 
-        proj.grid(row=0, column=1, sticky="nsew", padx=(8,0))
+        hpw.add(proj, weight=1)
 
         ttk.Label(proj, text="Projets QGIS", style="Card.TLabel").grid(row=0, column=0, columnspan=4, sticky="w")
 
@@ -2682,10 +2686,10 @@ class ContexteEcoTab(ttk.Frame):
 
         # Encart ID contexte éco
 
-        # Barre d'actions FIXE (hors zone scrollable) pour rester toujours visible
-        idf = ttk.Frame(self, style="Card.TFrame", padding=12)
+        # Barre d'actions: pane du bas (toujours visible) mais redimensionnable via le séparateur
+        idf = ttk.Frame(pw, style="Card.TFrame", padding=12)
 
-        idf.grid(row=1, column=0, sticky="ew", pady=(8,0))
+        pw.add(idf, weight=0)
 
         ttk.Label(idf, text="Tampon ZE (km)", style="Card.TLabel").grid(row=0, column=0, sticky="w")
 
@@ -2867,10 +2871,10 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-        # Console + progression
+        # Console + progression (dans le pane du bas)
         
-        bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
-        bottom.grid(row=2, column=0, sticky="nsew", pady=(10,0))
+        bottom = ttk.Frame(pw, style="Card.TFrame", padding=12)
+        pw.add(bottom, weight=1)
 
         # Libellé de statut à gauche
         self.status_label = ttk.Label(bottom, text="Prêt.", style="Status.TLabel")
