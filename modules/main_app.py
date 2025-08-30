@@ -1109,21 +1109,20 @@ class ExportCartesTab(ttk.Frame):
         # Wiki query manual override
         self.wiki_query_var = tk.StringVar(value=self.prefs.get("WIKI_QUERY", ""))
 
-        # Root layout: left controls, right projects, bottom console
-        root = ttk.Frame(self, style="Header.TFrame")
+        # Root layout using resizable panes
+        root = ttk.Panedwindow(self, orient=tk.VERTICAL)
         root.pack(fill="both", expand=True)
 
-        left = ttk.Frame(root, style="Card.TFrame")
-        right = ttk.Frame(root, style="Card.TFrame")
-        bottom = ttk.Frame(self, style="Card.TFrame")
+        top_panes = ttk.Panedwindow(root, orient=tk.HORIZONTAL)
+        left = ttk.Frame(top_panes, style="Card.TFrame", padding=6)
+        right = ttk.Frame(top_panes, style="Card.TFrame", padding=6)
+        top_panes.add(left, weight=1)
+        top_panes.add(right, weight=2)
 
-        left.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
-        right.grid(row=0, column=1, sticky="nsew", padx=6, pady=6)
-        bottom.pack(fill="both", expand=True, padx=6, pady=(0,6))
+        bottom = ttk.Frame(root, style="Card.TFrame", padding=6)
 
-        root.columnconfigure(0, weight=1)
-        root.columnconfigure(1, weight=2)
-        root.rowconfigure(0, weight=1)
+        root.add(top_panes, weight=3)
+        root.add(bottom, weight=1)
 
         # --- Left: parameters and actions ---
         ttk.Label(left, text="Contexte éco — Paramètres", font=self.font_title).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0,8))
