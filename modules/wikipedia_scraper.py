@@ -64,18 +64,15 @@ def _find_section_heading(soup: BeautifulSoup, heading_text: str):
     return span.find_parent(["h2", "h3"]) if span else None
 
 
-def _scrape_sections(driver: webdriver.Chrome) -> Dict[str, str]:
+def _parse_sections_from_soup(soup: BeautifulSoup) -> Dict[str, str]:
     out = {
         "climat_p1": "Non trouvé",
         "climat_p2": "Non trouvé",
         "occupation_p1": "Non trouvé",
     }
-    soup = BeautifulSoup(driver.page_source, "html.parser")
 
     h = _find_section_heading(soup, "Climat")
     if h:
-        # Recherche prioritaire du paragraphe commençant par
-        # "Pour la période 1971-2000, la température annuelle ..."
         target = None
         for p in h.find_all_next("p"):
             t = p.get_text(strip=True)
@@ -85,7 +82,6 @@ def _scrape_sections(driver: webdriver.Chrome) -> Dict[str, str]:
         if target:
             out["climat_p1"] = target
         else:
-            # Fallback: même logique qu'avant (paragraphe(s) suivant(s) l'explication du type de climat)
             start = None
             for p in h.find_all_next("p"):
                 t = p.get_text(strip=True)
@@ -107,6 +103,11 @@ def _scrape_sections(driver: webdriver.Chrome) -> Dict[str, str]:
                 out["occupation_p1"] = t
                 break
     return out
+
+
+def _scrape_sections(driver: webdriver.Chrome) -> Dict[str, str]:
+    soup = BeautifulSoup(driver.page_source, "html.parser")
+    return _parse_sections_from_soup(soup)
 
 
 def _scrape_sections_from_html(html: str) -> Dict[str, str]:
@@ -115,50 +116,16 @@ def _scrape_sections_from_html(html: str) -> Dict[str, str]:
     Utilisé en repli si la navigation Selenium échoue ou ne trouve pas
     les paragraphes souhaités.
     """
-    out = {
-        "climat_p1": "Non trouvé",
-        "climat_p2": "Non trouvé",
-        "occupation_p1": "Non trouvé",
-    }
     soup = BeautifulSoup(html, "html.parser")
+    return _parse_sections_from_soup(soup)
 
-    h = _find_section_heading(soup, "Climat")
-    if h:
-        target = None
-        for p in h.find_all_next("p"):
-            t = p.get_text(strip=True)
-            if t.startswith("Pour la période 1971-2000"):
-                target = t
-                break
-        if target:
-            out["climat_p1"] = target
-        else:
-            start = None
-            for p in h.find_all_next("p"):
-                t = p.get_text(strip=True)
-                if t.startswith("En 2010, le climat de la commune est de type") or "climat de la commune est de type" in t:
-                    start = p
-                    break
-            if start:
-                fol = start.find_next_siblings("p", limit=2)
-                if len(fol) >= 1:
-                    out["climat_p1"] = fol[0].get_text(strip=True)
-                if len(fol) >= 2:
-                    out["climat_p2"] = fol[1].get_text(strip=True)
 
-    h = _find_section_heading(soup, "Occupation des sols")
-    if h:
-        for p in h.find_all_next("p"):
-            t = p.get_text(strip=True)
-            if t.startswith("L'occupation des sols de la commune, telle qu'elle") or "L'occupation des sols de la commune, telle qu'elle ressort" in t:
-                out["occupation_p1"] = t
-                break
-    return out
+_NORM_RE = re.compile(r"^(.*?)[\s,;_-]*\(?(\d{2})\)?$")
 
 
 def _normalize_query(s: str) -> str:
     s = s.strip()
-    m = re.match(r"^(.*?)[\s,;_-]*\(?(\d{2})\)?$", s)
+    m = _NORM_RE.match(s)
     if m:
         base = m.group(1).strip()
         return f"{base} ({m.group(2)})"
@@ -194,8 +161,6 @@ def _open_article(driver: webdriver.Chrome, query: str, wait: WebDriverWait) -> 
         )
     )
     box.clear()
-    # Réduction du délai d'attente avant saisie: 0.5 s
-    time.sleep(0.5)
     box.send_keys(query)
 
     # Cliquer sur le bouton "Rechercher" (fall back sur Entrée au besoin)
