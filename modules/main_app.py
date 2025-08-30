@@ -1296,6 +1296,33 @@ class ExportCartesTab(ttk.Frame):
         if path:
             var.set(path)
 
+    def _open_output_dir(self):
+        """Open the output directory in the system file explorer."""
+        try:
+            path = (self.out_dir_var.get() or OUT_IMG).strip()
+        except Exception:
+            path = OUT_IMG
+
+        if not path:
+            messagebox.showwarning("Dossier Output", "Aucun dossier de sortie défini.")
+            return
+
+        # Ensure directory exists
+        try:
+            os.makedirs(path, exist_ok=True)
+        except Exception:
+            pass
+
+        try:
+            if sys.platform.startswith("win"):
+                os.startfile(path)  # type: ignore[attr-defined]
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", path])
+            else:
+                subprocess.Popen(["xdg-open", path])
+        except Exception as e:
+            messagebox.showerror("Dossier Output", f"Impossible d'ouvrir le dossier : {e}")
+
     def _open_wiki_url(self):
         url = (self.wiki_last_url or "").strip()
         if not url:
