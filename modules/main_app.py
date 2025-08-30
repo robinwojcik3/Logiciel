@@ -1109,21 +1109,22 @@ class ExportCartesTab(ttk.Frame):
         # Wiki query manual override
         self.wiki_query_var = tk.StringVar(value=self.prefs.get("WIKI_QUERY", ""))
 
-        # Root layout: left controls, right projects, bottom console
-        root = ttk.Frame(self, style="Header.TFrame")
-        root.pack(fill="both", expand=True)
+        # Root layout: use PanedWindows so panes can be resized by dragging
+        main_paned = ttk.PanedWindow(self, orient="vertical")
+        main_paned.pack(fill="both", expand=True)
 
-        left = ttk.Frame(root, style="Card.TFrame")
-        right = ttk.Frame(root, style="Card.TFrame")
-        bottom = ttk.Frame(self, style="Card.TFrame")
+        top_paned = ttk.PanedWindow(main_paned, orient="horizontal")
+        bottom = ttk.Frame(main_paned, style="Card.TFrame")
 
-        left.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
-        right.grid(row=0, column=1, sticky="nsew", padx=6, pady=6)
-        bottom.pack(fill="both", expand=True, padx=6, pady=(0,6))
+        # Add panes with weights to control initial size
+        main_paned.add(top_paned, weight=3, padding=6)
+        main_paned.add(bottom, weight=1, padding=(6,0,6,6))
 
-        root.columnconfigure(0, weight=1)
-        root.columnconfigure(1, weight=2)
-        root.rowconfigure(0, weight=1)
+        left = ttk.Frame(top_paned, style="Card.TFrame")
+        right = ttk.Frame(top_paned, style="Card.TFrame")
+
+        top_paned.add(left, weight=1, padding=6)
+        top_paned.add(right, weight=2, padding=6)
 
         # --- Left: parameters and actions ---
         ttk.Label(left, text="Contexte éco — Paramètres", font=self.font_title).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0,8))
