@@ -1130,7 +1130,8 @@ class ExportCartesTab(ttk.Frame):
 
 
 
-        grid = ttk.Frame(self); grid.pack(fill=tk.BOTH, expand=True)
+        # IMPORTANT: place content inside 'top' so the canvas can scroll it
+        grid = ttk.Frame(top); grid.pack(fill=tk.BOTH, expand=True)
 
         left = ttk.Frame(grid);  left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
 
@@ -1240,6 +1241,32 @@ class ExportCartesTab(ttk.Frame):
 
         proj.rowconfigure(2, weight=1); proj.columnconfigure(1, weight=1)
 
+        # Molette pour la liste des projets
+        def _mw_proj(e):
+            try:
+                delta = -1 * (e.delta // 120)
+            except Exception:
+                delta = -1 if getattr(e, 'num', 0) == 4 else (1 if getattr(e, 'num', 0) == 5 else 0)
+            if delta:
+                canvas.yview_scroll(delta, "units")
+            return "break"
+
+        def _bind_proj(_e=None):
+            canvas.bind_all("<MouseWheel>", _mw_proj)
+            canvas.bind_all("<Button-4>", _mw_proj)
+            canvas.bind_all("<Button-5>", _mw_proj)
+
+        def _unbind_proj(_e=None):
+            canvas.unbind_all("<MouseWheel>")
+            canvas.unbind_all("<Button-4>")
+            canvas.unbind_all("<Button-5>")
+
+        # Lancer le binding quand le pointeur entre dans la zone projets
+        self.scrollable_frame.bind("<Enter>", _bind_proj)
+        self.scrollable_frame.bind("<Leave>", _unbind_proj)
+        canvas.bind("<Enter>", _bind_proj)
+        canvas.bind("<Leave>", _unbind_proj)
+
 
 
         # Bas
@@ -1247,6 +1274,9 @@ class ExportCartesTab(ttk.Frame):
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12); bottom.pack(fill=tk.BOTH, expand=True, pady=(10,0))
 
         self.status_label = ttk.Label(bottom, text="Prêt.", style="Status.TLabel"); self.status_label.grid(row=0, column=0, sticky="w")
+        # Statut
+        self.status_label = ttk.Label(bottom, text="Prêt.", style="Status.TLabel")
+        self.status_label.grid(row=0, column=0, sticky="w")
 
         self.progress = ttk.Progressbar(bottom, orient="horizontal", mode="determinate", length=220)
 
@@ -2411,6 +2441,8 @@ class ContexteEcoTab(ttk.Frame):
     def _build_ui(self):
         # Layout racine: contenu haut défilant (vertical uniquement) + console fixe en bas
         self.grid_rowconfigure(0, weight=1)
+        # La console (row=2) peut aussi grandir pour afficher les logs confortablement
+        self.grid_rowconfigure(2, weight=1)
         self.grid_columnconfigure(0, weight=1)
         top_container = ttk.Frame(self)
         top_container.grid(row=0, column=0, sticky="nsew")
@@ -2443,7 +2475,7 @@ class ContexteEcoTab(ttk.Frame):
         top.bind("<Configure>", _on_frame_config)
         canvas.bind("<Configure>", _on_canvas_config)
 
-        # Défilement à la molette uniquement quand la souris est sur le canevas
+        # Défilement à la molette quand la souris est sur la zone scrollable (y compris enfants)
         def _mw(e):
             try:
                 delta = -1 * (e.delta // 120)
@@ -2451,10 +2483,20 @@ class ContexteEcoTab(ttk.Frame):
                 delta = -1 if getattr(e, 'num', 0) == 4 else (1 if getattr(e, 'num', 0) == 5 else 0)
             if delta:
                 canvas.yview_scroll(delta, "units")
+            return "break"
 
-        canvas.bind("<MouseWheel>", _mw)
-        canvas.bind("<Button-4>", _mw)
-        canvas.bind("<Button-5>", _mw)
+        def _bind_wheel(_e=None):
+            canvas.bind_all("<MouseWheel>", _mw)
+            canvas.bind_all("<Button-4>", _mw)
+            canvas.bind_all("<Button-5>", _mw)
+
+        def _unbind_wheel(_e=None):
+            canvas.unbind_all("<MouseWheel>")
+            canvas.unbind_all("<Button-4>")
+            canvas.unbind_all("<Button-5>")
+
+        top.bind("<Enter>", _bind_wheel)
+        top.bind("<Leave>", _unbind_wheel)
 
         # Sélecteurs shapefiles
 
@@ -2590,9 +2632,10 @@ class ContexteEcoTab(ttk.Frame):
 
         # Encart ID contexte éco
 
-        idf = ttk.Frame(top, style="Card.TFrame", padding=12)
+        # Barre d'actions FIXE (hors zone scrollable) pour rester toujours visible
+        idf = ttk.Frame(self, style="Card.TFrame", padding=12)
 
-        idf.pack(fill=tk.X, pady=(10,0))
+        idf.grid(row=1, column=0, sticky="ew", pady=(8,0))
 
         ttk.Label(idf, text="Tampon ZE (km)", style="Card.TLabel").grid(row=0, column=0, sticky="w")
 
@@ -2601,8 +2644,6 @@ class ContexteEcoTab(ttk.Frame):
         self.id_button = ttk.Button(idf, text="Lancer l’ID Contexte éco", style="Accent.TButton", command=self.start_id_thread)
 
         self.id_button.grid(row=0, column=2, sticky="w", padx=(12,0))
-
-
 
         self.wiki_button = ttk.Button(
 
@@ -2642,8 +2683,6 @@ class ContexteEcoTab(ttk.Frame):
         )
 
         self.vegsol_button.grid(row=0, column=5, sticky="w", padx=(12,0))
-
-
 
         self.rlt_button = ttk.Button(idf, text="Remonter le temps", style="Accent.TButton", command=self.start_rlt_thread)
 
@@ -2790,15 +2829,15 @@ class ContexteEcoTab(ttk.Frame):
 
 
         # Console + progression
-
+        
         bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
-        bottom.grid(row=1, column=0, sticky="nsew", pady=(10,0))
-        bottom.columnconfigure(0, weight=1)
+        bottom.grid(row=2, column=0, sticky="nsew", pady=(10,0))
 
+        # Libellé de statut à gauche
         self.status_label = ttk.Label(bottom, text="Prêt.", style="Status.TLabel")
-
         self.status_label.grid(row=0, column=0, sticky="w")
 
+        # Barre de progression à droite
         self.progress = ttk.Progressbar(bottom, orient="horizontal", mode="determinate", length=220)
 
         self.progress.grid(row=0, column=1, sticky="e")
@@ -3551,9 +3590,28 @@ class ContexteEcoTab(ttk.Frame):
 
         ttk.Label(frm, text="Collez 1 espèce par ligne (20 max)", style="Card.TLabel").pack(anchor='w')
 
-        txt = tk.Text(frm, height=20, wrap=tk.NONE)
-        txt.pack(fill=tk.BOTH, expand=True, pady=(6,6))
+        # Scrollable text area with mouse wheel support
+        area = ttk.Frame(frm)
+        area.pack(fill=tk.BOTH, expand=True, pady=(6,6))
+        txt = tk.Text(area, height=20, wrap=tk.NONE)
+        yscroll = ttk.Scrollbar(area, orient="vertical", command=txt.yview)
+        txt.configure(yscrollcommand=yscroll.set)
+        area.rowconfigure(0, weight=1)
+        area.columnconfigure(0, weight=1)
+        txt.grid(row=0, column=0, sticky="nsew")
+        yscroll.grid(row=0, column=1, sticky="ns")
         self.biodiv_text = txt
+        def _mw_text(e):
+            try:
+                delta = -1 * (e.delta // 120)
+            except Exception:
+                delta = -1 if getattr(e, 'num', 0) == 4 else (1 if getattr(e, 'num', 0) == 5 else 0)
+            if delta:
+                txt.yview_scroll(delta, "units")
+            return "break"
+        txt.bind("<MouseWheel>", _mw_text)
+        txt.bind("<Button-4>", _mw_text)
+        txt.bind("<Button-5>", _mw_text)
 
         btns = ttk.Frame(frm)
         btns.pack(fill=tk.X)
@@ -4983,6 +5041,11 @@ class MainApp:
         self.root.title("Contexte éco — Outils")
 
         self.root.geometry("1060x760"); self.root.minsize(900, 640)
+        # Start maximized by default on Windows
+        try:
+            self.root.state('zoomed')
+        except Exception:
+            pass
 
 
 
