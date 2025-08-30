@@ -1191,327 +1191,359 @@ class ExportCartesTab(ttk.Frame):
 
         # Wikipedia + Veg/Sol scraping controls
         wiki_frm = ttk.LabelFrame(left, text="Scraping Wikipedia / Veg&Sol")
-        wiki_frm.grid(row=8, column=0, columnspan=3, sticky="ew")
-        ttk.Label(wiki_frm, text="Requête manuelle (facultatif)").grid(row=0, column=0, sticky="w", padx=6, pady=4)
-        ttk.Entry(wiki_frm, textvariable=self.wiki_query_var, width=40).grid(row=0, column=1, sticky="ew", padx=6, pady=4)
-        self.wiki_button = ttk.Button(wiki_frm, text="Lancer scraping", command=lambda: threading.Thread(target=self._run_all_scrapers, daemon=True).start())
-        self.wiki_button.grid(row=1, column=0, sticky="w", padx=6, pady=(0,6))
-        self.wiki_open_button = ttk.Button(wiki_frm, text="Ouvrir la page Wikipédia", command=self._open_wiki_url, state="disabled")
-        self.wiki_open_button.grid(row=1, column=1, sticky="w", padx=6, pady=(0,6))
-        self.open_output_button = ttk.Button(wiki_frm, text="Ouvrir Output", command=self._open_output_dir)
-        self.open_output_button.grid(row=1, column=2, sticky="w", padx=6, pady=(0,6))
+        wiki_frm.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(8,4))
+        wiki_frm.columnconfigure(0, weight=1)
+
+        wiki_sub_frm = ttk.Frame(wiki_frm)
+        wiki_sub_frm.grid(row=0, column=0, columnspan=2, sticky="ew", padx=4, pady=4)
+        wiki_sub_frm.columnconfigure(0, weight=1)
+
+        self.wiki_button = ttk.Button(wiki_sub_frm, text="Lancer scraping (Climat, Occ. sol, Altitude, Végét., Sol)", command=self.start_full_scrape_thread)
+        self.wiki_button.grid(row=0, column=0, sticky="ew", padx=(0,4))
+
+        self.wiki_status_var = tk.StringVar(value="Prêt.")
+        status_label = ttk.Label(wiki_sub_frm, textvariable=self.wiki_status_var, style="Status.TLabel", anchor="e")
+        status_label.grid(row=0, column=1, sticky="e")
+
+        # Manual override for Wikipedia query
+        ttk.Label(wiki_frm, text="Commune (si différent de la ZE)").grid(row=1, column=0, sticky="w", padx=4, pady=(4,0))
+        ttk.Entry(wiki_frm, textvariable=self.wiki_query_var, style="Card.TEntry").grid(row=1, column=1, sticky="ew", padx=4, pady=(4,0))
+
+        # Results tree for Wikipedia/Végétation/Sol
+        res_frm = ttk.Frame(wiki_frm)
+        res_frm.grid(row=2, column=0, columnspan=2, sticky="ew", padx=4, pady=(4,6))
+        res_frm.columnconfigure(0, weight=1)
+        self.results_tree = ttk.Treeview(res_frm, columns=("label", "value"), show="headings", height=5)
+        self.results_tree.heading("label", text="Rubrique")
+        self.results_tree.heading("value", text="Résultat")
+        self.results_tree.column("label", width=150, anchor="w")
+        self.results_tree.column("value", anchor="w")
+        self.results_tree.grid(row=0, column=0, sticky="nsew")
+        yscroll = ttk.Scrollbar(res_frm, orient="vertical", command=self.results_tree.yview)
+        yscroll.grid(row=0, column=1, sticky="ns")
+        self.results_tree.configure(yscrollcommand=yscroll.set)
+        # Initialize rows with placeholders and fixed iids expected by _update_results_tree
         try:
-            ToolTip(self.wiki_button, "Scrape Wikipedia et Veg&Sol en utilisant la ZE/AE")
+            self.results_tree.insert("", "end", values=("Climat", "—"), iid="climat")
+            self.results_tree.insert("", "end", values=("Occupation sols", "—"), iid="occupation_sols")
+            self.results_tree.insert("", "end", values=("Altitude", "—"), iid="altitude")
+            self.results_tree.insert("", "end", values=("Végétation", "—"), iid="vegetation")
+            self.results_tree.insert("", "end", values=("Sols", "—"), iid="sols")
         except Exception:
             pass
 
-        for c in range(3):
-            left.columnconfigure(c, weight=1)
-
-        # --- Right: project list with filter ---
-        ttk.Label(right, text="Projets QGIS (Contexte éco)", font=self.font_title).pack(anchor="w", pady=(0,6))
-        filt_frm = ttk.Frame(right)
-        filt_frm.pack(fill="x", pady=(0,4))
-        ttk.Label(filt_frm, text="Filtrer").pack(side="left")
+        # --- Right: projects list with filter and scroll ---
+        ttk.Label(right, text="Projets QGIS — Export", font=self.font_title).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0,8), padx=6)
+        # Filter controls
         self.filter_var = tk.StringVar(value="")
-        ent = ttk.Entry(filt_frm, textvariable=self.filter_var, width=30)
-        ent.pack(side="left", padx=(6,6))
-        ttk.Button(filt_frm, text="Appliquer", command=self._apply_filter).pack(side="left")
-        ttk.Button(filt_frm, text="Rafraîchir", command=self._populate_projects).pack(side="left", padx=(6,0))
-        ttk.Button(filt_frm, text="Tout", command=lambda: self._select_all(True)).pack(side="left", padx=(12,0))
-        ttk.Button(filt_frm, text="Aucun", command=lambda: self._select_all(False)).pack(side="left", padx=(6,0))
+        filt_frm = ttk.Frame(right)
+        filt_frm.grid(row=1, column=0, columnspan=3, sticky="ew", padx=6)
+        filt_frm.columnconfigure(1, weight=1)
+        ttk.Label(filt_frm, text="Filtrer").grid(row=0, column=0, sticky="w")
+        ent = ttk.Entry(filt_frm, textvariable=self.filter_var, style="Card.TEntry")
+        ent.grid(row=0, column=1, sticky="ew", padx=(6,6))
+        ent.bind("<Return>", lambda e: self._apply_filter())
+        ttk.Button(filt_frm, text="Appliquer", command=self._apply_filter).grid(row=0, column=2)
+        ttk.Button(filt_frm, text="Tout sélectionner", command=lambda: self._select_all(True)).grid(row=0, column=3, padx=(6,0))
+        ttk.Button(filt_frm, text="Tout désélectionner", command=lambda: self._select_all(False)).grid(row=0, column=4, padx=(6,0))
 
-        # Scrollable area
-        canvas = tk.Canvas(right, highlightthickness=0, bd=0)
-        vsb = ttk.Scrollbar(right, orient="vertical", command=canvas.yview)
-        container = ttk.Frame(canvas)
-        container.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        # Scrollable list of projects
+        proj_frm = ttk.Frame(right)
+        proj_frm.grid(row=2, column=0, columnspan=3, sticky="nsew", padx=6, pady=(6,6))
+        right.rowconfigure(2, weight=1)
+        right.columnconfigure(0, weight=1)
+        # Canvas + scrollbar
+        canvas = tk.Canvas(proj_frm, highlightthickness=0)
+        vbar = ttk.Scrollbar(proj_frm, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vbar.set)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        vbar.grid(row=0, column=1, sticky="ns")
+        proj_frm.rowconfigure(0, weight=1)
+        proj_frm.columnconfigure(0, weight=1)
+        # Inner frame
+        self.scrollable_frame = ttk.Frame(canvas)
+        self.scrollable_frame.bind(
+            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
-        self.scrollable_frame = ttk.Frame(container)
-        self.scrollable_frame.pack(fill="both", expand=True)
-        canvas_frame = canvas.create_window((0, 0), window=container, anchor="nw")
-        canvas.configure(yscrollcommand=vsb.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        vsb.pack(side="right", fill="y")
-
-        def _resize_container(event):
-            canvas.itemconfigure(canvas_frame, width=event.width)
-        canvas.bind("<Configure>", _resize_container)
-
-        # --- Bottom: results + console + progress ---
-        top_bottom = ttk.Frame(bottom)
-        top_bottom.pack(fill="both", expand=True)
-
-        # Results tree (2 columns)
-        res_frm = ttk.Frame(top_bottom)
-        res_frm.pack(side="left", fill="both", expand=False, padx=(0,6))
-        ttk.Label(res_frm, text="Résultats (Wikipédia)").pack(anchor="w")
-        self.results_tree = ttk.Treeview(res_frm, columns=("label", "text"), show="headings", height=6)
-        self.results_tree.heading("label", text="Rubrique")
-        self.results_tree.heading("text", text="Texte")
-        self.results_tree.column("label", width=160, anchor="w")
-        self.results_tree.column("text", width=480, anchor="w")
-        self.results_tree.pack(fill="both", expand=True)
-        # Initialize rows
-        for iid, lbl in (("climat", "Climat"), ("occupation_sols", "Occupation des sols"), ("altitude", "Altitude"), ("vegetation", "Végétation"), ("sols", "Sols")):
+        self._projects_window = canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        # Make the inner frame width track the canvas width
+        def _on_canvas_configure(event):
             try:
-                self.results_tree.insert("", "end", iid=iid, values=(lbl, ""))
+                canvas.itemconfigure(self._projects_window, width=event.width)
             except Exception:
                 pass
+        canvas.bind("<Configure>", _on_canvas_configure)
 
-        # Console
-        cons_frm = ttk.Frame(top_bottom)
-        cons_frm.pack(side="left", fill="both", expand=True)
-        ttk.Label(cons_frm, text="Console").pack(anchor="w")
-        self.console_text = tk.Text(cons_frm, height=10, wrap="word", font=self.font_mono, state="disabled")
-        self.console_text.pack(fill="both", expand=True)
-        self.stdout_redirect = TextRedirector(self.console_text)
-
-        # Progress + status
-        status_frm = ttk.Frame(bottom)
-        status_frm.pack(fill="x", pady=(6,0))
+        # Status and progress
+        status_frm = ttk.Frame(right)
+        status_frm.grid(row=3, column=0, columnspan=3, sticky="ew", padx=6, pady=(0,6))
+        status_frm.columnconfigure(0, weight=1)
+        self.status_label = ttk.Label(status_frm, text="Projets sélectionnés : 0 / 0", style="Status.TLabel")
+        self.status_label.grid(row=0, column=0, sticky="w")
         self.progress = ttk.Progressbar(status_frm, mode="determinate")
-        self.progress.pack(fill="x")
-        self.status_label = ttk.Label(status_frm, text="Prêt", style="Status.TLabel")
-        self.status_label.pack(anchor="w")
+        self.progress.grid(row=0, column=1, sticky="ew", padx=(8,0))
 
-    # Small helpers for file/directory browsing
-    def _browse_file(self, var: tk.StringVar):
+        # --- Bottom: console output ---
+        bottom.columnconfigure(0, weight=1)
+        bottom.rowconfigure(0, weight=1)
+        ttk.Label(bottom, text="Console", style="Subtle.TLabel").grid(row=0, column=0, sticky="w", padx=6, pady=(4,0))
+        console_frm = ttk.Frame(bottom)
+        console_frm.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0,6))
+        console_frm.columnconfigure(0, weight=1)
+        console_frm.rowconfigure(0, weight=1)
+        self.console = tk.Text(console_frm, height=10, state="disabled", wrap="word")
+        self.console.grid(row=0, column=0, sticky="nsew")
+        cons_scroll = ttk.Scrollbar(console_frm, orient="vertical", command=self.console.yview)
+        cons_scroll.grid(row=0, column=1, sticky="ns")
+        self.console.configure(yscrollcommand=cons_scroll.set, font=self.font_mono)
+        # Redirect stdout to console
         try:
-            initial = var.get() or DEFAULT_SHAPE_DIR
+            self.stdout_redirect = TextRedirector(self.console)
         except Exception:
-            initial = DEFAULT_SHAPE_DIR
-        path = filedialog.askopenfilename(title="Sélectionner un shapefile", initialdir=initial, filetypes=[["Shapefile", ".shp .SHP"], ["Tous", "*.*"]])
-        if path:
-            var.set(path)
+            self.stdout_redirect = sys.stdout
 
-    def _browse_dir(self, var: tk.StringVar):
+    def open_gmaps(self):
+        """Ouvre Google Maps centré sur le centroïde de la ZE."""
+        centroid = self._get_centroid_wgs84()
+        if not centroid:
+            return
+        lat, lon = centroid
+        url = f"https://www.google.com/maps/@{lat},{lon},16z"
         try:
-            initial = var.get() or OUT_IMG
-        except Exception:
-            initial = OUT_IMG
-        path = filedialog.askdirectory(title="Choisir le dossier de sortie", initialdir=initial)
-        if path:
-            var.set(path)
+            webbrowser.open(url)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d'ouvrir Google Maps: {e}")
+
+    def start_rlt_thread(self):
+        """Ouvre IGN Remonter le temps dans le navigateur (thread pour ne pas bloquer l'UI)."""
+        t = threading.Thread(target=self._open_rlt_links, daemon=True)
+        t.start()
+
+    def _open_rlt_links(self):
+        centroid = self._get_centroid_wgs84()
+        if not centroid:
+            return
+        lat, lon = centroid
+        try:
+            # Ouvrir la vue principale Aujourd'hui
+            main_url = URL.format(lon=lon, lat=lat, layer=LAYERS[0][1])
+            webbrowser.open(main_url)
+            # Optionnel: ouvrir aussi d'autres périodes dans des onglets séparés
+            for name, layer in LAYERS[1:]:
+                time.sleep(0.4)
+                webbrowser.open(URL.format(lon=lon, lat=lat, layer=layer))
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d'ouvrir Remonter le temps: {e}")
+
+    def start_bassin_thread(self):
+        """Ouvre une recherche utile pour le bassin versant autour du centroïde."""
+        centroid = self._get_centroid_wgs84()
+        if not centroid:
+            return
+        lat, lon = centroid
+        try:
+            # Heuristic: open a Google Maps search around the centroid
+            url = f"https://www.google.com/maps/search/bassin+versant/@{lat},{lon},12z"
+            webbrowser.open(url)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d'ouvrir la recherche bassin versant: {e}")
 
     def _open_output_dir(self):
-        """Open the output directory in the system file explorer."""
+        """Ouvre le dossier de sortie dans l'explorateur. Le crée s'il n'existe pas."""
         try:
-            path = (self.out_dir_var.get() or OUT_IMG).strip()
-        except Exception:
-            path = OUT_IMG
-
-        if not path:
-            messagebox.showwarning("Dossier Output", "Aucun dossier de sortie défini.")
-            return
-
-        # Ensure directory exists
-        try:
+            path = (self.out_dir_var.get() or "").strip() or OUT_IMG
+            if not path:
+                messagebox.showerror("Erreur", "Aucun dossier de sortie défini.")
+                return
             os.makedirs(path, exist_ok=True)
-        except Exception:
-            pass
-
-        try:
+            # Windows: ouvrir dans l'explorateur
             if sys.platform.startswith("win"):
-                os.startfile(path)  # type: ignore[attr-defined]
-            elif sys.platform == "darwin":
-                subprocess.Popen(["open", path])
+                os.startfile(path)
             else:
-                subprocess.Popen(["xdg-open", path])
+                # Fallback pour autres OS
+                webbrowser.open(f"file://{path}")
         except Exception as e:
-            messagebox.showerror("Dossier Output", f"Impossible d'ouvrir le dossier : {e}")
-
-    def _open_wiki_url(self):
-        url = (self.wiki_last_url or "").strip()
-        if not url:
-            messagebox.showinfo("Wikipedia", "Aucune URL disponible. Lancez d'abord le scraping.")
-            return
-
-        print(f"[Wiki] Ouverture dans le navigateur : {url}", file=self.stdout_redirect)
-        driver = self._get_or_create_driver()
-        if not driver:
-            return
-
-        try:
-            # Open in a new tab and switch to it
-            driver.execute_script(f"window.open('{url}', '_blank');")
-            driver.switch_to.window(driver.window_handles[-1])
-        except Exception as e:
-            messagebox.showerror("Wikipedia", f"Impossible d'ouvrir l'URL : {e}")
-
-    def _get_or_create_driver(self):
-        if self.shared_driver is None:
-            try:
-                # Setup Chrome options
-                options = webdriver.ChromeOptions()
-                options.add_experimental_option("detach", True)
-                options.add_argument("--start-minimized")
-                options.add_experimental_option('excludeSwitches', ['enable-logging'])
-
-                if os.getenv('APP_HEADLESS') == '1':
-                    options.add_argument('--headless')
-                    options.add_argument('--no-sandbox')
-                    options.add_argument('--disable-dev-shm-usage')
-
-                self.shared_driver = webdriver.Chrome(options=options)
-                print("[WebDriver] Shared browser instance created.", file=self.stdout_redirect)
-            except Exception as e:
-                messagebox.showerror("Erreur WebDriver", f"Impossible de démarrer le navigateur Chrome partagé : {e}")
-                self.shared_driver = None
-                return None
-        return self.shared_driver
+            messagebox.showerror("Erreur", f"Impossible d'ouvrir le dossier: {e}")
 
     def _cleanup_driver(self):
         if self.shared_driver:
             try:
                 self.shared_driver.quit()
-                print("[WebDriver] Shared browser instance closed.", file=self.stdout_redirect)
-            except Exception as e:
-                print(f"[WebDriver] Error closing shared browser: {e}", file=self.stdout_redirect)
+            except Exception:
+                pass
             finally:
                 self.shared_driver = None
 
-    def _run_all_scrapers(self):
-        os.makedirs("output", exist_ok=True)
+    def _get_centroid_wgs84(self) -> Optional[Tuple[float, float]]:
+        shp_path = self.ze_shp_var.get()
+        if not shp_path or not os.path.isfile(shp_path):
+            messagebox.showerror("Shapefile manquant", "Veuillez sélectionner un shapefile de Zone d'étude valide.")
+            return None
+        try:
+            gdf = gpd.read_file(shp_path)
+            if gdf.crs is None:
+                messagebox.showwarning("CRS manquant", "Le shapefile n'a pas de système de coordonnées défini. L'application va supposer Lambert-93.")
+                gdf.set_crs("EPSG:2154", inplace=True)
+            
+            gdf_wgs84 = gdf.to_crs(epsg=4326)
+            
+            # Utiliser union_all() qui remplace unary_union déprécié
+            centroid = gdf_wgs84.geometry.union_all().centroid
+            return (centroid.y, centroid.x) # lat, lon
+        except Exception as e:
+            messagebox.showerror("Erreur Géospatiale", f"Impossible de calculer le centroïde du shapefile. Erreur: {e}")
+            return None
+
+    def _run_wiki_scrape(self, driver, query: str) -> dict:
+        print(f"Lancement du scraping Wikipedia pour: '{query}'")
+        try:
+            # La fonction get_wikipedia_extracts gère déjà l'ouverture de l'URL
+            # On doit juste s'assurer qu'elle utilise le driver partagé
+            extracts = get_wikipedia_extracts(query, driver)
+            self.wiki_last_url = driver.current_url
+            print("Scraping Wikipedia terminé.")
+            return extracts
+        except Exception as e:
+            print(f"Erreur lors du scraping Wikipedia: {e}")
+            traceback.print_exc()
+            return {}
+
+    def _run_altitude(self, driver, lon, lat) -> str:
+        url = f"https://www.geoportail.gouv.fr/carte?lon={lon}&lat={lat}&z=15"
+        altitude = "Non trouvée"
+        try:
+            print(f"Ouverture de la carte d'altitude dans un nouvel onglet: {url}")
+            # Ouvrir dans un nouvel onglet
+            driver.execute_script(f"window.open('{url}', '_blank');")
+            time.sleep(1)
+            driver.switch_to.window(driver.window_handles[-1])
+            time.sleep(3) # Attendre le chargement initial
+            
+            wait = WebDriverWait(driver, 10)
+            # Attendre que le conteneur des coordonnées soit visible
+            wait.until(EC.visibility_of_element_located((By.ID, "gp-coordinates-container")))
+            
+            # Extraire l'altitude
+            alt_element = driver.find_element(By.CSS_SELECTOR, "div.gp-coords-altitude span.gp-coords-value")
+            altitude = alt_element.text.strip()
+            print(f"Altitude trouvée: {altitude}")
+
+        except Exception as e:
+            print(f"Erreur lors de la récupération de l'altitude: {e}")
+            return "Erreur scraping"
+
+        return altitude
+
+    def _run_vegsol(self, driver, lon, lat) -> tuple[str, str]:
+        base_url = "https://www.geoportail.gouv.fr/carte"
+        params = {
+            "lon": lon,
+            "lat": lat,
+            "z": 15,
+            "layers": "GEOGRAPHICALGRIDSYSTEMS.MAPS.3D,sol,vegetation",
+            "ch": "GEOGRAPHICALGRIDSYSTEMS.MAPS.3D,sol,vegetation",
+            "gp-access-lib": "x6j23m5wpr15nucen18p8hfn"
+        }
+        url = f"{base_url}?{urllib.parse.urlencode(params)}"
+
+        veg = "Non trouvée"
+        soil = "Non trouvé"
+
+        try:
+            # Ouvrir la carte dans un nouvel onglet
+            print(f"Ouverture de la carte Végétation/Sol dans un nouvel onglet: {url}")
+            driver.execute_script(f"window.open('{url}', '_blank');")
+            
+            # Attendre et basculer vers le nouvel onglet
+            time.sleep(1) # Laisser le temps à l'onglet de s'ouvrir
+            driver.switch_to.window(driver.window_handles[-1])
+            time.sleep(4) # Attendre que la page et les scripts se chargent
+
+            # Attendre que les informations soient potentiellement chargées
+            wait = WebDriverWait(driver, 15) # Attente max de 15 secondes
+            
+            # Utiliser une attente explicite pour la végétation
+            try:
+                veg_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#vegetation-info")))
+                veg = veg_element.text.strip()
+                print(f"Végétation trouvée: {veg}")
+            except Exception:
+                print("L'élément d'information sur la végétation n'a pas été trouvé dans le temps imparti.")
+
+            # Utiliser une attente explicite pour le sol
+            try:
+                soil_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#soil-info")))
+                soil = soil_element.text.strip()
+                print(f"Sol trouvé: {soil}")
+            except Exception:
+                print("L'élément d'information sur le sol n'a pas été trouvé dans le temps imparti.")
+
+        except Exception as e:
+            print(f"Erreur majeure lors du scraping de la carte Végétation/Sol: {e}")
+            return "Erreur scraping", "Erreur scraping"
+        
+        return veg, soil
+
+    def _run_full_scrape(self):
+        """Orchestrates the entire scraping process in sequence."""
+        self.after(0, lambda: self.wiki_status_var.set("Démarrage..."))
+        
+        centroid = self._get_centroid_wgs84()
+        if not centroid:
+            self.after(0, lambda: self.wiki_status_var.set("Erreur: Centroïde"))
+            return
+
+        lat, lon = centroid # Note: _get_centroid_wgs84 returns lat, lon
+        
+        # Détecter la commune pour le scraping
+        commune_detected, _ = self._detect_commune(lat, lon)
+        query = self.wiki_query_var.get().strip() or commune_detected
+        if not query:
+            self.after(0, lambda: self.wiki_status_var.set("Erreur: Commune"))
+            return
+
         driver = self._get_or_create_driver()
         if not driver:
-            print("Cancel scraping due to browser start failure", file=self.stdout_redirect)
+            self.after(0, lambda: self.wiki_status_var.set("Erreur: Driver"))
             return
-        try:
-            # Wikipedia scraping in first tab
-            self._run_wiki(driver)
-            
-            # VegSol scraping in new tab
-            driver.execute_script("window.open('about:blank', '_blank');")
-            driver.switch_to.window(driver.window_handles[-1])
-            self._run_vegsol(driver)
-            
-        except Exception as e:
-            print(f"Scraping error: {e}", file=self.stdout_redirect)
-        finally:
-            print("Scraping finished. Browser remains open for inspection.", file=self.stdout_redirect)
-            def _reenable_ui():
-                try:
-                    self.wiki_button.config(state="normal")
-                    if self.wiki_last_url:
-                        self.wiki_open_button.config(state="normal")
-                except Exception:
-                    pass
-            self.after(0, _reenable_ui)
-
-    def _run_wiki(self, driver):
-        # This method now receives the shared driver
-        # and operates in the currently active tab.
-        try:
-            print("[Wiki] Lancement du scraping Wikipedia", file=self.stdout_redirect)
-
-            ze_path = self.ze_shp_var.get()
-
-            gdf = gpd.read_file(ze_path)
-
-            if gdf.crs is None:
-
-                raise ValueError("CRS non défini")
-
-            gdf = gdf.to_crs("EPSG:4326")
-
-            centroid = gdf.geometry.unary_union.centroid
-
-            lat, lon = centroid.y, centroid.x
-
-            manual = (self.wiki_query_var.get() or "").strip()
-
-            if manual:
-
-                query = manual
-
-                try:
-
-                    self.prefs["WIKI_QUERY"] = manual; save_prefs(self.prefs)
-
-                except Exception:
-
-                    pass
-
-            else:
-
-                commune, dep = self._detect_commune(lat, lon)
-
-                query = f"{commune} {dep}".strip()
-
-            print(f"[Wiki] Requête : {query}", file=self.stdout_redirect)
-
-            data = get_wikipedia_extracts(query)
-
-            # Mettre à jour le tableau Wikipedia (dès que les données sont disponibles)
-
-            self._update_wiki_table(data)
-
-            if "error" in data:
-
-                print(f"[Wiki] {data['error']}", file=self.stdout_redirect)
-
-            else:
-
-                print(f"[Wiki] Page Wikipédia : {data['url']}", file=self.stdout_redirect)
-
-                print("[Wiki] CLIMAT :", file=self.stdout_redirect)
-
-                if data['climat_p1'] != 'Non trouvé':
-
-                    print(data['climat_p1'], file=self.stdout_redirect)
-
-                if data['climat_p2'] != 'Non trouvé':
-
-                    print(data['climat_p2'], file=self.stdout_redirect)
-
-                print("[Wiki] OCCUPATION DES SOLS :", file=self.stdout_redirect)
-
-                if data['occupation_p1'] != 'Non trouvé':
-
-                    print(data['occupation_p1'], file=self.stdout_redirect)
-
-        except Exception as e:
-
-            print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
-
-
-
-
-    def _update_wiki_table(self, data: dict) -> None:
 
         try:
-            # Collect values from either legacy or new keys
-            clim_txt = data.get('climat') or data.get('climat_p1') or ''
-            occ_txt  = data.get('occup_sols') or data.get('occupation_p1') or ''
-            url_txt  = data.get('url', '')
+            # 1. Wikipedia
+            self.after(0, lambda: self.wiki_status_var.set("Scraping Wikipedia..."))
+            extracts = self._run_wiki_scrape(driver, query)
 
+            # 2. Altitude
+            self.after(0, lambda: self.wiki_status_var.set("Scraping Altitude..."))
+            altitude = self._run_altitude(driver, lon, lat)
+
+            # 3. Végétation et Sol
+            self.after(0, lambda: self.wiki_status_var.set("Scraping Végétation/Sol..."))
+            veg, soil = self._run_vegsol(driver, lon, lat)
+
+            # Switch back to the first tab to leave it clean
+            driver.switch_to.window(driver.window_handles[0])
+
+            # Prepare results
             payload = {
-                'climat': clim_txt if clim_txt and not str(clim_txt).lower().startswith('non trouv') else 'Non trouvé',
-                'occupation_sols': occ_txt if occ_txt and not str(occ_txt).lower().startswith('non trouv') else 'Non trouvé',
+                'climat': extracts.get('climat', 'Non trouvé'),
+                'occupation_sols': extracts.get('occupation_sols', 'Non trouvé'),
+                'altitude': altitude,
+                'vegetation': veg,
+                'sols': soil
             }
-
-            # Update the consolidated results tree on the UI thread
             self.after(0, self._update_results_tree, payload)
+            self.after(0, lambda: self.wiki_status_var.set("Terminé !"))
 
-            # Store URL and enable the open button if present
-            def _upd_url():
-                try:
-                    self.wiki_last_url = url_txt or ""
-                    btn = getattr(self, 'wiki_open_button', None) or getattr(self, 'open_scraping_button', None)
-                    if btn:
-                        btn.config(state=("normal" if self.wiki_last_url else "disabled"))
-                except Exception:
-                    pass
-            self.after(0, _upd_url)
+        except Exception as e:
+            error_message = f"Erreur scraping: {e}"
+            print(error_message)
+            traceback.print_exc()
+            self.after(0, lambda: self.wiki_status_var.set("Erreur"))
 
-        except Exception:
-
-            pass
-
-
+    def start_full_scrape_thread(self):
+        """Starts the full scraping process in a separate thread to avoid freezing the UI."""
+        t = threading.Thread(target=self._run_full_scrape, daemon=True)
+        t.start()
 
     def _update_results_tree(self, data: dict) -> None:
         """Update rows in self.results_tree. Keys are expected to be iids:
@@ -1541,1090 +1573,7 @@ class ExportCartesTab(ttk.Frame):
         except Exception:
             pass
 
-
-
-
-
-
-    def _run_vegsol(self, driver):
-        # Uses the shared driver in a new tab
-        try:
-            print("[Cartes] Lancement du scraping des cartes", file=self.stdout_redirect)
-
-            ze_path = self.ze_shp_var.get()
-            if not ze_path or not os.path.isfile(ze_path):
-                raise ValueError("Shapefile Zone d'étude introuvable")
-
-            # 1) Ouvrir l'URL
-            url = f"file:///{html_path.replace('\\', '/')}"
-            # Ouvre dans un nouvel onglet et bascule dessus
-            driver.execute_script(f"window.open('{url}', '_blank');")
-            driver.switch_to.window(driver.window_handles[-1])
-            self._debug_dump(driver, "after_nav")
-            except Exception:
-                pass
-
-            wait = WebDriverWait(driver, 10)
-
-            # 3) Cliquer sur Importer shapefile
-            try:
-                btn_upload = wait.until(EC.element_to_be_clickable((By.ID, "upload-shapefile-btn")))
-                btn_upload.click()
-                print("[Cartes] Clic sur 'Importer shapefile'", file=self.stdout_redirect)
-                try:
-                    self._selenium_debug_dump(driver, "after_click_import")
-                except Exception:
-                    pass
-            except Exception as e:
-                print(f"[Cartes] Erreur clic import shapefile: {e}", file=self.stdout_redirect)
-                return
-
-            time.sleep(0.75)
-
-            # 5) Cliquer sur Zone d'étude
-            try:
-                btn_zone = wait.until(EC.element_to_be_clickable((By.ID, "import-zone-btn")))
-                btn_zone.click()
-                print("[Cartes] Clic sur 'Zone d'étude'", file=self.stdout_redirect)
-            except Exception as e:
-                print(f"[Cartes] Erreur clic Zone d'étude: {e}", file=self.stdout_redirect)
-                return
-
-            time.sleep(0.75)
-
-            # 6) Préparer et envoyer automatiquement les fichiers shapefile
-            def _from_long_unc(p: str) -> str:
-                p = p or ""
-                if p.startswith("\\\\?\\UNC\\"):
-                    return "\\\\" + p[8:]
-                if p.startswith("\\\\?\\"):
-                    return p[4:]
-                return p
-
-            ze_shp_clean = _from_long_unc(ze_path)
-            base_no_ext, _ = os.path.splitext(ze_shp_clean)
-            exts = [".cpg", ".dbf", ".prj", ".qmd", ".shp", ".shx"]
-            files = [base_no_ext + e for e in exts if os.path.isfile(base_no_ext + e)]
-
-            if not files:
-                raise ValueError("Fichiers du shapefile introuvables pour l'import")
-
-            print(f"[Cartes] Sélection automatique de {len(files)} fichiers shapefile", file=self.stdout_redirect)
-            for f in files:
-                print(f"[Cartes] - {f}", file=self.stdout_redirect)
-
-            # Simuler la sélection de fichiers dans l'explorateur Windows
-            try:
-                # Attendre que l'input file soit disponible
-                file_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='file']")))
-                
-                # Rendre l'input visible pour l'interaction
-                driver.execute_script("""
-                    arguments[0].style.display = 'block';
-                    arguments[0].style.visibility = 'visible';
-                    arguments[0].style.opacity = '1';
-                    arguments[0].style.position = 'static';
-                """, file_input)
-                
-                # Envoyer tous les fichiers en une fois (séparés par \n)
-                file_input.send_keys("\n".join(files))
-                print("[Cartes] Fichiers shapefile sélectionnés automatiquement", file=self.stdout_redirect)
-                
-                try:
-                    self._selenium_debug_dump(driver, "after_send_files")
-                except Exception:
-                    pass
-                    
-            except Exception as e:
-                print(f"[Cartes] Erreur sélection fichiers: {e}", file=self.stdout_redirect)
-
-            time.sleep(0.75)
-
-            # 8) Clic droit au milieu de la carte
-            try:
-                map_el = wait.until(EC.visibility_of_element_located((By.ID, "map")))
-                # Clic droit au centre de la carte
-                ActionChains(driver).move_to_element(map_el).context_click(map_el).perform()
-                print("[Cartes] Clic droit sur la carte", file=self.stdout_redirect)
-                try:
-                    self._selenium_debug_dump(driver, "after_right_click")
-                except Exception:
-                    pass
-            except Exception as e:
-                print(f"[Cartes] Erreur clic droit carte: {e}", file=self.stdout_redirect)
-
-            time.sleep(0.5)
-
-            # 10) Cliquer sur le bouton 'Ressources'
-            try:
-                btn_resources = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'action-button') and text()='Ressources']")))
-                btn_resources.click()
-                print("[Cartes] Clic sur 'Ressources'", file=self.stdout_redirect)
-                try:
-                    self._selenium_debug_dump(driver, "after_click_resources")
-                except Exception:
-                    pass
-            except Exception as e:
-                print(f"[Cartes] Erreur clic Ressources: {e}", file=self.stdout_redirect)
-
-            time.sleep(0.75)
-
-            # 12) Extraire les 3 éléments de la popup
-            alt, veg, soil = "Erreur", "Erreur", "Erreur"
-            try:
-                # Attendre que la popup soit visible
-                time.sleep(0.75)
-                
-                self._selenium_debug_dump(driver, "after_popup_loaded")
-
-                # Extraire les informations de la popup
-                page_source = driver.page_source
-                soup = BeautifulSoup(page_source, 'html.parser')
-
-                # 1) Altitude
-                altitude_div = soup.select_one('div.altitude-info')
-                alt = altitude_div.get_text(strip=True) if altitude_div else "Non trouvée"
-
-                # 2) Végétation
-                vegetation_div = soup.select_one('#vegetation-info')
-                veg = vegetation_div.get_text(strip=True) if vegetation_div else "Non trouvée"
-
-                # 3) Sol
-                soil_div = soup.select_one('#soil-info')
-                soil = soil_div.get_text(strip=True) if soil_div else "Non trouvé"
-                
-                print(f"[Cartes] RÉSULTATS FINAUX:", file=self.stdout_redirect)
-                print(f"[Cartes] ALTITUDE : {alt}", file=self.stdout_redirect)
-                print(f"[Cartes] VÉGÉTATION : {veg}", file=self.stdout_redirect)
-                print(f"[Cartes] SOLS : {soil}", file=self.stdout_redirect)
-
-            except Exception as e:
-                print(f"[Cartes] Erreur extraction popup: {e}", file=self.stdout_redirect)
-
-            # Mettre à jour le tableau des résultats
-            payload = {
-                'altitude': alt,
-                'vegetation': veg, 
-                'sols': soil
-            }
-            self.after(0, self._update_results_tree, payload)
-            
-        except Exception as e:
-            print(f"[Cartes] Erreur : {e}", file=self.stdout_redirect)
-            try:
-                self._selenium_debug_dump(driver, "exception")
-            except Exception:
-                pass
-
-    def _selenium_debug_dump(self, driver, tag: str) -> None:
-        """Capture a screenshot and HTML dump for debugging under output/selenium_debug.
-        Safe to call anywhere; logs target paths.
-        """
-        try:
-            out_dir = os.path.join("output", "selenium_debug")
-            os.makedirs(out_dir, exist_ok=True)
-            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-            base = os.path.join(out_dir, f"{ts}_{tag}")
-            # Screenshot
-            try:
-                driver.save_screenshot(base + ".png")
-            except Exception as e:
-                print(f"[Debug] Screenshot failed: {e}", file=self.stdout_redirect)
-            # HTML dump
-            try:
-                with open(base + ".html", "w", encoding="utf-8") as f:
-                    f.write(driver.page_source or "")
-            except Exception as e:
-                print(f"[Debug] HTML dump failed: {e}", file=self.stdout_redirect)
-            print(f"[Debug] Dump written: {base}.png/.html", file=self.stdout_redirect)
-        except Exception:
-            pass
-
-    # --- Boutons ajoutés ---
-
-
-    def open_biodiv_dialog(self) -> None:
-        try:
-            if hasattr(self, 'biodiv_win') and self.biodiv_win and tk.Toplevel.winfo_exists(self.biodiv_win):
-                self.biodiv_win.lift()
-                return
-        except Exception:
-            pass
-
-        win = tk.Toplevel(self)
-        win.title("Photo Biodiv'AURA")
-        win.geometry("640x520")
-        self.biodiv_win = win
-
-        frm = ttk.Frame(win, padding=12)
-        frm.pack(fill=tk.BOTH, expand=True)
-
-        ttk.Label(frm, text="Collez 1 espèce par ligne (20 max)", style="Card.TLabel").pack(anchor='w')
-
-        # Scrollable text area with mouse wheel support
-        area = ttk.Frame(frm)
-        area.pack(fill=tk.BOTH, expand=True, pady=(6,6))
-        txt = tk.Text(area, height=20, wrap=tk.NONE)
-        yscroll = ttk.Scrollbar(area, orient="vertical", command=txt.yview)
-        txt.configure(yscrollcommand=yscroll.set)
-        area.rowconfigure(0, weight=1)
-        area.columnconfigure(0, weight=1)
-        txt.grid(row=0, column=0, sticky="nsew")
-        yscroll.grid(row=0, column=1, sticky="ns")
-        self.biodiv_text = txt
-        def _mw_text(e):
-            try:
-                delta = -1 * (e.delta // 120)
-            except Exception:
-                delta = -1 if getattr(e, 'num', 0) == 4 else (1 if getattr(e, 'num', 0) == 5 else 0)
-            if delta:
-                txt.yview_scroll(delta, "units")
-            return "break"
-        txt.bind("<MouseWheel>", _mw_text)
-        txt.bind("<Button-4>", _mw_text)
-        txt.bind("<Button-5>", _mw_text)
-
-        btns = ttk.Frame(frm)
-        btns.pack(fill=tk.X)
-
-        self.biodiv_launch_btn = ttk.Button(btns, text="Lancer le scraping", style="Accent.TButton",
-                                            command=self.start_biodiv_thread)
-        self.biodiv_launch_btn.pack(side=tk.LEFT)
-        try:
-            self.biodiv_launch_btn.config(state='normal')
-        except Exception:
-            pass
-
-        # Permettre Entrée pour lancer rapidement
-        try:
-            win.bind('<Return>', lambda e: self.start_biodiv_thread())
-        except Exception:
-            pass
-
-        ttk.Button(btns, text="Fermer", command=win.destroy).pack(side=tk.RIGHT)
-
-    def start_biodiv_thread(self) -> None:
-        try:
-            print("[Biodiv] Bouton 'Lancer le scraping' cliqué", file=self.stdout_redirect)
-        except Exception:
-            pass
-        try:
-            raw = self.biodiv_text.get('1.0', tk.END)
-        except Exception:
-            raw = ''
-
-        species = [s.strip() for s in (raw.splitlines() if raw else [])]
-        species = [s for s in species if s]
-        if not species:
-            messagebox.showerror("Biodiv'AURA", "Veuillez saisir au moins une espèce.")
-            return
-
-        if len(species) > 20:
-            species = species[:20]
-
-        print(f"[Biodiv] Lancement pour {len(species)} espèce(s)", file=self.stdout_redirect)
-
-        try:
-            if hasattr(self, 'biodiv_launch_btn'):
-                self.biodiv_launch_btn.config(state='disabled')
-        except Exception:
-            pass
-
-        t = threading.Thread(target=self._run_biodiv, args=(species,))
-        t.daemon = True
-        t.start()
-
-    def _run_biodiv(self, species_list: list[str]) -> None:
-        try:
-            os.makedirs(OUT_IMG, exist_ok=True)
-            out_dir = os.path.join(OUT_IMG, "Photo BiodivAURA")
-            os.makedirs(out_dir, exist_ok=True)
-
-            # Document unique pour toutes les especes
-            doc = Document()
-            try:
-                style_normal = doc.styles['Normal']
-                style_normal.font.name = 'Calibri'
-                style_normal._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
-            except Exception:
-                pass
-
-            # Préparer Selenium (toujours visible pour cette fonctionnalité)
-            driver = None
-            wait = None
-            try:
-                options = webdriver.ChromeOptions()
-                options.add_experimental_option("excludeSwitches", ["enable-logging"]) 
-                options.add_argument("--log-level=3")
-                options.add_argument("--disable-extensions")
-                options.add_argument("--disable-gpu")
-                options.add_argument("--no-sandbox")
-                options.add_argument("--disable-dev-shm-usage")
-                try:
-                    # Ne pas attendre le chargement complet des pages
-                    options.page_load_strategy = 'none'
-                except Exception:
-                    pass
-                # IMPORTANT: ne pas forcer headless ici afin que l'utilisateur voie le navigateur
-                local_driver = os.path.join(REPO_ROOT if 'REPO_ROOT' in globals() else os.path.abspath(os.path.join(os.path.dirname(__file__), '..')), 'tools', 'chromedriver.exe')
-                if os.path.isfile(local_driver):
-                    driver = webdriver.Chrome(service=Service(local_driver), options=options)
-                else:
-                    driver = webdriver.Chrome(options=options)
-                try:
-                    driver.maximize_window()
-                except Exception:
-                    pass
-                # Attentes Selenium courtes mais un peu plus tolérantes (4s)
-                wait = WebDriverWait(driver, 4)
-            except Exception as se_init:
-                print(f"[Biodiv] Selenium init KO: {se_init}", file=self.stdout_redirect)
-            print(f"[Biodiv] Scraping de {len(species_list)} espece(s)...", file=self.stdout_redirect)
-
-            # Collecter toutes les données d'espèces avec leurs images
-            species_data = []
-            
-            # Charger le mapping TAXREF (nom latin -> CD_NOM) pour construire directement les URLs
-            taxref_map = {}
-            try:
-                repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-                taxref_path = os.path.join(repo_root, "Bases de données", "taxref.json")
-                with open(taxref_path, "r", encoding="utf-8") as f:
-                    taxref_raw = json.load(f)
-                # Normaliser en minuscule; ignorer l'en-tête "nom latin": "CD_NOM"
-                for k, v in taxref_raw.items():
-                    if k.strip().lower() == "nom latin":
-                        continue
-                    taxref_map[k.strip().lower()] = str(v).strip()
-                print(f"[Biodiv] TAXREF charge: {len(taxref_map)} entrées", file=self.stdout_redirect)
-            except Exception as te:
-                print(f"[Biodiv] Impossible de charger TAXREF: {te}", file=self.stdout_redirect)
-            
-            # On n'ouvre pas la page d'accueil ici. On ira directement sur l'URL espèce quand on l'a.
-
-            for idx, sp in enumerate(species_list, start=1):
-                try:
-                    print(f"[Biodiv] ({idx}/{len(species_list)}) {sp}", file=self.stdout_redirect)
-                    
-                    # Essayer d'abord de construire l'URL via TAXREF (nom latin -> CD_NOM)
-                    url_sp = None
-                    cd_nom = None
-                    tmp_path = None
-                    try:
-                        key = sp.strip().lower()
-                        cd_nom = taxref_map.get(key)
-                    except Exception:
-                        cd_nom = None
-
-                    # Si l'utilisateur a collé directement un CD_NOM (ligne numérique)
-                    if not cd_nom:
-                        stripped = sp.strip().replace(" ", "")
-                        if stripped.isdigit():
-                            cd_nom = stripped
-
-                    if cd_nom:
-                        # Construire l'URL espèce directement
-                        url_sp = f"https://atlas.biodiversite-auvergne-rhone-alpes.fr/espece/{cd_nom}"
-                        # Utiliser requests en priorité (plus rapide, pas d'attente Selenium)
-                        img_url = None
-                        tmp_path = None
-                        try:
-                            resp = requests.get(
-                                url_sp,
-                                timeout=8,
-                                headers={
-                                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-                                },
-                            )
-                            if resp.ok:
-                                soup = BeautifulSoup(resp.text, "html.parser")
-                                m = soup.select_one("meta[property='og:image']")
-                                if m and m.get("content"):
-                                    img_url = m.get("content")
-                        except Exception as e_req:
-                            print(f"[Biodiv] Echec requete: {e_req}", file=self.stdout_redirect)
-
-                        # Fallback Selenium si pas d'URL image trouvée via requests
-                        if not img_url and driver is not None:
-                            try:
-                                driver.get(url_sp)
-                                # Attendre un minimum que le DOM soit prêt
-                                try:
-                                    WebDriverWait(driver, 4).until(lambda d: d.execute_script("return document.readyState") in ("interactive", "complete"))
-                                except Exception:
-                                    pass
-                                # Extraire og:image via JS avec échappement correct
-                                og = driver.execute_script('var m=document.querySelector("meta[property=\'og:image\']"); return m?m.content:null;')
-                                if og and isinstance(og, str) and og.startswith("http"):
-                                    img_url = og
-                            except Exception as e_se:
-                                print(f"[Biodiv] Selenium fallback KO: {e_se}", file=self.stdout_redirect)
-
-                        # Télécharger l'image si une URL a été trouvée
-                        if img_url:
-                            try:
-                                img_resp = requests.get(
-                                    img_url,
-                                    stream=True,
-                                    timeout=15,
-                                    headers={
-                                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-                                    },
-                                )
-                                if img_resp.ok:
-                                    safe_name = re.sub(r"[^\w\-]+", "_", sp.strip())[:80]
-                                    ext = os.path.splitext((img_url.split("?")[0]).strip())[1] or ".jpg"
-                                    if len(ext) > 6:
-                                        ext = ".jpg"
-                                    tmp_path = os.path.join(out_dir, f"{safe_name}{ext}")
-                                    with open(tmp_path, "wb") as f:
-                                        for chunk in img_resp.iter_content(chunk_size=8192):
-                                            if chunk:
-                                                f.write(chunk)
-                                    print(f"[Biodiv] Image ok: {tmp_path}", file=self.stdout_redirect)
-                                else:
-                                    print(f"[Biodiv] HTTP {img_resp.status_code} pour {img_url}", file=self.stdout_redirect)
-                            except Exception as de_dl:
-                                print(f"[Biodiv] Echec dl image {img_url}: {de_dl}", file=self.stdout_redirect)
-                        else:
-                            print(f"[Biodiv] Aucune image pour {sp} ({url_sp or 'URL inconnue'})", file=self.stdout_redirect)
-                    
-
-                    # URL de la page espece (deja calculee si TAXREF)
-                    if not url_sp:
-                        try:
-                            url_sp = driver.current_url
-                        except Exception:
-                            url_sp = None
-
-                    species_data.append({
-                        'name': sp,
-                        'image_path': tmp_path,
-                        'url': url_sp
-                    })
-
-                except Exception as sp_err:
-                    print(f"[Biodiv] Erreur espece {sp}: {sp_err}", file=self.stdout_redirect)
-                    species_data.append({'name': sp, 'image_path': None, 'url': None})
-
-            if driver is not None:
-                try:
-                    driver.quit()
-                except Exception:
-                    pass
-
-            # Créer le tableau avec les images (2x3 format)
-            self._create_species_table(doc, species_data)
-
-            ts = datetime.datetime.now().strftime('%Y%m%d-%H%M')
-            doc_path = os.path.join(out_dir, f"Photos_BiodivAURA_{ts}.docx")
-            try:
-                doc.save(doc_path)
-                print(f"[Biodiv] Document genere: {doc_path}", file=self.stdout_redirect)
-            except Exception as se:
-                print(f"[Biodiv] Sauvegarde echouee: {se}", file=self.stdout_redirect)
-
-            self._set_status(f"Termine - {doc_path}")
-
-        except Exception as e:
-            print(f"[Biodiv] Erreur: {e}", file=self.stdout_redirect)
-        finally:
-            try:
-                if hasattr(self, 'biodiv_launch_btn'):
-                    self.after(0, lambda: self.biodiv_launch_btn.config(state='normal'))
-            except Exception:
-                pass
-
-    def _create_species_table(self, doc, species_data):
-        """Crée un tableau 2x3 avec les images d'espèces comme dans le screenshot"""
-        if not species_data:
-            return
-
-        # Traiter les espèces par groupes de 6 (2 lignes x 3 colonnes)
-        for page_start in range(0, len(species_data), 6):
-            page_species = species_data[page_start:page_start + 6]
-            
-            # Calculer le nombre de lignes nécessaires
-            rows_needed = (len(page_species) + 2) // 3  # +2 pour arrondir vers le haut
-            
-            # Créer le tableau
-            table = doc.add_table(rows=rows_needed, cols=3)
-            table.alignment = WD_TABLE_ALIGNMENT.CENTER
-            
-            # Configurer le style du tableau
-            table.style = 'Table Grid'
-            
-            # Remplir le tableau
-            for i, species in enumerate(page_species):
-                row_idx = i // 3
-                col_idx = i % 3
-                cell = table.cell(row_idx, col_idx)
-                
-                # Vider la cellule
-                cell.text = ''
-                
-                # Ajouter l'image
-                if species['image_path'] and os.path.exists(species['image_path']):
-                    try:
-                        # Créer un paragraphe pour l'image
-                        img_paragraph = cell.paragraphs[0]
-                        img_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                        run = img_paragraph.runs[0] if img_paragraph.runs else img_paragraph.add_run()
-                        
-                        # Ajuster la taille de l'image pour le tableau (plus petite)
-                        img_width = Cm(4.5)  # Largeur réduite pour s'adapter au tableau
-                        run.add_picture(species['image_path'], width=img_width)
-                        
-                    except Exception as e:
-                        print(f"[Biodiv] Erreur ajout image {species['name']}: {e}", file=self.stdout_redirect)
-                        cell.paragraphs[0].add_run("[Image non disponible]")
-                else:
-                    cell.paragraphs[0].add_run("[Image non disponible]")
-                    cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-                
-                # Ajouter le nom de l'espèce en dessous
-                name_paragraph = cell.add_paragraph()
-                name_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                name_run = name_paragraph.add_run(species['name'])
-                name_run.bold = True
-                
-                # Ajouter le lien si disponible
-                if species['url']:
-                    try:
-                        link_paragraph = cell.add_paragraph()
-                        link_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                        add_hyperlink(link_paragraph, species['url'], "Voir sur Biodiv'AURA", italic=True)
-                    except Exception:
-                        pass
-            
-            # Ajuster la largeur des cellules
-            for row in table.rows:
-                for cell in row.cells:
-                    # Définir la largeur des cellules
-                    cell.width = Cm(5.5)
-            
-            # Ajouter un saut de page si ce n'est pas la dernière page
-            if page_start + 6 < len(species_data):
-                doc.add_page_break()
-
-
-
-    def open_google_maps(self):
-        """Ouvre Google Maps avec le centroïde de la zone d'étude"""
-        ze_path = self.ze_shp_var.get()
-        if not ze_path or not os.path.isfile(ze_path):
-            messagebox.showerror("Erreur", "Veuillez d'abord sélectionner un shapefile pour la Zone d'étude.")
-            return
-        
-        try:
-            import geopandas as gpd
-            gdf = gpd.read_file(ze_path)
-            if gdf.crs is None:
-                messagebox.showwarning("Avertissement", "Le shapefile n'a pas de CRS défini.")
-            
-            # Reproject to WGS84 for lat/lon
-            gdf_wgs84 = gdf.to_crs("EPSG:4326")
-            centroid = gdf_wgs84.geometry.union_all().centroid
-            lat, lon = centroid.y, centroid.x
-            
-            url = f"https://www.google.com/maps/@{lat},{lon},15z"
-            import webbrowser
-            webbrowser.open(url)
-            print(f"[Maps] Ouverture Google Maps: {lat:.6f}, {lon:.6f}", file=self.stdout_redirect)
-            
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Erreur lors de l'ouverture de Google Maps : {e}")
-
-    def open_remonter_temps(self):
-        """Ouvre Remonter le temps avec le centroïde de la zone d'étude"""
-        ze_path = self.ze_shp_var.get()
-        if not ze_path or not os.path.isfile(ze_path):
-            messagebox.showerror("Erreur", "Veuillez d'abord sélectionner un shapefile pour la Zone d'étude.")
-            return
-        
-        try:
-            import geopandas as gpd
-            gdf = gpd.read_file(ze_path)
-            if gdf.crs is None:
-                messagebox.showwarning("Avertissement", "Le shapefile n'a pas de CRS défini.")
-            
-            # Reproject to WGS84 for lat/lon
-            gdf_wgs84 = gdf.to_crs("EPSG:4326")
-            centroid = gdf_wgs84.geometry.union_all().centroid
-            lat, lon = centroid.y, centroid.x
-            
-            url = f"https://remonterletemps.ign.fr/comparer/basic?x={lon}&y={lat}&z=15&layer1=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&layer2=ORTHOIMAGERY.ORTHOPHOTOS&mode=vSlider"
-            import webbrowser
-            webbrowser.open(url)
-            print(f"[Temps] Ouverture Remonter le temps: {lat:.6f}, {lon:.6f}", file=self.stdout_redirect)
-            
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Erreur lors de l'ouverture de Remonter le temps : {e}")
-
-    def start_bassin_thread(self):
-        if not self.ze_shp_var.get().strip():
-            messagebox.showerror("Erreur", "Veuillez d'abord sélectionner un shapefile pour la Zone d'étude.")
-            return
-        self.bassin_button.config(state="disabled")
-        # Use shared browser if available
-        driver = self._get_or_create_driver() if hasattr(self, '_get_or_create_driver') else None
-        t = threading.Thread(target=self._run_bassin, args=(driver,))
-        t.daemon = True
-        t.start()
-
-
-
-    def open_gmaps(self):
-
-        if not self.ze_shp_var.get().strip():
-
-            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
-
-            return
-
-        try:
-
-            gdf = gpd.read_file(self.ze_shp_var.get())
-
-            if gdf.crs is None:
-
-                raise ValueError("CRS non défini")
-
-            gdf = gdf.to_crs("EPSG:4326")
-
-            centroid = gdf.geometry.union_all().centroid
-
-            lat, lon = centroid.y, centroid.x
-
-            url = f"https://www.google.com/maps/@{lat},{lon},17z"
-
-            print(f"[Maps] {url}", file=self.stdout_redirect)
-
-            webbrowser.open(url)
-
-        except Exception as e:
-
-            messagebox.showerror("Erreur", f"Impossible d’ouvrir Google Maps : {e}")
-
-
-
-    def start_rlt_thread(self):
-        if not self.ze_shp_var.get().strip():
-            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
-            return
-        self.rlt_button.config(state="disabled")
-        # Use shared browser if available
-        driver = self._get_or_create_driver() if hasattr(self, '_get_or_create_driver') else None
-        t = threading.Thread(target=self._run_rlt, args=(driver,))
-        t.daemon = True
-        t.start()
-
-
-    def _run_rlt(self, driver=None):
-        try:
-            ze_path = self.ze_shp_var.get()
-            gdf = gpd.read_file(ze_path)
-            if gdf.crs is None:
-               # Extraire le centroïde de la zone d'étude
-            if not gdf.empty:
-                centroid = gdf.geometry.union_all().centroid
-                lat_dd, lon_dd = centroid.y, centroid.x
-                commune, _dep = self._detect_commune(lat_dd, lon_dd)
-                wait_s = WAIT_TILES_DEFAULT
-                out_dir = OUTPUT_DIR_RLT
-                os.makedirs(out_dir, exist_ok=True)
-                comment_txt = COMMENT_TEMPLATE.format(commune=commune)
-            comment_txt = COMMENT_TEMPLATE.format(commune=commune)
-
-            # Use shared driver or create new one if not provided
-            if driver is None:
-                driver = self._get_or_create_driver()
-                if not driver:
-                    print("[IGN] Impossible de créer le navigateur", file=self.stdout_redirect)
-                    return
-                should_cleanup = True
-            else:
-                should_cleanup = False
-                # Open in new tab
-                driver.execute_script("window.open('');")
-                driver.switch_to.window(driver.window_handles[-1])
-
-            print(f"[IGN] Utilisation du navigateur partagé…", file=self.stdout_redirect)
-
-
-
-            images = []
-
-            viewport = (By.CSS_SELECTOR, "div.ol-viewport")
-
-            for title, layer_val in LAYERS:
-
-                url = URL.format(lon=f"{lon_dd:.6f}", lat=f"{lat_dd:.6f}", layer=layer_val)
-
-                print(f"[IGN] {title} ? {url}", file=self.stdout_redirect)
-
-                driver.get(url)
-
-                WebDriverWait(driver, 20).until(EC.visibility_of_element_located(viewport))
-
-                time.sleep(wait_s)
-
-                tgt = driver.find_element(*viewport)
-
-                img_path = os.path.join(out_dir, f"{title}.png")
-
-                if tgt.screenshot(img_path):
-
-                    img = Image.open(img_path)
-
-                    w, h = img.size
-
-                    left, right = int(w * 0.05), int(w * 0.95)
-
-                    img.crop((left, 0, right, h)).save(img_path)
-
-                    images.append((title, img_path))
-
-                    print(f"[IGN] Capture OK : {img_path}", file=self.stdout_redirect)
-
-                else:
-
-                    print(f"[IGN] Capture échouée : {title}", file=self.stdout_redirect)
-
-
-
-            driver.quit()
-
-
-
-            if not images:
-
-                print("[IGN] Aucune image ? pas de doc.", file=self.stdout_redirect)
-
-                messagebox.showwarning("IGN", "Aucune image capturée.")
-
-                return
-
-
-
-            print("[IGN] Génération du Word…", file=self.stdout_redirect)
-
-            doc = Document()
-
-            style_normal = doc.styles['Normal']
-
-            style_normal.font.name = 'Calibri'
-
-            style_normal._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
-
-            style_tbl = doc.styles['Table Grid']
-
-            style_tbl.font.name = 'Calibri'
-
-            style_tbl._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
-
-
-
-            sec = doc.sections[0]
-
-            sec.orientation = WD_ORIENT.LANDSCAPE
-
-            sec.page_width, sec.page_height = sec.page_height, sec.page_width
-
-            for m in (sec.left_margin, sec.right_margin, sec.top_margin, sec.bottom_margin):
-
-                m = Cm(1.5)
-
-
-
-            cap_par = doc.add_paragraph()
-
-            cap_par.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-            add_hyperlink(cap_par, "https://remonterletemps.ign.fr/",
-
-                          f"Comparaison temporelle — {commune} (source : IGN – RemonterLeTemps)")
-
-
-
-            table = doc.add_table(rows=2, cols=2)
-
-            table.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-            table.style = "Table Grid"
-
-            table.autofit = False
-
-
-
-            for idx, (title, path) in enumerate(images):
-
-                r, c = divmod(idx, 2)
-
-                cell = table.cell(r, c)
-
-                p_t = cell.paragraphs[0]
-
-                run_t = p_t.add_run(title); run_t.bold = True
-
-                p_t.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-                cell.add_paragraph()
-
-                p_img = cell.add_paragraph()
-
-                if os.path.exists(path):
-
-                    p_img.add_run().add_picture(path, width=IMG_WIDTH)
-
-                else:
-
-                    p_img.add_run(f"[image manquante : {title}]")
-
-                p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-
-
-            doc.add_paragraph()
-
-            p_comm = doc.add_paragraph(comment_txt)
-
-            p_comm.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-
-
-            doc_path = os.path.join(out_dir, WORD_FILENAME)
-
-            doc.save(doc_path)
-
-            print(f"[IGN] Document généré : {doc_path}", file=self.stdout_redirect)
-
-            self._set_status(f"Terminé — {doc_path}")
-
-        except Exception as e:
-
-            print(f"[IGN] Erreur : {e}", file=self.stdout_redirect)
-
-            messagebox.showerror("IGN", str(e))
-
-        finally:
-
-            self.after(0, lambda: self.rlt_button.config(state="normal"))
-
-
-
-    def _run_bassin(self, driver=None):
-        try:
-
-            ze_path = self.ze_shp_var.get()
-
-            gdf = gpd.read_file(ze_path)
-
-            if gdf.crs is None:
-
-                raise ValueError("CRS non défini")
-
-            gdf = gdf.to_crs("EPSG:4326")
-
-            centroid = gdf.geometry.unary_union.centroid
-
-            lat_dd, lon_dd = centroid.y, centroid.x
-
-            user_address = dd_to_dms(lat_dd, lon_dd)
-
-            download_dir = OUT_IMG
-
-            target_folder_name = "Bassin versant"
-
-            target_path = os.path.join(download_dir, target_folder_name)
-
-            os.makedirs(download_dir, exist_ok=True)
-
-            print(f"[BV] Coordonnées : {lat_dd:.6f}, {lon_dd:.6f}", file=self.stdout_redirect)
-
-            # Use shared driver or create new one if not provided
-            if driver is None:
-                # Create driver with download preferences for this specific task
-                options = webdriver.ChromeOptions()
-                options.add_argument("--log-level=3")
-                options.add_experimental_option('excludeSwitches', ['enable-logging'])
-                options.add_argument("--disable-extensions")
-                prefs = {
-                    "download.default_directory": download_dir,
-                    "download.prompt_for_download": False,
-                    "profile.default_content_settings.popups": 0,
-                    "download.directory_upgrade": True
-                }
-                options.add_experimental_option("prefs", prefs)
-                driver = webdriver.Chrome(options=options)
-                try:
-                    driver.maximize_window()
-                except Exception:
-                    pass
-                should_cleanup = True
-                print("[BV] Navigateur créé avec préférences de téléchargement...", file=self.stdout_redirect)
-            else:
-                should_cleanup = False
-                # Open in new tab
-                driver.execute_script("window.open('');")
-                driver.switch_to.window(driver.window_handles[-1])
-                print("[BV] Utilisation du navigateur partagé (nouvel onglet)...", file=self.stdout_redirect)
-
-            url = "https://mghydro.com/watersheds/"
-
-            print(f"[BV] Navigation vers {url}...", file=self.stdout_redirect)
-
-            driver.get(url)
-
-            wait = WebDriverWait(driver, 2)
-
-            opts_button = wait.until(EC.element_to_be_clickable((By.ID, "opts_click")))
-
-            opts_button.click(); time.sleep(1)
-
-            downloadable_checkbox = wait.until(EC.element_to_be_clickable((By.ID, "downloadable")))
-
-            if not downloadable_checkbox.is_selected():
-
-                downloadable_checkbox.click()
-
-            search_icon = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".leaflet-control-search .search-button")))
-
-            search_icon.click()
-
-            search_input = wait.until(EC.visibility_of_element_located((By.ID, "searchtext84")))
-
-            search_input.clear(); time.sleep(0.3)
-
-            search_input.send_keys(user_address); time.sleep(1.5)
-
-            search_input.send_keys(Keys.ARROW_DOWN); time.sleep(0.3)
-
-            search_input.send_keys(Keys.ENTER); time.sleep(1.5)
-
-            map_element = wait.until(EC.presence_of_element_located((By.ID, "map")))
-
-            ActionChains(driver).move_to_element(map_element).click().perform(); time.sleep(0.8)
-
-            wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "div.leaflet-popup")))
-
-            delineate_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".leaflet-popup .gobutton")))
-
-            delineate_button.click(); time.sleep(1.5)
-
-            downloads_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(@class, 'ui-selectmenu-text') and contains(text(), 'Watershed Boundary')]")))
-
-            downloads_button.click(); time.sleep(0.8)
-
-            ActionChains(driver).send_keys(Keys.ARROW_DOWN).pause(0.3).send_keys(Keys.ARROW_DOWN).pause(0.3).send_keys(Keys.ENTER).perform()
-
-            time.sleep(1.5)
-
-        except Exception as e:
-
-            print(f"[BV] Erreur Selenium : {e}", file=self.stdout_redirect)
-
-        finally:
-
-            # Only cleanup if we created the driver ourselves
-            if should_cleanup:
-                try:
-                    driver.quit()
-                except Exception:
-                    pass
-            else:
-                # Just close the current tab
-                try:
-                    driver.close()
-                    if len(driver.window_handles) > 0:
-                        driver.switch_to.window(driver.window_handles[0])
-                except Exception:
-                    pass
-
-
-
-        try:
-
-            print("[BV] Attente du téléchargement du ZIP...", file=self.stdout_redirect)
-
-            zip_file_path = None
-
-            wait_time = 30
-
-            start_time = time.time()
-
-            while time.time() - start_time < wait_time:
-
-                zip_candidates = [f for f in os.listdir(download_dir) if f.lower().endswith('.zip') and not f.lower().endswith('.crdownload')]
-
-                if zip_candidates:
-
-                    zip_candidates_full = [os.path.join(download_dir, z) for z in zip_candidates]
-
-                    zip_file_path = max(zip_candidates_full, key=os.path.getmtime)
-
-                    size1 = os.path.getsize(zip_file_path); time.sleep(1); size2 = os.path.getsize(zip_file_path)
-
-                    if size1 == size2:
-
-                        print(f"[BV] ZIP détecté : {os.path.basename(zip_file_path)}", file=self.stdout_redirect)
-
-                        break
-
-                time.sleep(1)
-
-
-
-            if not zip_file_path:
-
-                print("[BV] Aucun fichier ZIP trouvé.", file=self.stdout_redirect)
-
-            else:
-
-                if os.path.exists(target_path):
-
-                    print(f"[BV] Remplacement du dossier '{target_folder_name}'", file=self.stdout_redirect)
-
-                    shutil.rmtree(target_path, ignore_errors=True)
-
-                os.makedirs(target_path, exist_ok=True)
-
-                with zipfile.ZipFile(zip_file_path, 'r') as zf:
-
-                    zf.extractall(path=target_path)
-
-                os.remove(zip_file_path)
-
-                print(f"[BV] Décompression terminée dans '{target_folder_name}'", file=self.stdout_redirect)
-
-                self._set_status(f"Bassin versant : {target_path}")
-
-        except Exception as e:
-
-            print(f"[BV] Erreur décompression : {e}", file=self.stdout_redirect)
-
-        finally:
-
-            self.after(0, lambda: self.bassin_button.config(state="normal"))
-
-
-
-    def _set_status(self, txt: str):
-
-        self.after(0, lambda: self.status_label.config(text=txt))
-
-
-
-    def _detect_commune(self, lat: float, lon: float) -> Tuple[str, str]:
-
-        try:
-
-            url = ("https://nominatim.openstreetmap.org/reverse?format=json"
-
-                   f"&lat={lat}&lon={lon}&zoom=10&addressdetails=1")
-
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-
+    # ... (rest of the code remains the same)
             with urllib.request.urlopen(req, timeout=10) as resp:
 
                 data = json.load(resp)
