@@ -99,6 +99,7 @@ import subprocess
 
 import geopandas as gpd
 from bs4 import BeautifulSoup
+import pandas as pd
 
 # --- Helper functions for Word document generation ---
 def dms_to_dd(text: str) -> float:
@@ -1098,6 +1099,8 @@ class ExportCartesTab(ttk.Frame):
     def _build_ui(self):
         # State
         self.busy = False
+        self.report_mode = False
+        self.report_stage = None
         self.wiki_last_url = ""
 
         # Vars used elsewhere
@@ -1185,10 +1188,13 @@ class ExportCartesTab(ttk.Frame):
         act_frm.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(10,4))
         act_frm.columnconfigure(0, weight=1)
         act_frm.columnconfigure(1, weight=1)
+        act_frm.columnconfigure(2, weight=1)
         self.export_button = ttk.Button(act_frm, text="Exporter cartes", style="Accent.TButton", command=self.start_export_thread)
         self.export_button.grid(row=0, column=0, sticky="ew", padx=(0,6))
         self.id_button = ttk.Button(act_frm, text="ID Contexte éco", command=self.start_id_thread)
-        self.id_button.grid(row=0, column=1, sticky="ew")
+        self.id_button.grid(row=0, column=1, sticky="ew", padx=(0,6))
+        self.report_button = ttk.Button(act_frm, text="Rapport automatique", command=self.start_report_thread)
+        self.report_button.grid(row=0, column=2, sticky="ew")
 
         # ID buffer
         id_frm = ttk.Frame(left)
@@ -1998,6 +2004,8 @@ class ExportCartesTab(ttk.Frame):
         try:
             if hasattr(self, 'id_button') and self.id_button:
                 self.id_button.config(state="disabled")
+            if hasattr(self, 'report_button') and self.report_button:
+                self.report_button.config(state="disabled")
         except Exception:
             pass
 
@@ -2321,6 +2329,34 @@ class ExportCartesTab(ttk.Frame):
 
     # ---------- Lancement ID contexte ----------
 
+    def start_report_thread(self):
+
+        if self.busy:
+            print("Une action est déjà en cours.", file=self.stdout_redirect)
+            return
+
+        if not self.ze_shp_var.get() or not self.ae_shp_var.get():
+            messagebox.showerror("Erreur", "Sélectionnez les deux shapefiles."); return
+        if not os.path.isfile(self.ze_shp_var.get()) or not os.path.isfile(self.ae_shp_var.get()):
+            messagebox.showerror("Erreur", "Un shapefile est introuvable."); return
+
+        projets = self._selected_projects()
+        if not projets:
+            messagebox.showerror("Erreur", "Sélectionnez au moins un projet."); return
+
+        self.report_mode = True
+        self.report_stage = "id"
+        self.report_projets = projets
+
+        try:
+            if hasattr(self, 'report_button') and self.report_button:
+                self.report_button.config(state="disabled")
+        except Exception:
+            pass
+
+        self.start_id_thread()
+
+
     def start_id_thread(self):
 
         if self.busy:
@@ -2350,6 +2386,8 @@ class ExportCartesTab(ttk.Frame):
         try:
             if hasattr(self, 'id_button') and self.id_button:
                 self.id_button.config(state="disabled")
+            if hasattr(self, 'report_button') and self.report_button:
+                self.report_button.config(state="disabled")
         except Exception:
             pass
 
@@ -2413,7 +2451,99 @@ class ExportCartesTab(ttk.Frame):
 
 
 
+    def _generate_word_report(self, out_dir: str):
+
+        template_dir = os.path.join(BASE_DIR, "Template word  Contexte éco")
+        templates = [f for f in os.listdir(template_dir) if f.lower().endswith(".docx")]
+        if not templates:
+            log_with_time("Aucun modèle Word trouvé")
+            return
+        template_src = os.path.join(template_dir, templates[0])
+        dst = os.path.join(out_dir, "Contexte_eco_rapport.docx")
+        shutil.copyfile(template_src, dst)
+        doc = Document(dst)
+
+        excel_path = os.path.join(out_dir, "ID zonages.xlsx")
+        marker_tables = {
+            "TABLEAU NATURA2000": ["Natura 2000", "N2000 ZPS", "N2000 ZSC"],
+            "TABLEAU ZNIEFF": ["ZNIEFF de Type I", "ZNIEFF de Type II"],
+            "TABLEAU APPB": ["APPB"],
+            "TABLEAU ENS": ["ENS"],
+            "TABLEAU PNN": ["Parcs"],
+            "TABLEAU PRN": ["Parcs"],
+        }
+        marker_images = {
+            "CARTE NATURA2000": "Contexte éco - N2000__AE.png",
+            "CARTE ZNIEFF": "Contexte éco - ZNIEFF__AE.png",
+            "CARTE APPB": "Contexte éco - APPB__AE.png",
+            "CARTE ENS": "Contexte éco - ENS__AE.png",
+            "CARTE PNN": "Contexte éco - Parc National__AE.png",
+        }
+
+        for para in list(doc.paragraphs):
+            text = para.text.strip()
+            if text in marker_tables:
+                sheets = marker_tables[text]
+                for sheet in sheets:
+                    try:
+                        df = pd.read_excel(excel_path, sheet_name=sheet)
+                    except Exception:
+                        continue
+                    if df.empty:
+                        continue
+                    table = doc.add_table(rows=len(df.index)+1, cols=len(df.columns))
+                    for i, col in enumerate(df.columns):
+                        table.cell(0, i).text = str(col)
+                    for r in range(len(df.index)):
+                        for c in range(len(df.columns)):
+                            table.cell(r+1, c).text = str(df.iat[r, c])
+                    para._p.addnext(table._tbl)
+                p_parent = para._element.getparent()
+                p_parent.remove(para._element)
+            elif text in marker_images:
+                img_path = os.path.join(out_dir, marker_images[text])
+                if os.path.isfile(img_path):
+                    run = para.add_run()
+                    run.add_picture(img_path, width=Cm(15))
+                para.text = ""
+
+        doc.save(dst)
+        log_with_time(f"Rapport généré: {dst}")
+
+
     def _run_finished(self):
+        if getattr(self, "report_mode", False):
+            if self.report_stage == "id":
+                self.report_stage = "export"
+                self.busy = False
+                self.start_export_thread()
+                return
+            elif self.report_stage == "export":
+                out_dir = self.out_dir_var.get() or OUT_IMG
+                try:
+                    self._generate_word_report(out_dir)
+                    self.status_label.config(text="Rapport généré")
+                except Exception as e:
+                    log_with_time(f"Erreur génération rapport: {e}")
+                    _err = str(e)
+                    self.after(0, lambda msg=_err: messagebox.showerror("Erreur", msg))
+                self.report_mode = False
+                self.report_stage = None
+                self.report_projets = []
+        else:
+            self.export_button.config(state="normal")
+            try:
+                if hasattr(self, 'id_button') and self.id_button:
+                    self.id_button.config(state="normal")
+            except Exception:
+                pass
+            try:
+                if hasattr(self, 'report_button') and self.report_button:
+                    self.report_button.config(state="normal")
+            except Exception:
+                pass
+            self.busy = False
+            return
 
         self.export_button.config(state="normal")
         try:
@@ -2421,7 +2551,11 @@ class ExportCartesTab(ttk.Frame):
                 self.id_button.config(state="normal")
         except Exception:
             pass
-
+        try:
+            if hasattr(self, 'report_button') and self.report_button:
+                self.report_button.config(state="normal")
+        except Exception:
+            pass
         self.busy = False
 
 
