@@ -3311,20 +3311,48 @@ class ContexteEcoTab(ttk.Frame):
 
 
                 # 10) Cliquer sur 'Ressources'
-
+                print("[Cartes] Recherche du bouton 'Ressources'...", file=self.stdout_redirect)
+                
                 try:
+                    # Essayer plusieurs sélecteurs pour le bouton Ressources
+                    ressources_selectors = [
+                        "//button[contains(.,'Ressources')]",
+                        "//button[contains(text(),'Ressources')]",
+                        "//button[@class='action-button' and contains(.,'Ressources')]",
+                        ".action-button"
+                    ]
+                    
+                    btn_res = None
+                    for selector in ressources_selectors:
+                        try:
+                            if selector.startswith("//"):
+                                btn_res = wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
+                            else:
+                                btn_res = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
+                            print(f"[Cartes] Bouton trouvé avec sélecteur: {selector}", file=self.stdout_redirect)
+                            break
+                        except Exception:
+                            continue
+                    
+                    if btn_res:
+                        print("[Cartes] Clic sur le bouton Ressources...", file=self.stdout_redirect)
+                        btn_res.click()
+                    else:
+                        print("[Cartes] Bouton Ressources non trouvé - recherche de tous les boutons...", file=self.stdout_redirect)
+                        # Debug: lister tous les boutons disponibles
+                        buttons = self.vegsol_driver.find_elements(By.TAG_NAME, "button")
+                        for i, btn in enumerate(buttons):
+                            try:
+                                text = btn.text.strip()
+                                if text:
+                                    print(f"[Cartes] Bouton {i}: '{text}'", file=self.stdout_redirect)
+                            except Exception:
+                                pass
 
-                    btn_res = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(.,'Ressources')]")))
+                except Exception as btn_err:
+                    print(f"[Cartes] Erreur bouton Ressources: {btn_err}", file=self.stdout_redirect)
 
-                    btn_res.click()
-
-                except Exception:
-
-                    pass
-
-
-
-                time.sleep(0.75)
+                time.sleep(2.0)  # Attendre plus longtemps pour la popup
 
 
 
@@ -3352,9 +3380,23 @@ class ContexteEcoTab(ttk.Frame):
                         
                         print(f"[Cartes] Éléments trouvés - Altitude: {len(altitude_els)}, Végétation: {len(veg_els)}, Sols: {len(soil_els)}", file=self.stdout_redirect)
                         
+                        # Debug: afficher le contenu HTML des éléments trouvés
+                        if altitude_els:
+                            print(f"[Cartes] Contenu altitude HTML: {str(altitude_els[0])[:200]}", file=self.stdout_redirect)
+                        if veg_els:
+                            for i, el in enumerate(veg_els):
+                                print(f"[Cartes] Contenu végétation {i} HTML: {str(el)[:200]}", file=self.stdout_redirect)
+                        if soil_els:
+                            for i, el in enumerate(soil_els):
+                                print(f"[Cartes] Contenu sols {i} HTML: {str(el)[:200]}", file=self.stdout_redirect)
+                        
                         def _txt(sel):
                             el = soup.select_one(sel)
-                            return el.get_text(" ", strip=True) if el else "Non trouvé"
+                            if el:
+                                text = el.get_text(" ", strip=True)
+                                print(f"[Cartes] Texte extrait pour {sel}: '{text}'", file=self.stdout_redirect)
+                                return text if text.strip() else "Non trouvé"
+                            return "Non trouvé"
                         
                         alt_new = _txt("div.altitude-info")
                         veg_new = _txt("div.tooltip-pill.vegetation-pill")
