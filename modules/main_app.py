@@ -2582,9 +2582,9 @@ class ContexteEcoTab(ttk.Frame):
         top.bind("<Enter>", _bind_wheel)
         top.bind("<Leave>", _unbind_wheel)
 
-        # Layout horizontal principal
+        # Layout horizontal principal - suppression de la marge droite inutile
         main_horizontal = ttk.Frame(top)
-        main_horizontal.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+        main_horizontal.pack(fill=tk.BOTH, expand=True, padx=(8,0), pady=4)
         
         # Colonne gauche: Shapefiles + Options d'export
         left_column = ttk.Frame(main_horizontal, style="Card.TFrame", padding=8)
@@ -2669,7 +2669,7 @@ class ContexteEcoTab(ttk.Frame):
         
         left_column.columnconfigure(1, weight=1)
         
-        # Colonne droite: Projets + Résultats
+        # Colonne droite: Projets + Résultats - expansion complète
         right_column = ttk.Frame(main_horizontal)
         right_column.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(4,0))
 
@@ -3098,9 +3098,7 @@ class ContexteEcoTab(ttk.Frame):
 
                     pass
 
-            self.after(0, lambda: _fill(self.wiki_climat_txt, clim_txt2 or ''))
-
-            self.after(0, lambda: _fill(self.wiki_occ_txt, occ_txt2 or ''))
+            # Anciens widgets supprimés - utiliser le tableau consolidé à la place
 
             self.after(0, lambda: self.wiki_climat_var.set(_norm(clim_txt2)))
 
@@ -3500,11 +3498,13 @@ class ContexteEcoTab(ttk.Frame):
 
                     pass
 
-            self.after(0, lambda: _fill(self.veg_alt_txt, alt))
-
-            self.after(0, lambda: _fill(self.veg_veg_txt, veg))
-
-            self.after(0, lambda: _fill(self.veg_soil_txt, soil))
+            # Anciens widgets supprimés - utiliser le tableau consolidé à la place
+            # Mettre à jour le tableau avec les résultats
+            self.after(0, self._update_results_tree, {
+                "altitude": alt or 'Non trouvé',
+                "vegetation": veg or 'Non trouvé', 
+                "sols": soil or 'Non trouvé'
+            })
 
         except Exception:
 
