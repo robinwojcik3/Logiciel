@@ -1068,14 +1068,12 @@ class ExportCartesTab(ttk.Frame):
         self.project_vars: dict[str, tk.IntVar] = {}
 
         self.all_projects: List[str] = []
-
         self.filtered_projects: List[str] = []
 
         self.total_expected = 0
 
         self.progress_done  = 0
-
-
+        self.shared_driver = None
 
         self._build_ui()
 
@@ -1083,1899 +1081,69 @@ class ExportCartesTab(ttk.Frame):
 
         self._update_counts()
 
-
-
-    def _build_ui(self):
-        # Layout root of the tab: top scrollable content + fixed bottom console
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
-        top_container = ttk.Frame(self)
-        top_container.grid(row=0, column=0, sticky="nsew")
-        canvas = tk.Canvas(top_container, highlightthickness=0, borderwidth=0)
-        vscroll = ttk.Scrollbar(top_container, orient="vertical", command=canvas.yview)
-        hscroll = ttk.Scrollbar(top_container, orient="horizontal", command=canvas.xview)
-        canvas.configure(yscrollcommand=vscroll.set, xscrollcommand=hscroll.set)
-        vscroll.pack(side=tk.RIGHT, fill=tk.Y)
-        hscroll.pack(side=tk.BOTTOM, fill=tk.X)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        top = ttk.Frame(canvas)
-        _win = canvas.create_window((0, 0), window=top, anchor="nw")
-        def _on_frame_config(_e=None):
-            try:
-                canvas.configure(scrollregion=canvas.bbox("all"))
-            except Exception:
-                pass
-        def _on_canvas_config(e):
-            try:
-                pass
-            except Exception:
-                pass
-        top.bind("<Configure>", _on_frame_config)
-        canvas.bind("<Configure>", _on_canvas_config)
-        def _mw(e):
-            try:
-                delta = -1 * (e.delta // 120)
-            except Exception:
-                delta = -1 if getattr(e, 'num', 0) == 4 else (1 if getattr(e, 'num', 0) == 5 else 0)
-            if delta:
-                canvas.yview_scroll(delta, "units")
-        canvas.bind_all("<MouseWheel>", _mw)
-        canvas.bind_all("<Button-4>", _mw)
-        canvas.bind_all("<Button-5>", _mw)
-
-        header = ttk.Frame(top, style="Header.TFrame", padding=(14, 12))
-
-        header.pack(fill=tk.X, pady=(0, 10))
-
-        ttk.Label(header, text="Export cartes — QGIS ? PNG", style="Card.TLabel", font=self.font_title).grid(row=0, column=0, sticky="w")
-
-        ttk.Label(header, text="Sélection shapefiles, choix du cadrage, export multi-projets.", style="Subtle.TLabel", font=self.font_sub).grid(row=1, column=0, sticky="w", pady=(4,0))
-
-        header.columnconfigure(0, weight=1)
-
-
-
-        # IMPORTANT: place content inside 'top' so the canvas can scroll it
-        grid = ttk.Frame(top); grid.pack(fill=tk.BOTH, expand=True)
-
-        left = ttk.Frame(grid);  left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
-
-        right = ttk.Frame(grid); right.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
-
-        grid.columnconfigure(0, weight=1); grid.columnconfigure(1, weight=1); grid.rowconfigure(0, weight=1)
-
-
-
-        # Shapefiles
-
-        shp = ttk.Frame(left, style="Card.TFrame", padding=12); shp.pack(fill=tk.X)
-
-        ttk.Label(shp, text="1. Couches Shapefile", style="Card.TLabel").grid(row=0, column=0, columnspan=4, sticky="w")
-
-        self._file_row(shp, 1, "?? Zone d'étude…", self.ze_shp_var, lambda: self._select_shapefile('ZE'))
-
-        self._file_row(shp, 2, "📍 Aire d'étude élargie…", self.ae_shp_var, lambda: self._select_shapefile('AE'))
-
-        # Bouton pour identifier la commune
-        self.identify_commune_button = ttk.Button(shp, text="Identifier commune", command=self._identify_commune)
-        self.identify_commune_button.grid(row=3, column=0, sticky="w", pady=(10, 0))
-        commune_label = ttk.Label(shp, textvariable=self.commune_var, style="Card.TLabel", wraplength=300)
-        commune_label.grid(row=3, column=1, columnspan=3, sticky="w", padx=(10, 0), pady=(10, 0))
-
-        shp.columnconfigure(1, weight=1)
-
-
-
-        # Options
-
-        opt = ttk.Frame(left, style="Card.TFrame", padding=12); opt.pack(fill=tk.X, pady=(10,0))
-
-        ttk.Label(opt, text="2. Cadrage et options", style="Card.TLabel").grid(row=0, column=0, columnspan=6, sticky="w")
-
-        ttk.Radiobutton(opt, text="AE + ZE", variable=self.cadrage_var, value="BOTH", style="Card.TRadiobutton").grid(row=1, column=0, sticky="w", pady=(6,2))
-
-        ttk.Radiobutton(opt, text="ZE uniquement", variable=self.cadrage_var, value="ZE", style="Card.TRadiobutton").grid(row=1, column=1, sticky="w", padx=(12,0))
-
-        ttk.Radiobutton(opt, text="AE uniquement", variable=self.cadrage_var, value="AE", style="Card.TRadiobutton").grid(row=1, column=2, sticky="w", padx=(12,0))
-
-        ttk.Checkbutton(opt, text="Écraser si le PNG existe", variable=self.overwrite_var, style="Card.TCheckbutton").grid(row=1, column=3, sticky="w", padx=(24, 0))
-
-
-
-        ttk.Label(opt, text="DPI", style="Card.TLabel").grid(row=2, column=0, sticky="w", pady=(8,0))
-
-        ttk.Spinbox(opt, from_=72, to=1200, textvariable=self.dpi_var, width=6, justify="right").grid(row=2, column=1, sticky="w", pady=(8,0))
-
-        ttk.Label(opt, text="Workers", style="Card.TLabel").grid(row=2, column=2, sticky="w", padx=(12,0), pady=(8,0))
-
-        ttk.Spinbox(opt, from_=1, to=max(1, (os.cpu_count() or 2)), textvariable=self.workers_var, width=6, justify="right").grid(row=2, column=3, sticky="w", pady=(8,0))
-
-        ttk.Label(opt, text="Marge", style="Card.TLabel").grid(row=2, column=4, sticky="w", padx=(12,0), pady=(8,0))
-
-        ttk.Spinbox(opt, from_=1.00, to=2.00, increment=0.05, textvariable=self.margin_var, width=6, justify="right").grid(row=2, column=5, sticky="w", pady=(8,0))
-
-        ttk.Label(opt, text="Tampon ID (km)", style="Card.TLabel").grid(row=3, column=0, sticky="w", pady=(8,0))
-        ttk.Spinbox(opt, from_=0.0, to=100.0, increment=0.5, textvariable=self.id_buffer_km_var, width=6, justify="right").grid(row=3, column=1, sticky="w", pady=(8,0))
-
-
-
-
-        # Actions
-
-        act = ttk.Frame(left, style="Card.TFrame", padding=12); act.pack(fill=tk.X, pady=(10,0))
-
-        act.columnconfigure(0, weight=1)
-
-        self.export_button = ttk.Button(act, text="▶ Lancer l’export", style="Accent.TButton", command=self.start_export_thread)
-        self.export_button.grid(row=0, column=0, sticky="ew")
-
-        obtn = ttk.Button(act, text="📂 Ouvrir le dossier de sortie", command=self._open_out_dir)
-        obtn.grid(row=0, column=1, padx=(10,0)); ToolTip(obtn, OUT_IMG)
-
-        tbtn = ttk.Button(act, text="🧪 Tester QGIS", command=self._test_qgis_threaded)
-        tbtn.grid(row=0, column=2, padx=(10,0)); ToolTip(tbtn, "Vérifier l’import QGIS/Qt")
-
-        self.id_contexte_button = ttk.Button(act, text="ID Contexte éco", command=self._start_id_contexte_thread)
-        self.id_contexte_button.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(8, 0))
-
-
-
-        # Projets
-
-        proj = ttk.Frame(right, style="Card.TFrame", padding=12); proj.pack(fill=tk.BOTH, expand=True)
-
-        ttk.Label(proj, text="3. Projets QGIS", style="Card.TLabel").grid(row=0, column=0, columnspan=4, sticky="w")
-
-        ttk.Label(proj, text="Filtrer", style="Card.TLabel").grid(row=1, column=0, sticky="w", pady=(6,6))
-
-        self.filter_var = tk.StringVar()
-
-        fe = ttk.Entry(proj, textvariable=self.filter_var, width=32); fe.grid(row=1, column=1, sticky="w", pady=(6,6))
-
-        fe.bind("<KeyRelease>", lambda _e: self._apply_filter())
-
-        ttk.Button(proj, text="Tout", width=6, command=lambda: self._select_all(True)).grid(row=1, column=2, padx=(8,0))
-
-        ttk.Button(proj, text="Aucun", width=6, command=lambda: self._select_all(False)).grid(row=1, column=3, padx=(6,0))
-
-
-
-        canvas = tk.Canvas(proj, highlightthickness=0, borderwidth=0)
-
-        scrollbar = ttk.Scrollbar(proj, orient="vertical", command=canvas.yview)
-
-        self.scrollable_frame = ttk.Frame(canvas)
-
-        self.scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-
-        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-
-        canvas.configure(yscrollcommand=scrollbar.set, height=220)
-
-        canvas.grid(row=2, column=0, columnspan=4, sticky="nsew", pady=(6, 6))
-
-        scrollbar.grid(row=2, column=4, sticky="ns", padx=(6,0))
-
-        proj.rowconfigure(2, weight=1); proj.columnconfigure(1, weight=1)
-
-        # Conteneur des résultats (Wikipedia + Cartes végétation/sols) sous la liste des projets
-        self.wiki_container = ttk.Frame(right_pane)
-        right_pane.add(self.wiki_container, weight=1)
-
-        # Molette pour la liste des projets
-        def _mw_proj(e):
-            try:
-                delta = -1 * (e.delta // 120)
-            except Exception:
-                delta = -1 if getattr(e, 'num', 0) == 4 else (1 if getattr(e, 'num', 0) == 5 else 0)
-            if delta:
-                canvas.yview_scroll(delta, "units")
-            return "break"
-
-        def _bind_proj(_e=None):
-            canvas.bind_all("<MouseWheel>", _mw_proj)
-            canvas.bind_all("<Button-4>", _mw_proj)
-            canvas.bind_all("<Button-5>", _mw_proj)
-
-        def _unbind_proj(_e=None):
-            canvas.unbind_all("<MouseWheel>")
-            canvas.unbind_all("<Button-4>")
-            canvas.unbind_all("<Button-5>")
-
-        # Lancer le binding quand le pointeur entre dans la zone projets
-        self.scrollable_frame.bind("<Enter>", _bind_proj)
-        self.scrollable_frame.bind("<Leave>", _unbind_proj)
-        canvas.bind("<Enter>", _bind_proj)
-        canvas.bind("<Leave>", _unbind_proj)
-
-
-
-        # Bas
-
-        bottom = ttk.Frame(self, style="Card.TFrame", padding=12); bottom.pack(fill=tk.BOTH, expand=True, pady=(10,0))
-
-        self.status_label = ttk.Label(bottom, text="Prêt.", style="Status.TLabel"); self.status_label.grid(row=0, column=0, sticky="w")
-        # Statut
-        self.status_label = ttk.Label(bottom, text="Prêt.", style="Status.TLabel")
-        self.status_label.grid(row=0, column=0, sticky="w")
-
-        self.progress = ttk.Progressbar(bottom, orient="horizontal", mode="determinate", length=220)
-
-        self.progress.grid(row=0, column=1, sticky="e"); bottom.columnconfigure(0, weight=1)
-
-
-
-        log_frame = ttk.Frame(bottom, style="Card.TFrame"); log_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(8,0))
-
-        bottom.rowconfigure(1, weight=1)
-
-        self.log_text = tk.Text(log_frame, height=10, wrap=tk.WORD, state='disabled',
-
-                                bg=self.style_helper.style.lookup("Card.TFrame", "background"),
-
-                                fg=self.style_helper.style.lookup("TLabel", "foreground"))
-
-        self.log_text.configure(font=self.font_mono, relief="flat")
-
-        log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
-
-        self.log_text['yscrollcommand'] = log_scroll.set
-
-        log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        sys.stdout = TextRedirector(self.log_text)
-
-
-
-    def _file_row(self, parent, row: int, label: str, var: tk.StringVar, cmd):
-
-        btn = ttk.Button(parent, text=label, command=cmd)
-
-        btn.grid(row=row, column=0, sticky="w", pady=(8 if row == 1 else 4, 2))
-
-        ent = ttk.Entry(parent, textvariable=var, width=10); ent.grid(row=row, column=1, sticky="ew", padx=8)
-
-        ent.configure(state="readonly")
-
-        copy_btn = ttk.Button(parent, text="Copier", width=6, command=lambda: self._copy_to_clipboard(var.get()))
-
-        copy_btn.grid(row=row, column=2, sticky="e")
-
-        clear_btn = ttk.Button(parent, text="?", width=3, command=lambda: var.set(""))
-
-        clear_btn.grid(row=row, column=3, sticky="e")
-
-        ToolTip(copy_btn, "Copier le chemin"); ToolTip(clear_btn, "Effacer")
-
-        parent.columnconfigure(1, weight=1)
-
-
-
-    def _copy_to_clipboard(self, text: str):
-
-        try: self.winfo_toplevel().clipboard_clear(); self.winfo_toplevel().clipboard_append(text)
-
-        except Exception: pass
-
-
-
-    def _select_shapefile(self, shp_type):
-
-        label_text = "Zone d'étude" if shp_type == 'ZE' else "Aire d'étude élargie"
-
-        title = f"Sélectionner le shapefile pour '{label_text}'"
-
-        base_dir = DEFAULT_SHAPE_DIR if os.path.isdir(DEFAULT_SHAPE_DIR) else os.path.expanduser("~")
-
-        path = filedialog.askopenfilename(title=title, initialdir=base_dir, filetypes=[("Shapefile ESRI", "*.shp")])
-
-        if path:
-
-            if shp_type == 'ZE': self.ze_shp_var.set(path)
-
-            else: self.ae_shp_var.set(path)
-
-
-
-    def _populate_projects(self):
-
-        for w in list(self.scrollable_frame.children.values()): w.destroy()
-
-        self.project_vars.clear()
-
-        self.all_projects = discover_projects()
-
-        self.filtered_projects = list(self.all_projects)
-
-        if not self.all_projects:
-
-            ttk.Label(self.scrollable_frame, text="Aucun projet trouvé ou dossier inaccessible.", foreground="red").pack(anchor="w")
-
+    def _open_wiki_url(self):
+        url = (self.wiki_last_url or "").strip()
+        if not url:
+            messagebox.showinfo("Wikipedia", "Aucune URL disponible. Lancez d'abord le scraping.")
             return
 
-        for proj_path in self.filtered_projects:
-
-            var = tk.IntVar(value=1); self.project_vars[proj_path] = var
-
-            ttk.Checkbutton(self.scrollable_frame, text=os.path.basename(proj_path), variable=var, style="Card.TCheckbutton").pack(anchor='w', padx=4, pady=1)
-
-
-
-    def _apply_filter(self):
-
-        term = normalize_name(self.filter_var.get())
-
-        for w in list(self.scrollable_frame.children.values()): w.destroy()
-
-        self.filtered_projects = [p for p in self.all_projects if term in normalize_name(os.path.basename(p))]
-
-        if not self.filtered_projects:
-
-            ttk.Label(self.scrollable_frame, text="Aucun projet ne correspond au filtre.", foreground="red").pack(anchor="w")
-
-            self.project_vars = {}; self._update_counts(); return
-
-        for proj_path in self.filtered_projects:
-
-            current = self.project_vars.get(proj_path, tk.IntVar(value=1))
-
-            self.project_vars[proj_path] = current
-
-            ttk.Checkbutton(self.scrollable_frame, text=os.path.basename(proj_path), variable=current, style="Card.TCheckbutton").pack(anchor='w', padx=4, pady=1)
-
-        self._update_counts()
-
-
-
-    def _select_all(self, state: bool):
-
-        for var in self.project_vars.values(): var.set(1 if state else 0)
-
-        self._update_counts()
-
-
-
-    def _selected_projects(self) -> List[str]:
-
-        return [p for p, v in self.project_vars.items() if v.get() == 1 and p in self.filtered_projects]
-
-
-
-    def _update_counts(self):
-
-        selected = len(self._selected_projects()); total = len(self.filtered_projects)
-
-        self.status_label.config(text=f"Projets sélectionnés : {selected} / {total}")
-
-
-
-    def _open_out_dir(self):
-        try:
-            os.startfile(os.path.abspath(OUT_IMG))
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Impossible d'ouvrir le dossier de sortie :\n{e}")
-
-    def _start_id_contexte_thread(self):
-        # Run analysis in a separate thread to avoid freezing the UI
-        threading.Thread(target=self._run_id_contexte, daemon=True).start()
-
-    def _run_id_contexte(self):
-        self._set_status("Lancement de l'identification des zonages...")
-        self.id_contexte_button.config(state='disabled')
-
-        ae_shp = self.ae_shp_var.get()
-        ze_shp = self.ze_shp_var.get()
-        buffer_km = self.id_buffer_km_var.get()
-
-        if not ae_shp or not ze_shp:
-            messagebox.showerror("Erreur", "Veuillez sélectionner les shapefiles 'Zone d'étude' et 'Aire d'étude élargie'.")
-            self.id_contexte_button.config(state='normal')
-            self._set_status("Prêt.")
+        print(f"[Wiki] Ouverture dans le navigateur : {url}", file=self.stdout_redirect)
+        driver = self._get_or_create_driver()
+        if not driver:
             return
 
         try:
-            # This module will print to stdout, which is redirected to our console
-            from modules.id_contexte_eco import run_analysis
-            run_analysis(ae_shp=ae_shp, ze_shp=ze_shp, buffer_km=buffer_km)
-            self._set_status("Identification des zonages terminée.")
+            # Open in a new tab and switch to it
+            driver.execute_script(f"window.open('{url}', '_blank');")
+            driver.switch_to.window(driver.window_handles[-1])
         except Exception as e:
-            print(f"Erreur lors de l'exécution de id_contexte_eco: {e}")
-            traceback.print_exc(file=sys.stdout)
-            self._set_status("Erreur lors de l'identification.")
-        finally:
-            self.id_contexte_button.config(state='normal')
-
-
-    def _test_qgis_threaded(self):
-        # ... (rest of the code remains the same)
-        t = threading.Thread(target=self._test_qgis); t.daemon = True; t.start()
-
-
-
-    def _test_qgis(self):
-
-        try:
-
-            log_with_time("Test QGIS : import…")
-
-            cfg = {"QGIS_ROOT": QGIS_ROOT, "QGIS_APP": QGIS_APP, "PY_VER": PY_VER}
-
-            run_worker_subprocess([], cfg)
-
-            log_with_time("Test QGIS : OK")
-
-            messagebox.showinfo("QGIS", "Import QGIS OK.")
-
-        except Exception as e:
-
-            log_with_time(f"Échec import QGIS : {e}")
-
-            messagebox.showerror("QGIS", f"Échec import QGIS : {e}")
-
-
-
-    def start_export_thread(self):
-
-        if not self.ze_shp_var.get() or not self.ae_shp_var.get():
-
-            messagebox.showerror("Erreur", "Sélectionnez les deux shapefiles."); return
-
-        if not os.path.isfile(self.ze_shp_var.get()) or not os.path.isfile(self.ae_shp_var.get()):
-
-            messagebox.showerror("Erreur", "Un shapefile est introuvable."); return
-
-        projets = self._selected_projects()
-
-        if not projets:
-
-            messagebox.showerror("Erreur", "Sélectionnez au moins un projet."); return
-
-
-
-        self._update_counts()
-
-        self.export_button.config(state="disabled")
-
-        self.progress_done = 0; self.progress["value"] = 0
-
-
-
-        mode = self.cadrage_var.get(); per_project = 2 if mode == "BOTH" else 1
-
-        self.total_expected = per_project * len(projets)
-
-        self.progress["maximum"] = max(1, self.total_expected)
-
-
-
-        self.prefs.update({
-
-            "ZE_SHP": self.ze_shp_var.get(),
-
-            "AE_SHP": self.ae_shp_var.get(),
-
-            "CADRAGE_MODE": self.cadrage_var.get(),
-
-            "OVERWRITE": bool(self.overwrite_var.get()),
-
-            "DPI": int(self.dpi_var.get()),
-
-            "N_WORKERS": int(self.workers_var.get()),
-
-            "MARGIN_FAC": float(self.margin_var.get()),
-
-        }); save_prefs(self.prefs)
-
-
-
-        t = threading.Thread(target=self._run_export_logic, args=(projets,))
-
-        t.daemon = True; t.start()
-
-
-
-    def _run_export_logic(self, projets: List[str]):
-
-        try:
-
-            start = datetime.datetime.now()
-
-            os.makedirs(OUT_IMG, exist_ok=True)
-
-
-
-            log_with_time(f"{len(projets)} projets (attendu = calcul en cours)")
-
-            log_with_time(f"Workers={self.workers_var.get()}, DPI={self.dpi_var.get()}, marge={self.margin_var.get():.2f}, overwrite={self.overwrite_var.get()}")
-
-
-
-            workers = int(self.workers_var.get())
-
-            # Désactive provisoirement le multiprocessing pour éviter les erreurs _multiprocessing
-
-            # keep configured workers
-
-            chunks = chunk_even(projets, workers)
-
-            # Forcer au moins 2 workers pour utiliser ProcessPoolExecutor
-
-            # (et donc le Python de QGIS configuré ci-dessous)
-
-            workers = max(1, workers)
-
-            cfg = {
-
-                "QGIS_ROOT": QGIS_ROOT,
-
-                "QGIS_APP": QGIS_APP,
-
-                "PY_VER": PY_VER,
-
-                "EXPORT_DIR": OUT_IMG,
-
-                "DPI": int(self.dpi_var.get()),
-
-                "MARGIN_FAC": float(self.margin_var.get()),
-
-                "LAYER_AE_NAME": LAYER_AE_NAME,
-
-                "LAYER_ZE_NAME": LAYER_ZE_NAME,
-
-                "AE_SHP": self.ae_shp_var.get(),
-
-                "ZE_SHP": self.ze_shp_var.get(),
-
-                "CADRAGE_MODE": self.cadrage_var.get(),
-
-                "OVERWRITE": bool(self.overwrite_var.get()),
-
-                "EXPORT_TYPE": "PNG",
-
-                "WORKERS": workers,
-
-            }
-
-
-
-            ok_total = 0
-
-            ko_total = 0
-
-
-
-            def ui_update_progress(done_inc):
-
-                self.progress_done += done_inc
-
-                self.progress["value"] = min(self.progress_done, self.total_expected)
-
-                self.status_label.config(text=f"Progression : {self.progress_done}/{self.total_expected}")
-
-
-
-            # Pas de preflight multiprocessing: on utilise des sous-processus QGIS Python
-
-
-
-            if workers <= 1:
-
-                for chunk in chunks:
-
-                    ok, ko = run_worker_subprocess(chunk, cfg)
-
-                    ok_total += ok
-
-                    ko_total += ko
-
-                    self.after(0, ui_update_progress, ok + ko)
-
-                    log_with_time(f"Lot terminé: {ok} OK, {ko} KO")
-
-            else:
-
-                ctx = None
-
-                try:
-
-                    import multiprocessing as mp
-
-                    # Nettoyer l'environnement Python hérité pour éviter le mélange de versions (3.12/3.13)
-
-                    for _k in ("PYTHONHOME", "PYTHONPATH", "PYTHONSTARTUP"):
-
-                        if os.environ.get(_k):
-
-                            try:
-
-                                os.environ.pop(_k, None)
-
-                                log_with_time(f"Env nettoye: unset {_k} pour les workers")
-
-                            except Exception:
-
-                                pass
-
-                    os.environ["PYTHONNOUSERSITE"] = "1"
-
-                    # Fixer PYTHONHOME et PYTHONPATH sur le Python de QGIS
-
-                    try:
-
-                        qgis_py_root = os.path.join(QGIS_ROOT, "apps", PY_VER)
-
-                        if os.path.isdir(qgis_py_root):
-
-                            os.environ["PYTHONHOME"] = qgis_py_root
-
-                            qgis_lib   = os.path.join(qgis_py_root, "Lib")
-
-                            qgis_dlls  = os.path.join(qgis_py_root, "DLLs")
-
-                            qgis_site  = os.path.join(qgis_lib, "site-packages")
-
-                            qgis_app_py = os.path.join(QGIS_APP, "python")
-
-                            py_paths = [qgis_py_root, qgis_lib, qgis_dlls, qgis_site, qgis_app_py]
-
-                            os.environ["PYTHONPATH"] = os.pathsep.join(py_paths)
-
-                            # Préfixer le PATH avec les dossiers Python QGIS pour la résolution des DLLs
-
-                            os.environ["PATH"] = os.pathsep.join([qgis_py_root, qgis_dlls, os.environ.get("PATH", "")])
-
-                            log_with_time(f"PYTHONHOME={qgis_py_root}")
-
-                    except Exception:
-
-                        pass
-
-
-
-                    ctx = mp.get_context("spawn")
-
-                    # Forcer l'utilisation du Python de QGIS pour les sous-processus (compat CPython/Qt)
-
-                    try:
-
-                        qgis_py = os.path.join(QGIS_ROOT, "apps", PY_VER, "python.exe")
-
-                        if os.path.isfile(qgis_py):
-
-                            ctx.set_executable(qgis_py)
-
-                            log_with_time(f"MP exe: {qgis_py}")
-
-                        else:
-
-                            log_with_time(f"Python QGIS introuvable: {qgis_py}")
-
-                    except Exception as e:
-
-                        log_with_time(f"set_executable ï¿½chec: {e}")
-
-                except Exception:
-
-                    pass
-
-                # Ajuster temporairement sys.path pour privilégier les libs QGIS
-
-                old_syspath = list(sys.path)
-
-                try:
-
-                    qgis_py_root = os.path.join(QGIS_ROOT, "apps", PY_VER)
-
-                    qgis_py_lib = os.path.join(qgis_py_root, "Lib")
-
-                    qgis_dlls = os.path.join(qgis_py_root, "DLLs")
-
-                    qgis_site = os.path.join(qgis_py_lib, "site-packages")
-
-                    qgis_app_py = os.path.join(QGIS_APP, "python")
-
-                    def _keep_path(p: str) -> bool:
-
-                        if not isinstance(p, str):
-
-                            return False
-
-                        l = p.lower()
-
-                        if "python313" in l or "python311" in l or "python310" in l or "python39" in l:
-
-                            return False
-
-                        if ".venv" in l:
-
-                            return False
-
-                        return True
-
-                    # Important: include QGIS DLLs so extension modules like _multiprocessing are found
-
-                    sys.path = [qgis_py_root, qgis_py_lib, qgis_dlls, qgis_site, qgis_app_py] + [p for p in old_syspath if _keep_path(p)]
-
-                except Exception as e:
-
-                    log_with_time(f"sys.path cleanup skip: {e}")
-
-                # Pool de threads qui pilotent des sous-processus QGIS Python (pas de multiprocessing)
-
-                with ThreadPoolExecutor(max_workers=workers) as ex:
-
-                    futures = [ex.submit(run_worker_subprocess, chunk, cfg) for chunk in chunks if chunk]
-
-                    for fut in as_completed(futures):
-
-                        try:
-
-                            ok, ko = fut.result()
-
-                            ok_total += ok
-
-                            ko_total += ko
-
-                            self.after(0, ui_update_progress, ok + ko)
-
-                            log_with_time(f"Lot terminé: {ok} OK, {ko} KO")
-
-                        except Exception as e:
-
-                            log_with_time(f"Erreur worker: {e}")
-
-                # Restaure le sys.path initial
-
-                sys.path = old_syspath
-
-                # Fallback séquentiel si aucun résultat (pool KO)
-
-                if (ok_total + ko_total) == 0 and chunks:
-
-                    log_with_time("Tous les workers ont échoué -> bascule en mode séquentiel")
-
-                    for chunk in chunks:
-
-                        try:
-
-                            ok, ko = run_worker_subprocess(chunk, cfg)
-
-                            ok_total += ok
-
-                            ko_total += ko
-
-                            self.after(0, ui_update_progress, ok + ko)
-
-                            log_with_time(f"Lot terminé (fallback): {ok} OK, {ko} KO")
-
-                        except Exception as e:
-
-                            log_with_time(f"Erreur fallback: {e}")
-
-
-
-            # Si aucun résultat n'a été produit (workers plantés), on retente en séquentiel
-
-            if (ok_total + ko_total) == 0 and chunks:
-
-                log_with_time("Tous les workers ont échoué — bascule en mode séquentiel…")
-
-                for chunk in chunks:
-
-                    try:
-
-                        ok, ko = run_worker_subprocess(chunk, cfg)
-
-                        ok_total += ok
-
-                        ko_total += ko
-
-                        self.after(0, ui_update_progress, ok + ko)
-
-                        log_with_time(f"Lot terminé (fallback): {ok} OK, {ko} KO")
-
-                    except Exception as e:
-
-                        log_with_time(f"Erreur fallback: {e}")
-
-            # Si aucun résultat n'a été produit (workers plantés), on retente en séquentiel
-
-            if (ok_total + ko_total) == 0 and chunks:
-
-                log_with_time("Tous les workers ont échoué — bascule en mode séquentiel…")
-
-                for chunk in chunks:
-
-                    try:
-
-                        ok, ko = run_worker_subprocess(chunk, cfg)
-
-                        ok_total += ok
-
-                        ko_total += ko
-
-                        self.after(0, ui_update_progress, ok + ko)
-
-                        log_with_time(f"Lot terminé (fallback): {ok} OK, {ko} KO")
-
-                    except Exception as e:
-
-                        log_with_time(f"Erreur fallback: {e}")
-
-            elapsed = datetime.datetime.now() - start
-
-            log_with_time(f"FIN — OK={ok_total} | KO={ko_total} | Attendu={self.total_expected} | Durée={elapsed}")
-
-            self.after(0, lambda: self.status_label.config(text=f"Terminé — OK={ok_total} / KO={ko_total}"))
-
-        except Exception as e:
-
-            log_with_time(f"Erreur critique: {e}")
-
-            _err = str(e)
-
-            self.after(0, lambda msg=_err: messagebox.showerror("Erreur", msg))
-
-        finally:
-
-            self.after(0, lambda: self.export_button.config(state="normal"))
-
-
-# =========================
-
-# Onglet 3 — Identification Pl@ntNet (UI + logique)
-
-# =========================
-
-class PlantNetTab(ttk.Frame):
-
-    def __init__(self, parent, style_helper: StyleHelper, prefs: dict):
-
-        super().__init__(parent, padding=12)
-
-        self.style_helper = style_helper
-
-        self.prefs = prefs
-
-
-
-        self.font_title = tkfont.Font(family="Segoe UI", size=15, weight="bold")
-
-        self.font_sub   = tkfont.Font(family="Segoe UI", size=10)
-
-        self.font_mono  = tkfont.Font(family="Consolas", size=9)
-
-
-
-        self.folder_var = tk.StringVar(value=self.prefs.get("PLANTNET_FOLDER", ""))
-
-
-
-        self._build_ui()
-
-
-
-    def _build_ui(self):
-        # Zone haute défilante + console basse fixe
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
-        top_container = ttk.Frame(self)
-        top_container.grid(row=0, column=0, sticky="nsew")
-        canvas = tk.Canvas(top_container, highlightthickness=0, borderwidth=0)
-        vscroll = ttk.Scrollbar(top_container, orient="vertical", command=canvas.yview)
-        hscroll = ttk.Scrollbar(top_container, orient="horizontal", command=canvas.xview)
-        canvas.configure(yscrollcommand=vscroll.set, xscrollcommand=hscroll.set)
-        vscroll.pack(side=tk.RIGHT, fill=tk.Y)
-        hscroll.pack(side=tk.BOTTOM, fill=tk.X)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        top = ttk.Frame(canvas)
-        _win = canvas.create_window((0, 0), window=top, anchor="nw")
-        def _on_frame_config(_=None):
-            try:
-                canvas.configure(scrollregion=canvas.bbox("all"))
-            except Exception:
-                pass
-        def _on_canvas_config(e):
-            try:
-                pass
-            except Exception:
-                pass
-        top.bind("<Configure>", _on_frame_config)
-        canvas.bind("<Configure>", _on_canvas_config)
-        def _mw(e):
-            try:
-                delta = -1 * (e.delta // 120)
-            except Exception:
-                delta = -1 if getattr(e, 'num', 0) == 4 else (1 if getattr(e, 'num', 0) == 5 else 0)
-            if delta:
-                canvas.yview_scroll(delta, "units")
-        canvas.bind_all("<MouseWheel>", _mw)
-        canvas.bind_all("<Button-4>", _mw)
-        canvas.bind_all("<Button-5>", _mw)
-
-        header = ttk.Frame(top, style="Header.TFrame", padding=(14, 12))
-
-        header.pack(fill=tk.X, pady=(0, 10))
-
-        ttk.Label(header, text="Identification Pl@ntNet", style="Card.TLabel", font=self.font_title).grid(row=0, column=0, sticky="w")
-
-        ttk.Label(header, text="Analyse un dossier d'images via l'API Pl@ntNet.", style="Subtle.TLabel", font=self.font_sub).grid(row=1, column=0, sticky="w", pady=(4,0))
-
-        header.columnconfigure(0, weight=1)
-
-
-
-        card = ttk.Frame(top, style="Card.TFrame", padding=12)
-
-        card.pack(fill=tk.X)
-
-        ttk.Label(card, text="Dossier d'images", style="Card.TLabel").grid(row=0, column=0, sticky="w")
-
-        row = ttk.Frame(card, style="Card.TFrame")
-
-        row.grid(row=0, column=1, sticky="ew", padx=0)
-
-        row.columnconfigure(0, weight=1)
-
-        ttk.Entry(row, textvariable=self.folder_var).grid(row=0, column=0, sticky="ew")
-
-        ttk.Button(row, text="Parcourir…", command=self._pick_folder).grid(row=0, column=1, padx=(6,0))
-
-        card.columnconfigure(1, weight=1)
-
-
-
-        act = ttk.Frame(top, style="Card.TFrame", padding=12)
-
-        act.pack(fill=tk.X, pady=(10,0))
-
-        self.run_btn = ttk.Button(act, text="â–¶ Lancer l'analyse", style="Accent.TButton", command=self._start_thread)
-
-        self.run_btn.grid(row=0, column=0, sticky="w")
-
-        obtn = ttk.Button(act, text="?? Ouvrir le dossier de sortie", command=self._open_out_dir)
-
-        obtn.grid(row=0, column=1, padx=(10,0)); ToolTip(obtn, "Ouvrir le dossier cible")
-
-
-
-        bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
-        bottom.grid(row=1, column=0, sticky="nsew", pady=(10,0))
-        bottom.columnconfigure(0, weight=1)
-
-        self.log_text = tk.Text(bottom, height=12, wrap=tk.WORD, state='disabled',
-
-                                bg=self.style_helper.style.lookup("Card.TFrame", "background"),
-
-                                fg=self.style_helper.style.lookup("TLabel", "foreground"))
-
-        self.log_text.configure(font=self.font_mono, relief="flat")
-
-        log_scroll = ttk.Scrollbar(bottom, orient="vertical", command=self.log_text.yview)
-
-        self.log_text['yscrollcommand'] = log_scroll.set
-
-        log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        self.stdout_redirect = TextRedirector(self.log_text)
-
-
-
-    def _pick_folder(self):
-
-        base = self.folder_var.get() or os.path.expanduser("~")
-
-        d = filedialog.askdirectory(title="Choisir le dossier d'images", initialdir=base if os.path.isdir(base) else os.path.expanduser("~"))
-
-        if d:
-
-            self.folder_var.set(d)
-
-
-
-    def _open_out_dir(self):
-
-        try:
-
-            os.makedirs(OUT_IMG, exist_ok=True)
-
-            os.startfile(OUT_IMG)
-
-        except Exception as e:
-
-            messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
-
-
-
-    def _start_thread(self):
-
-        self.run_btn.config(state="disabled")
-
-        t = threading.Thread(target=self._run_process)
-
-        t.daemon = True
-
-        t.start()
-
-
-
-    def _run_process(self):
-
-        folder = self.folder_var.get().strip()
-
-        if not folder:
-
-            print("Veuillez sélectionner un dossier.", file=self.stdout_redirect)
-
-            self.after(0, lambda: self.run_btn.config(state="normal"))
-
-            return
-
-        if not os.path.exists(folder):
-
-            print(f"Le dossier à traiter n'existe pas : {folder}", file=self.stdout_redirect)
-
-            self.after(0, lambda: self.run_btn.config(state="normal"))
-
-            return
-
-
-
-        self.prefs["PLANTNET_FOLDER"] = folder
-
-        save_prefs(self.prefs)
-
-
-
-        image_extensions = ['.jpg', '.jpeg', '.png', '.heic', '.heif']
-
-        image_files = []
-
-        for root, dirs, files in os.walk(folder):
-
-            for f in files:
-
-                if os.path.splitext(f)[1].lower() in image_extensions:
-
-                    if '@plantnet' not in f:
-
-                        image_files.append(os.path.join(root, f))
-
-
-
-        if not image_files:
-
-            print("Aucune image à traiter dans le dossier.", file=self.stdout_redirect)
-
-            self.after(0, lambda: self.run_btn.config(state="normal"))
-
-            return
-
-
-
-        plant_name_counts = {}
-
-        old_stdout = sys.stdout
-
-        sys.stdout = self.stdout_redirect
-
-        try:
-
-            for image_path in image_files:
-
-                organ = 'flower'
-
-                plant_name = identify_plant(image_path, organ)
-
-                if plant_name:
-
-                    count = plant_name_counts.get(plant_name, 0) + 1
-
-                    plant_name_counts[plant_name] = count
-
-                    copy_and_rename_file(image_path, folder, plant_name, count)
-
-                else:
-
-                    print(f"Aucune identification possible pour l'image : {image_path}")
-
-            print("Analyse terminée.")
-
-        finally:
-
-            sys.stdout = old_stdout
-
-            self.after(0, lambda: self.run_btn.config(state="normal"))
-
-
-
-# =========================
-
-# Onglet 4 — ID contexte éco
-
-# =========================
-
-class IDContexteEcoTab(ttk.Frame):
-
-    def __init__(self, parent, style_helper: StyleHelper, prefs: dict):
-
-        super().__init__(parent, padding=12)
-
-        self.style_helper = style_helper
-
-        self.prefs = prefs
-
-
-
-        self.font_title = tkfont.Font(family="Segoe UI", size=15, weight="bold")
-
-        self.font_sub   = tkfont.Font(family="Segoe UI", size=10)
-
-        self.font_mono  = tkfont.Font(family="Consolas", size=9)
-
-
-
-        self.ae_var = tk.StringVar()
-
-        self.ze_var = tk.StringVar()
-
-
-
-        self._build_ui()
-
-
-
-    def _build_ui(self):
-
-        header = ttk.Frame(self, style="Header.TFrame", padding=(14, 12))
-
-        header.pack(fill=tk.X, pady=(0, 10))
-
-        ttk.Label(header, text="Identification des zonages", style="Card.TLabel", font=self.font_title).grid(row=0, column=0, sticky="w")
-
-        ttk.Label(header, text="Choisissez les shapefiles de référence puis lancez l'analyse.", style="Subtle.TLabel", font=self.font_sub).grid(row=1, column=0, sticky="w", pady=(4,0))
-
-        header.columnconfigure(0, weight=1)
-
-
-
-        card = ttk.Frame(self, style="Card.TFrame", padding=12)
-
-        card.pack(fill=tk.X)
-
-        self._file_row(card, 0, "?? Aire d'étude élargie…", self.ae_var, self._select_ae)
-
-        self._file_row(card, 1, "?? Zone d'étude…", self.ze_var, self._select_ze)
-
-        card.columnconfigure(1, weight=1)
-
-
-
-        act = ttk.Frame(self, style="Card.TFrame", padding=12)
-
-        act.pack(fill=tk.X, pady=(10,0))
-
-        self.run_btn = ttk.Button(act, text="â–¶ Lancer l'analyse", style="Accent.TButton", command=self._start_thread)
-
-        self.run_btn.grid(row=0, column=0, sticky="w")
-
-
-
-        bottom = ttk.Frame(self, style="Card.TFrame", padding=12)
-        bottom.grid(row=1, column=0, sticky="nsew", pady=(10,0))
-        bottom.columnconfigure(0, weight=1)
-
-        self.log_text = tk.Text(bottom, height=12, wrap=tk.WORD, state='disabled',
-
-                                bg=self.style_helper.style.lookup("Card.TFrame", "background"),
-
-                                fg=self.style_helper.style.lookup("TLabel", "foreground"))
-
-        self.log_text.configure(font=self.font_mono, relief="flat")
-
-        log_scroll = ttk.Scrollbar(bottom, orient="vertical", command=self.log_text.yview)
-
-        self.log_text['yscrollcommand'] = log_scroll.set
-
-        log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        self.stdout_redirect = TextRedirector(self.log_text)
-
-
-
-    def _file_row(self, parent, row: int, label: str, var: tk.StringVar, cmd):
-
-        btn = ttk.Button(parent, text=label, command=cmd)
-
-        btn.grid(row=row, column=0, sticky="w", pady=(8 if row == 0 else 4, 2))
-
-        ent = ttk.Entry(parent, textvariable=var, width=10)
-
-        ent.grid(row=row, column=1, sticky="ew", padx=8)
-
-        ent.configure(state="readonly")
-
-        clear_btn = ttk.Button(parent, text="?", width=3, command=lambda: var.set(""))
-
-        clear_btn.grid(row=row, column=2, sticky="e")
-
-        parent.columnconfigure(1, weight=1)
-
-
-
-    def _select_ae(self):
-
-        base = self.ae_var.get() or os.path.expanduser("~")
-
-        path = filedialog.askopenfilename(title="Sélectionner l'aire d'étude élargie",
-
-                                          initialdir=base if os.path.isdir(base) else os.path.expanduser("~"),
-
-                                          filetypes=[("Shapefile ESRI", "*.shp")])
-
-        if path:
-
-            self.ae_var.set(path)
-
-
-
-    def _select_ze(self):
-
-        base = self.ze_var.get() or os.path.expanduser("~")
-
-        path = filedialog.askopenfilename(title="Sélectionner la zone d'étude",
-
-                                          initialdir=base if os.path.isdir(base) else os.path.expanduser("~"),
-
-                                          filetypes=[("Shapefile ESRI", "*.shp")])
-
-        if path:
-
-            self.ze_var.set(path)
-
-
-
-    def _start_thread(self):
-
-        self.run_btn.config(state="disabled")
-
-        t = threading.Thread(target=self._run_process)
-
-        t.daemon = True
-
-        t.start()
-
-
-
-    def _run_process(self):
-
-        ae = self.ae_var.get().strip()
-
-        ze = self.ze_var.get().strip()
-
-        if not ae or not ze:
-
-            print("Veuillez sélectionner les deux shapefiles.", file=self.stdout_redirect)
-
-            self.after(0, lambda: self.run_btn.config(state="normal"))
-
-            return
-
-
-
-        old_stdout = sys.stdout
-
-        sys.stdout = self.stdout_redirect
-
-        try:
-
-            from .id_contexte_eco import run_analysis as run_id_context
-
-            run_id_context(ae, ze)
-
-            print("Analyse terminée.")
-
-        except Exception as e:
-
-            print(f"Erreur: {e}")
-
-        finally:
-
-            sys.stdout = old_stdout
-
-            self.after(0, lambda: self.run_btn.config(state="normal"))
-
-
-
-# =========================
-
-# Nouvel onglet « Contexte éco »
-
-# =========================
-
-class ContexteEcoTab(ttk.Frame):
-
-    def __init__(self, parent, style_helper: StyleHelper, prefs: dict):
-
-        super().__init__(parent, padding=12)
-
-        self.style_helper = style_helper
-
-        self.prefs = prefs
-
-
-
-        self.font_mono = tkfont.Font(family="Consolas", size=9)
-
-
-
-        # Variables partagées
-
-        self.ze_shp_var   = tk.StringVar(value=from_long_unc(self.prefs.get("ZE_SHP", "")))
-
-        self.ae_shp_var   = tk.StringVar(value=from_long_unc(self.prefs.get("AE_SHP", "")))
-
-        self.cadrage_var   = tk.StringVar(value=self.prefs.get("CADRAGE_MODE", "BOTH"))
-
-        self.overwrite_var = tk.BooleanVar(value=self.prefs.get("OVERWRITE", OVERWRITE_DEFAULT))
-
-        self.dpi_var       = tk.IntVar(value=int(self.prefs.get("DPI", DPI_DEFAULT)))
-
-        self.workers_var   = tk.IntVar(value=int(self.prefs.get("N_WORKERS", N_WORKERS_DEFAULT)))
-
-        self.margin_var    = tk.DoubleVar(value=float(self.prefs.get("MARGIN_FAC", MARGIN_FAC_DEFAULT)))
-
-        self.buffer_var    = tk.DoubleVar(value=float(self.prefs.get("ID_TAMPON_KM", 5.0)))
-        self.id_buffer_km_var = tk.DoubleVar(value=float(self.prefs.get("ID_BUFFER_KM", 5.0)))
-
-        self.out_dir_var   = tk.StringVar(value=self.prefs.get("OUT_DIR", OUT_IMG))
-
-        self.export_type_var = tk.StringVar(value=self.prefs.get("EXPORT_TYPE", "BOTH"))
-        self.commune_var = tk.StringVar(value="")
-
-        # Resultats Wikipedia (affichage sous forme de tableau)
-
-        self.wiki_climat_var = tk.StringVar(value="")
-
-        self.wiki_occ_var = tk.StringVar(value="")
-
-        self.wiki_last_url = ""
-
-        self.wiki_query_var = tk.StringVar(value=self.prefs.get("WIKI_QUERY", ""))
-
-
-
-        # Résultats Cartes végétation/sols
-
-        self.veg_alt_var = tk.StringVar(value="")
-
-        self.veg_veg_var = tk.StringVar(value="")
-
-        self.veg_soil_var = tk.StringVar(value="")
-
-
-
-        self.project_vars: dict[str, tk.IntVar] = {}
-
-        self.all_projects: List[str] = []
-
-        self.filtered_projects: List[str] = []
-
-        self.total_expected = 0
-
-        self.progress_done  = 0
-
-        self.busy = False
-
-
-
-        self._build_ui()
-
-        self._populate_projects()
-
-        self._update_counts()
-
-    def _identify_commune(self):
-        ze_path = self.ze_shp_var.get()
-        if not ze_path or not os.path.isfile(ze_path):
-            messagebox.showerror("Erreur", "Veuillez d'abord sélectionner un shapefile pour la Zone d'étude.")
-            return
-
-        try:
-            self.commune_var.set("Identification en cours...")
-            self.update_idletasks()
-
-            gdf = gpd.read_file(ze_path)
-            if gdf.crs is None:
-                messagebox.showwarning("Avertissement", "Le shapefile n'a pas de système de coordonnées (CRS) défini. L'identification pourrait être imprécise.")
-            
-            # Reproject to WGS84 for lat/lon
-            gdf_wgs84 = gdf.to_crs("EPSG:4326")
-            
-            # Use unary_union to handle multi-part geometries before getting the centroid
-            centroid = gdf_wgs84.geometry.unary_union.centroid
-            lat, lon = centroid.y, centroid.x
-            
-            # Use the existing detection method
-            commune, dep = self._detect_commune(lat, lon)
-            
-            if commune and commune != "Inconnue" and dep:
-                self.commune_var.set(f"{commune} ({dep})")
-            elif commune and commune != "Inconnue":
-                self.commune_var.set(f"{commune} (département inconnu)")
-            else:
-                self.commune_var.set("Commune non trouvée")
-
-        except Exception as e:
-            self.commune_var.set("Erreur d'identification")
-            messagebox.showerror("Erreur", f"Une erreur est survenue lors de l'identification de la commune :\n{e}")
-
-    # ---------- Construction UI ----------
-
-    def _build_ui(self):
-        # Layout racine: contenu haut défilant (vertical uniquement) + console fixe en bas
-        self.grid_rowconfigure(0, weight=1)
-        # La console (row=2) peut aussi grandir pour afficher les logs confortablement
-        self.grid_rowconfigure(2, weight=1)
-        self.grid_columnconfigure(0, weight=1)
-        # Panedwindow vertical pour permettre de redimensionner entre le haut (contenu) et le bas (console)
-        pw = ttk.Panedwindow(self, orient=tk.VERTICAL)
-        pw.grid(row=0, column=0, sticky="nsew", rowspan=3)
-
-        top_container = ttk.Frame(pw)
-        pw.add(top_container, weight=3)
-
-        # Zone défilante verticale sans barre horizontale (tout le contenu
-        # s'adapte en largeur au canevas pour éviter le défilement latéral)
-        canvas = tk.Canvas(top_container, highlightthickness=0, borderwidth=0)
-        vscroll = ttk.Scrollbar(top_container, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=vscroll.set)
-        vscroll.pack(side=tk.RIGHT, fill=tk.Y)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        top = ttk.Frame(canvas)
-        _win = canvas.create_window((0, 0), window=top, anchor="nw")
-
-        def _on_frame_config(_e=None):
-            # Met à jour la zone défilante lorsque le contenu change
-            try:
-                canvas.configure(scrollregion=canvas.bbox("all"))
-            except Exception:
-                pass
-
-        def _on_canvas_config(e):
-            # Force l'adaptation en largeur du contenu au canevas
-            try:
-                canvas.itemconfigure(_win, width=e.width)
-            except Exception:
-                pass
-
-        top.bind("<Configure>", _on_frame_config)
-        canvas.bind("<Configure>", _on_canvas_config)
-
-        # Défilement à la molette quand la souris est sur la zone scrollable (y compris enfants)
-        def _mw(e):
-            try:
-                delta = -1 * (e.delta // 120)
-            except Exception:
-                delta = -1 if getattr(e, 'num', 0) == 4 else (1 if getattr(e, 'num', 0) == 5 else 0)
-            if delta:
-                canvas.yview_scroll(delta, "units")
-            return "break"
-
-        def _bind_wheel(_e=None):
-            canvas.bind_all("<MouseWheel>", _mw)
-            canvas.bind_all("<Button-4>", _mw)
-            canvas.bind_all("<Button-5>", _mw)
-
-        def _unbind_wheel(_e=None):
-            canvas.unbind_all("<MouseWheel>")
-            canvas.unbind_all("<Button-4>")
-            canvas.unbind_all("<Button-5>")
-
-        top.bind("<Enter>", _bind_wheel)
-        top.bind("<Leave>", _unbind_wheel)
-
-        # Layout horizontal principal - suppression de la marge droite inutile
-        main_horizontal = ttk.Frame(top)
-        main_horizontal.pack(fill=tk.BOTH, expand=True, padx=(8,0), pady=4)
-        
-        # Colonne gauche: Shapefiles + Options d'export
-        left_column = ttk.Frame(main_horizontal, style="Card.TFrame", padding=8)
-        left_column.pack(side=tk.LEFT, fill=tk.Y, padx=(0,4))
-        
-        # Sélecteurs shapefiles (plus compact)
-        ttk.Label(left_column, text="Couches Shapefile", style="Card.TLabel").grid(row=0, column=0, columnspan=2, sticky="w", pady=(0,4))
-        self._file_row(left_column, 1, "Zone d'étude", self.ze_shp_var, self._select_ze)
-        self._file_row(left_column, 2, "Aire élargie", self.ae_shp_var, self._select_ae)
-        
-        # Commune sur une ligne
-        self.identify_commune_button = ttk.Button(left_column, text="ID Commune", command=self._identify_commune)
-        self.identify_commune_button.grid(row=3, column=0, sticky="w", pady=(4,0))
-        commune_label = ttk.Label(left_column, textvariable=self.commune_var, style="Card.TLabel", wraplength=200)
-        commune_label.grid(row=3, column=1, sticky="w", padx=(4,0), pady=(4,0))
-        
-        # Séparateur
-        ttk.Separator(left_column, orient='horizontal').grid(row=4, column=0, columnspan=2, sticky="ew", pady=6)
-        
-        # Options d'export compactes
-        ttk.Label(left_column, text="Export", style="Card.TLabel").grid(row=5, column=0, columnspan=2, sticky="w", pady=(0,2))
-        
-        # Cadrage horizontal
-        cadrage_frame = ttk.Frame(left_column)
-        cadrage_frame.grid(row=6, column=0, columnspan=2, sticky="ew", pady=1)
-        ttk.Label(cadrage_frame, text="Cadrage:", style="Card.TLabel").pack(side=tk.LEFT)
-        ttk.Radiobutton(cadrage_frame, text="AE+ZE", variable=self.cadrage_var, value="BOTH", style="Card.TRadiobutton").pack(side=tk.LEFT, padx=2)
-        ttk.Radiobutton(cadrage_frame, text="ZE", variable=self.cadrage_var, value="ZE", style="Card.TRadiobutton").pack(side=tk.LEFT, padx=2)
-        ttk.Radiobutton(cadrage_frame, text="AE", variable=self.cadrage_var, value="AE", style="Card.TRadiobutton").pack(side=tk.LEFT, padx=2)
-        
-        # Paramètres sur 2 colonnes
-        ttk.Label(left_column, text="DPI:", style="Card.TLabel").grid(row=7, column=0, sticky="w", pady=1)
-        ttk.Spinbox(left_column, from_=72, to=1200, textvariable=self.dpi_var, width=8).grid(row=7, column=1, sticky="w", pady=1)
-        
-        ttk.Label(left_column, text="Workers:", style="Card.TLabel").grid(row=8, column=0, sticky="w", pady=1)
-        ttk.Spinbox(left_column, from_=1, to=max(1, (os.cpu_count() or 2)), textvariable=self.workers_var, width=8).grid(row=8, column=1, sticky="w", pady=1)
-        
-        ttk.Label(left_column, text="Marge:", style="Card.TLabel").grid(row=9, column=0, sticky="w", pady=1)
-        ttk.Spinbox(left_column, from_=1.00, to=2.00, increment=0.05, textvariable=self.margin_var, width=8).grid(row=9, column=1, sticky="w", pady=1)
-        
-        ttk.Checkbutton(left_column, text="Écraser PNG", variable=self.overwrite_var, style="Card.TCheckbutton").grid(row=10, column=0, columnspan=2, sticky="w", pady=2)
-        
-        # Dossier de sortie
-        ttk.Label(left_column, text="Sortie:", style="Card.TLabel").grid(row=11, column=0, sticky="w", pady=1)
-        out_frame = ttk.Frame(left_column)
-        out_frame.grid(row=11, column=1, sticky="ew", pady=1)
-        ttk.Entry(out_frame, textvariable=self.out_dir_var, width=20).pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Button(out_frame, text="...", command=self._select_out_dir, width=3).pack(side=tk.RIGHT, padx=(2,0))
-        
-        # Type d'export
-        exp_frame = ttk.Frame(left_column)
-        exp_frame.grid(row=12, column=0, columnspan=2, sticky="ew", pady=2)
-        ttk.Radiobutton(exp_frame, text="PNG+QGIS", variable=self.export_type_var, value="BOTH", style="Card.TRadiobutton").pack(side=tk.LEFT)
-        ttk.Radiobutton(exp_frame, text="PNG", variable=self.export_type_var, value="PNG", style="Card.TRadiobutton").pack(side=tk.LEFT, padx=4)
-        ttk.Radiobutton(exp_frame, text="QGIS", variable=self.export_type_var, value="QGS", style="Card.TRadiobutton").pack(side=tk.LEFT)
-        
-        self.export_button = ttk.Button(left_column, text="Lancer export", style="Accent.TButton", command=self.start_export_thread)
-        self.export_button.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(4,0))
-        
-        # Bouton ID Contexte éco
-        self.id_contexte_button = ttk.Button(left_column, text="ID Contexte éco", command=self.start_id_thread)
-        self.id_contexte_button.grid(row=14, column=0, columnspan=2, sticky="ew", pady=(4,0))
-        
-        # Séparateur
-        ttk.Separator(left_column, orient='horizontal').grid(row=15, column=0, columnspan=2, sticky="ew", pady=6)
-        
-        # Actions supplémentaires
-        ttk.Label(left_column, text="Actions", style="Card.TLabel").grid(row=16, column=0, columnspan=2, sticky="w", pady=(0,2))
-        
-        # Boutons d'actions sur 2 colonnes
-        self.bassin_button = ttk.Button(left_column, text="Bassin versant", command=self.start_bassin_thread)
-        self.bassin_button.grid(row=17, column=0, sticky="ew", pady=1, padx=(0,2))
-        
-        self.biodiv_button = ttk.Button(left_column, text="Photo Biodiv", command=self.open_biodiv_dialog)
-        self.biodiv_button.grid(row=17, column=1, sticky="ew", pady=1, padx=(2,0))
-        
-        self.gmaps_button = ttk.Button(left_column, text="Google Maps", command=self.open_google_maps)
-        self.gmaps_button.grid(row=18, column=0, sticky="ew", pady=1, padx=(0,2))
-        
-        self.remonter_button = ttk.Button(left_column, text="Remonter temps", command=self.open_remonter_temps)
-        self.remonter_button.grid(row=18, column=1, sticky="ew", pady=1, padx=(2,0))
-        
-        left_column.columnconfigure(1, weight=1)
-        
-        # Colonne droite: Projets + Résultats - occupe tout l'espace restant (suppression marge droite)
-        right_column = ttk.Frame(main_horizontal)
-        right_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=0)
-
-        # Panedwindow vertical dans la colonne droite: Projets au-dessus, Résultats en dessous
-        right_pane = ttk.Panedwindow(right_column, orient=tk.VERTICAL)
-        right_pane.pack(fill=tk.BOTH, expand=True)
-
-        proj = ttk.Frame(right_pane, style="Card.TFrame", padding=6)
-        right_pane.add(proj, weight=2)
-
-        # En-tête projets plus compact
-        proj_header = ttk.Frame(proj)
-        proj_header.grid(row=0, column=0, sticky="ew", pady=(0,4))
-        proj_header.columnconfigure(1, weight=1)
-        
-        ttk.Label(proj_header, text="Projets QGIS", style="Card.TLabel").grid(row=0, column=0, sticky="w")
-        
-        # Filtre et boutons sur une ligne
-        filter_frame = ttk.Frame(proj_header)
-        filter_frame.grid(row=0, column=1, sticky="e")
-        
-        self.filter_var = tk.StringVar()
-        ttk.Label(filter_frame, text="Filtrer:", style="Card.TLabel").pack(side=tk.LEFT, padx=(0,2))
-        fe = ttk.Entry(filter_frame, textvariable=self.filter_var, width=20)
-        fe.pack(side=tk.LEFT, padx=2)
-        fe.bind("<KeyRelease>", lambda _e: self._apply_filter())
-        ttk.Button(filter_frame, text="Tout", width=5, command=lambda: self._select_all(True)).pack(side=tk.LEFT, padx=2)
-        ttk.Button(filter_frame, text="Aucun", width=5, command=lambda: self._select_all(False)).pack(side=tk.LEFT, padx=2)
-
-        # Zone défilante pour la liste des projets
-        proj.rowconfigure(1, weight=1)
-        proj.columnconfigure(0, weight=1)
-
-        proj_list = ttk.Frame(proj)
-        proj_list.grid(row=1, column=0, sticky="nsew", pady=(2,0))
-
-        canvas = tk.Canvas(proj_list, highlightthickness=0, borderwidth=0)
-        vscroll = ttk.Scrollbar(proj_list, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=vscroll.set)
-        vscroll.pack(side=tk.RIGHT, fill=tk.Y)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        self.scrollable_frame = ttk.Frame(canvas)
-        _proj_win = canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-
-        def _on_proj_frame_config(_e=None):
-            try:
-                canvas.configure(scrollregion=canvas.bbox("all"))
-            except Exception:
-                pass
-        self.scrollable_frame.bind("<Configure>", _on_proj_frame_config)
-
-        def _on_proj_canvas_config(event):
-            try:
-                canvas.itemconfigure(_proj_win, width=event.width)
-            except Exception:
-                pass
-        canvas.bind("<Configure>", _on_proj_canvas_config)
-
-        
-        # En-tête Scraping avec bouton et champ de requête
-        scraping_header = ttk.Frame(right_pane, style="Card.TFrame", padding=12)
-        right_pane.add(scraping_header, weight=0)
-        
-        header_content = ttk.Frame(scraping_header)
-        header_content.pack(fill=tk.X)
-        
-        self.wiki_button = ttk.Button(header_content, text="Scraping", command=self.start_consolidated_scraping)
-        self.wiki_button.pack(side=tk.LEFT)
-        
-        self.wiki_query_entry = ttk.Entry(header_content, textvariable=self.wiki_query_var, width=20)
-        self.wiki_query_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8,8))
-        
-        self.wiki_open_button = ttk.Button(header_content, text="Ouvrir", state="disabled", command=self.open_wiki_url)
-        self.wiki_open_button.pack(side=tk.RIGHT)
-        
-        # Panneau pour les résultats de scraping consolidés
-        results_frame = ttk.Frame(right_pane, style="Card.TFrame", padding=12)
-        right_pane.add(results_frame, weight=1)
-
-        ttk.Label(results_frame, text="Résultats du scraping", style="Card.TLabel").pack(anchor="w")
-
-        self.results_tree = ttk.Treeview(results_frame, columns=("Type", "Résultat"), show="headings", height=12)
-        self.results_tree.heading("Type", text="Type de donnée")
-        self.results_tree.heading("Résultat", text="Résultat")
-        self.results_tree.column("Type", width=120, anchor="w")
-        self.results_tree.column("Résultat", width=400, anchor="w")
-
-        # Ajout des items initiaux
-        self.results_tree.insert("", "end", values=("Climat", ""), iid="climat")
-        self.results_tree.insert("", "end", values=("Occupation sols", ""), iid="occupation_sols")
-        self.results_tree.insert("", "end", values=("Altitude", ""), iid="altitude")
-        self.results_tree.insert("", "end", values=("Végétation", ""), iid="vegetation")
-        self.results_tree.insert("", "end", values=("Sols", ""), iid="sols")
-
-        tree_scroll = ttk.Scrollbar(results_frame, orient="vertical", command=self.results_tree.yview)
-        self.results_tree.configure(yscrollcommand=tree_scroll.set)
-        self.results_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=(6, 0))
-        tree_scroll.pack(side=tk.RIGHT, fill=tk.Y, pady=(6, 0))
-
-        # Console + progression (dans le pane du bas)
-        
-        bottom = ttk.Frame(pw, style="Card.TFrame", padding=12)
-        pw.add(bottom, weight=1)
-
-        # Libellé de statut à gauche
-        self.status_label = ttk.Label(bottom, text="Prêt.", style="Status.TLabel")
-        self.status_label.grid(row=0, column=0, sticky="w")
-
-        # Barre de progression à droite
-        self.progress = ttk.Progressbar(bottom, orient="horizontal", mode="determinate", length=220)
-
-        self.progress.grid(row=0, column=1, sticky="e")
-
-        bottom.columnconfigure(0, weight=1)
-
-
-
-        log_frame = ttk.Frame(bottom, style="Card.TFrame")
-
-        log_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(8,0))
-
-        bottom.rowconfigure(1, weight=1)
-
-        self.log_text = tk.Text(log_frame, height=10, wrap=tk.WORD, state='disabled',
-
-                                bg=self.style_helper.style.lookup("Card.TFrame", "background"),
-
-                                fg=self.style_helper.style.lookup("TLabel", "foreground"))
-
-        self.log_text.configure(font=self.font_mono, relief="flat")
-
-        log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
-
-        self.log_text['yscrollcommand'] = log_scroll.set
-
-        log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        self.stdout_redirect = TextRedirector(self.log_text)
-
-
-
-        obtn = ttk.Button(bottom, text="?? Ouvrir le dossier de sortie", command=self._open_out_dir)
-        obtn.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8,0))
-        try:
-            ToolTip(obtn, "Ouvrir le dossier cible")
-        except Exception:
-            pass
-
-
-
-    # ---------- Helpers UI ----------
-
-    def _file_row(self, parent, row: int, label: str, var: tk.StringVar, cmd):
-
-        btn = ttk.Button(parent, text=label, command=cmd)
-
-        btn.grid(row=row, column=0, sticky="w", pady=(8 if row == 1 else 4, 2))
-
-        ent = ttk.Entry(parent, textvariable=var, width=10)
-
-        ent.grid(row=row, column=1, sticky="ew", padx=8)
-
-        ent.configure(state="readonly")
-
-        clear_btn = ttk.Button(parent, text="?", width=3, command=lambda: var.set(""))
-
-        clear_btn.grid(row=row, column=2, sticky="e")
-
-        parent.columnconfigure(1, weight=1)
-
-
-
-    def _select_ze(self):
-
-        base = self.ze_shp_var.get() or os.path.expanduser("~")
-
-        path = filedialog.askopenfilename(title="Sélectionner la zone d'étude",
-
-                                          initialdir=base if os.path.isdir(base) else os.path.expanduser("~"),
-
-                                          filetypes=[("Shapefile ESRI", "*.shp")])
-
-        if path:
-            # Normaliser pour l'affichage (sans préfixe long UNC)
-            self.ze_shp_var.set(os.path.normpath(path))
-
-
-
-    def _select_ae(self):
-
-        base = self.ae_shp_var.get() or os.path.expanduser("~")
-
-        path = filedialog.askopenfilename(title="Sélectionner l'aire d'étude élargie",
-
-                                          initialdir=base if os.path.isdir(base) else os.path.expanduser("~"),
-
-                                          filetypes=[("Shapefile ESRI", "*.shp")])
-
-        if path:
-            # Normaliser pour l'affichage (sans préfixe long UNC)
-            self.ae_shp_var.set(os.path.normpath(path))
-
-
-
-    def _select_out_dir(self):
-
-        base = self.out_dir_var.get() or OUT_IMG
-
-        d = filedialog.askdirectory(title="Choisir le dossier de sortie",
-
-                                    initialdir=base if os.path.isdir(base) else os.path.expanduser("~"))
-
-        if d:
-
-            self.out_dir_var.set(d)
-
-
-
-    def _open_out_dir(self):
-
-        try:
-
-            out_dir = self.out_dir_var.get() or OUT_IMG
-
-            os.makedirs(out_dir, exist_ok=True)
-
-            os.startfile(out_dir)
-
-        except Exception as e:
-
-            messagebox.showerror("Erreur", f"Impossible d’ouvrir le dossier : {e}")
-
-
-
-    def _clear_results_tree(self):
-        """Resets the results in the treeview to '...' or empty."""
-        try:
-            if not hasattr(self, 'results_tree'):
-                return
-            for iid in ('climat', 'occupation_sols', 'altitude', 'vegetation', 'sols'):
-                try:
-                    cur = self.results_tree.item(iid, 'values')
-                    label = cur[0]
-                    self.results_tree.item(iid, values=(label, ""))
-                except Exception:
-                    pass  # Item might not exist, ignore.
-        except Exception:
-            pass
-
-    def start_consolidated_scraping(self):
-        if (not self.wiki_query_var.get().strip()) and (not self.ze_shp_var.get().strip()):
-            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude ou saisir une commune.")
-            return
-
-        print("[Scraping] Démarrage du scraping consolidé...", file=self.stdout_redirect)
-        self.wiki_button.config(state="disabled")
-        self.wiki_open_button.config(state="disabled")
-        self.wiki_last_url = ""
-
-        self._clear_results_tree()
-
-        t = threading.Thread(target=self._run_all_scrapers)
-        t.daemon = True
-        t.start()
-
-
-
-    def open_wiki_url(self) -> None:
-
-        try:
-
-            url = (self.wiki_last_url or "").strip()
-
-            if not url:
-
-                messagebox.showinfo("Wikipedia", "Aucune URL disponible. Lancez d'abord le scraping.")
-
-                return
-
-            print(f"[Wiki] Ouverture dans le navigateur : {url}", file=self.stdout_redirect)
-
-            webbrowser.open(url)
-
-        except Exception as e:
-
             messagebox.showerror("Wikipedia", f"Impossible d'ouvrir l'URL : {e}")
 
+    def _get_or_create_driver(self):
+        if self.shared_driver is None:
+            try:
+                # Setup Chrome options
+                options = webdriver.ChromeOptions()
+                options.add_experimental_option("detach", True)
+                options.add_argument("--start-maximized")
+                options.add_experimental_option('excludeSwitches', ['enable-logging'])
 
+                if os.getenv('APP_HEADLESS') == '1':
+                    options.add_argument('--headless')
+                    options.add_argument('--no-sandbox')
+                    options.add_argument('--disable-dev-shm-usage')
+
+                self.shared_driver = webdriver.Chrome(options=options)
+                print("[WebDriver] Shared browser instance created.", file=self.stdout_redirect)
+            except Exception as e:
+                messagebox.showerror("Erreur WebDriver", f"Impossible de démarrer le navigateur Chrome partagé : {e}")
+                self.shared_driver = None
+                return None
+        return self.shared_driver
+
+    def _cleanup_driver(self):
+        if self.shared_driver:
+            try:
+                self.shared_driver.quit()
+                print("[WebDriver] Shared browser instance closed.", file=self.stdout_redirect)
+            except Exception as e:
+                print(f"[WebDriver] Error closing shared browser: {e}", file=self.stdout_redirect)
+            finally:
+                self.shared_driver = None
 
     def _run_all_scrapers(self):
-        """Runs Wikipedia and Veg/Soil scrapers sequentially."""
+        os.makedirs("output", exist_ok=True)
+        driver = self._get_or_create_driver()
+        if not driver:
+            print("Cancel scraping due to browser start failure", file=self.stdout_redirect)
+            return
         try:
-            print("\n[Scraping] Étape 1: Wikipedia", file=self.stdout_redirect)
-            self._run_wiki()
-
-            print("\n[Scraping] Étape 2: Végétation et Sols", file=self.stdout_redirect)
-            self._run_vegsol()
-
-            print("\n[Scraping] Scraping consolidé terminé.", file=self.stdout_redirect)
-
+            self._run_wiki(driver)
+            self._run_vegsol(driver)
         except Exception as e:
-            print(f"[Scraping] Erreur durant le scraping consolidé: {e}", file=self.stdout_redirect)
+            print(f"Scraping error: {e}", file=self.stdout_redirect)
         finally:
+            print("Scraping finished. Browser remains open for inspection.", file=self.stdout_redirect)
             def _reenable_ui():
                 try:
                     self.wiki_button.config(state="normal")
@@ -2985,7 +1153,9 @@ class ContexteEcoTab(ttk.Frame):
                     pass
             self.after(0, _reenable_ui)
 
-    def _run_wiki(self):
+    def _run_wiki(self, driver):
+        # This method now receives the shared driver
+        # and operates in the currently active tab.
         try:
             print("[Wiki] Lancement du scraping Wikipedia", file=self.stdout_redirect)
 
@@ -3128,7 +1298,9 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-    def _run_vegsol(self):
+    def _run_vegsol(self, driver):
+        # This method now receives the shared driver
+        # and operates in a new tab as orchestrated by _run_all_scrapers.
 
         try:
 
@@ -3251,11 +1423,9 @@ class ContexteEcoTab(ttk.Frame):
                     p = p or ""
 
                     if p.startswith("\\\\?\\UNC"):
-
                         return "\\\\" + p[8:]
 
                     if p.startswith("\\\\?\\"):
-
                         return p[4:]
 
                     return p
@@ -3877,19 +2047,14 @@ class ContexteEcoTab(ttk.Frame):
             messagebox.showerror("Erreur", f"Erreur lors de l'ouverture de Remonter le temps : {e}")
 
     def start_bassin_thread(self):
-
         if not self.ze_shp_var.get().strip():
-
             messagebox.showerror("Erreur", "Veuillez d'abord sélectionner un shapefile pour la Zone d'étude.")
-
             return
-
         self.bassin_button.config(state="disabled")
-
-        t = threading.Thread(target=self._run_bassin)
-
+        # Use shared browser if available
+        driver = self._get_or_create_driver() if hasattr(self, '_get_or_create_driver') else None
+        t = threading.Thread(target=self._run_bassin, args=(driver,))
         t.daemon = True
-
         t.start()
 
 
@@ -3933,62 +2098,42 @@ class ContexteEcoTab(ttk.Frame):
             messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
             return
         self.rlt_button.config(state="disabled")
-        t = threading.Thread(target=self._run_rlt)
+        # Use shared browser if available
+        driver = self._get_or_create_driver() if hasattr(self, '_get_or_create_driver') else None
+        t = threading.Thread(target=self._run_rlt, args=(driver,))
         t.daemon = True
         t.start()
 
 
-    def _run_rlt(self):
-
+    def _run_rlt(self, driver=None):
         try:
-
             ze_path = self.ze_shp_var.get()
-
             gdf = gpd.read_file(ze_path)
-
             if gdf.crs is None:
-
                 raise ValueError("CRS non défini")
-
             gdf = gdf.to_crs("EPSG:4326")
-
             centroid = gdf.geometry.unary_union.centroid
-
             lat_dd, lon_dd = centroid.y, centroid.x
-
             commune, _dep = self._detect_commune(lat_dd, lon_dd)
-
             wait_s = WAIT_TILES_DEFAULT
-
             out_dir = OUTPUT_DIR_RLT
-
             os.makedirs(out_dir, exist_ok=True)
-
             comment_txt = COMMENT_TEMPLATE.format(commune=commune)
 
+            # Use shared driver or create new one if not provided
+            if driver is None:
+                driver = self._get_or_create_driver()
+                if not driver:
+                    print("[IGN] Impossible de créer le navigateur", file=self.stdout_redirect)
+                    return
+                should_cleanup = True
+            else:
+                should_cleanup = False
+                # Open in new tab
+                driver.execute_script("window.open('');")
+                driver.switch_to.window(driver.window_handles[-1])
 
-
-            drv_opts = webdriver.ChromeOptions()
-
-            drv_opts.add_argument("--log-level=3")
-
-            drv_opts.add_experimental_option('excludeSwitches', ['enable-logging'])
-
-            drv_opts.add_argument("--disable-extensions")
-
-
-
-            print(f"[IGN] Lancement Chrome…", file=self.stdout_redirect)
-
-            driver = webdriver.Chrome(options=drv_opts)
-
-            try:
-
-                driver.maximize_window()
-
-            except Exception:
-
-                pass
+            print(f"[IGN] Utilisation du navigateur partagé…", file=self.stdout_redirect)
 
 
 
@@ -4152,8 +2297,7 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-    def _run_bassin(self):
-
+    def _run_bassin(self, driver=None):
         try:
 
             ze_path = self.ze_shp_var.get()
@@ -4182,45 +2326,33 @@ class ContexteEcoTab(ttk.Frame):
 
             print(f"[BV] Coordonnées : {lat_dd:.6f}, {lon_dd:.6f}", file=self.stdout_redirect)
 
-
-
-            options = webdriver.ChromeOptions()
-
-            options.add_argument("--log-level=3")
-
-            options.add_experimental_option('excludeSwitches', ['enable-logging'])
-
-            options.add_argument("--disable-extensions")
-
-            prefs = {
-
-                "download.default_directory": download_dir,
-
-                "download.prompt_for_download": False,
-
-                "profile.default_content_settings.popups": 0,
-
-                "download.directory_upgrade": True
-
-            }
-
-            options.add_experimental_option("prefs", prefs)
-
-
-
-            print("[BV] Initialisation du navigateur...", file=self.stdout_redirect)
-
-            driver = webdriver.Chrome(options=options)
-
-            try:
-
-                driver.maximize_window()
-
-            except Exception:
-
-                pass
-
-
+            # Use shared driver or create new one if not provided
+            if driver is None:
+                # Create driver with download preferences for this specific task
+                options = webdriver.ChromeOptions()
+                options.add_argument("--log-level=3")
+                options.add_experimental_option('excludeSwitches', ['enable-logging'])
+                options.add_argument("--disable-extensions")
+                prefs = {
+                    "download.default_directory": download_dir,
+                    "download.prompt_for_download": False,
+                    "profile.default_content_settings.popups": 0,
+                    "download.directory_upgrade": True
+                }
+                options.add_experimental_option("prefs", prefs)
+                driver = webdriver.Chrome(options=options)
+                try:
+                    driver.maximize_window()
+                except Exception:
+                    pass
+                should_cleanup = True
+                print("[BV] Navigateur créé avec préférences de téléchargement...", file=self.stdout_redirect)
+            else:
+                should_cleanup = False
+                # Open in new tab
+                driver.execute_script("window.open('');")
+                driver.switch_to.window(driver.window_handles[-1])
+                print("[BV] Utilisation du navigateur partagé (nouvel onglet)...", file=self.stdout_redirect)
 
             url = "https://mghydro.com/watersheds/"
 
@@ -4229,8 +2361,6 @@ class ContexteEcoTab(ttk.Frame):
             driver.get(url)
 
             wait = WebDriverWait(driver, 2)
-
-
 
             opts_button = wait.until(EC.element_to_be_clickable((By.ID, "opts_click")))
 
@@ -4241,8 +2371,6 @@ class ContexteEcoTab(ttk.Frame):
             if not downloadable_checkbox.is_selected():
 
                 downloadable_checkbox.click()
-
-
 
             search_icon = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".leaflet-control-search .search-button")))
 
@@ -4258,8 +2386,6 @@ class ContexteEcoTab(ttk.Frame):
 
             search_input.send_keys(Keys.ENTER); time.sleep(1.5)
 
-
-
             map_element = wait.until(EC.presence_of_element_located((By.ID, "map")))
 
             ActionChains(driver).move_to_element(map_element).click().perform(); time.sleep(0.8)
@@ -4270,8 +2396,6 @@ class ContexteEcoTab(ttk.Frame):
 
             delineate_button.click(); time.sleep(1.5)
 
-
-
             downloads_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(@class, 'ui-selectmenu-text') and contains(text(), 'Watershed Boundary')]")))
 
             downloads_button.click(); time.sleep(0.8)
@@ -4280,21 +2404,26 @@ class ContexteEcoTab(ttk.Frame):
 
             time.sleep(1.5)
 
-
-
         except Exception as e:
 
             print(f"[BV] Erreur Selenium : {e}", file=self.stdout_redirect)
 
         finally:
 
-            try:
-
-                driver.quit()
-
-            except Exception:
-
-                pass
+            # Only cleanup if we created the driver ourselves
+            if should_cleanup:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+            else:
+                # Just close the current tab
+                try:
+                    driver.close()
+                    if len(driver.window_handles) > 0:
+                        driver.switch_to.window(driver.window_handles[0])
+                except Exception:
+                    pass
 
 
 
@@ -4982,153 +3111,51 @@ class ContexteEcoTab(ttk.Frame):
 
 
 # =========================
-
 # App principale avec Notebook
-
 # =========================
+class Application(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.prefs = load_prefs()
 
-class MainApp:
+        self.title("Bota-Logiciel | Assistant Contexte Éco & Identification")
+        self.geometry(self.prefs.get("GEOMETRY", "1200x900"))
 
-    def __init__(self, root):
+        self.style_helper = StyleHelper(self, self.prefs)
+        self.style_helper.apply(self.prefs.get("THEME", "light"))
 
-        self.root = root
+        self.notebook = ttk.Notebook(self)
+        self.export_tab = ExportCartesTab(self.notebook, self.style_helper, self.prefs)
+        self.plantnet_tab = PlantNetTab(self.notebook, self.style_helper, self.prefs)
+        self.biodiv_tab = BiodivTab(self.notebook, self.style_helper, self.prefs)
 
-        self.root.title("Contexte éco — Outils")
+        self.notebook.add(self.export_tab, text="Contexte Écologique & Cartes")
+        self.notebook.add(self.plantnet_tab, text="  Pl@ntNet  ")
+        self.notebook.add(self.biodiv_tab, text="Biodiv'AURA")
 
-        self.root.geometry("1060x760"); self.root.minsize(900, 640)
-        # Start maximized by default on Windows
+        self.notebook.pack(expand=True, fill='both', padx=10, pady=10)
+
+        self.protocol("WM_DELETE_WINDOW", self._on_closing)
+
+    def _on_closing(self):
         try:
-            self.root.state('zoomed')
+            g = self.geometry()
+            if "x" in g:
+                self.prefs["GEOMETRY"] = g
+            save_prefs(self.prefs)
         except Exception:
             pass
 
+        # Call the cleanup method for the shared browser
+        if hasattr(self, 'export_tab'):
+            self.export_tab._cleanup_driver()
 
+        self.destroy()
 
-        self.prefs = load_prefs()
 
-        self.style_helper = StyleHelper(root, self.prefs)
-
-        self.theme_var = tk.StringVar(value=self.prefs.get("theme", "light"))
-
-        self.style_helper.apply(self.theme_var.get())
-
-
-
-        self.wiki_driver = None
-
-        self.vegsol_driver = None
-
-
-
-        # Header global + bouton thème
-
-        top = ttk.Frame(root, style="Header.TFrame", padding=(12, 8))
-
-        top.pack(fill=tk.X)
-
-        ttk.Label(top, text='Contexte éco — Suite d’outils', style='Card.TLabel',
-
-                  font=tkfont.Font(family="Segoe UI", size=16, weight="bold")).pack(side=tk.LEFT)
-
-        btn_theme = ttk.Button(top, text='Changer de thème', command=self._toggle_theme)
-
-        btn_theme.pack(side=tk.RIGHT)
-
-
-
-        # Notebook
-
-        nb = ttk.Notebook(root)
-
-        nb.pack(fill=tk.BOTH, expand=True, padx=12, pady=10)
-
-
-
-        self.tab_ctx   = ContexteEcoTab(nb, self.style_helper, self.prefs)
-
-        self.tab_plant = PlantNetTab(nb, self.style_helper, self.prefs)
-
-
-
-        nb.add(self.tab_ctx, text="Contexte éco")
-
-        nb.add(self.tab_plant, text="Pl@ntNet")
-
-
-
-        # Raccourcis utiles
-
-        root.bind("<Control-1>", lambda _e: nb.select(0))
-
-        root.bind("<Control-2>", lambda _e: nb.select(1))
-
-
-
-        # Sauvegarde prefs à la fermeture
-
-        root.protocol("WM_DELETE_WINDOW", self._on_close)
-
-
-
-    def _toggle_theme(self):
-
-        themes = ["light", "dark", "funky"]
-
-        current = self.theme_var.get()
-
-        new_theme = themes[(themes.index(current) + 1) % len(themes)]
-
-        self.theme_var.set(new_theme)
-
-        self.prefs["theme"] = new_theme
-
-        save_prefs(self.prefs)
-
-        self.style_helper.apply(new_theme)
-
-
-
-    def _on_close(self):
-
-        try:
-
-            save_prefs(self.prefs)
-
-        finally:
-
-            self.root.destroy()
-
-
-
-# =========================
-
-# Main
-
-# =========================
-
-def launch():
-
-    """Lance l'interface principale."""
-
-    root = tk.Tk()
-
-    app = MainApp(root)
-
-    root.mainloop()
-
-
-
-
-
-if __name__ == "__main__":
-
-    launch()
-
-
-
-
-
-
+if __name__ == '__main__':
+    app = Application()
+    app.mainloop()
 
 
 
