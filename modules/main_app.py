@@ -3663,6 +3663,7 @@ class ContexteEcoTab(ttk.Frame):
                     # Essayer d'abord de construire l'URL via TAXREF (nom latin -> CD_NOM)
                     url_sp = None
                     cd_nom = None
+                    tmp_path = None
                     try:
                         key = sp.strip().lower()
                         cd_nom = taxref_map.get(key)
@@ -3680,6 +3681,7 @@ class ContexteEcoTab(ttk.Frame):
                         url_sp = f"https://atlas.biodiversite-auvergne-rhone-alpes.fr/espece/{cd_nom}"
                         # Utiliser requests en priorité (plus rapide, pas d'attente Selenium)
                         img_url = None
+                        tmp_path = None
                         try:
                             resp = requests.get(
                                 url_sp,
@@ -3688,10 +3690,35 @@ class ContexteEcoTab(ttk.Frame):
                                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
                                 },
                             )
+                            if resp.ok:
+                                soup = BeautifulSoup(resp.text, "html.parser")
+                                m = soup.select_one("meta[property='og:image']")
+                                if m and m.get("content"):
+                                    img_url = m.get("content")
+                        except Exception as e_req:
+                            print(f"[Biodiv] Echec requete: {e_req}", file=self.stdout_redirect)
+
+                        # Fallback Selenium si pas d'URL image trouvée via requests
+                        if not img_url and driver is not None:
                             try:
-                                if sel.startswith("meta["):
-                                    el = driver.find_element(By.CSS_SELECTOR, sel)
-                                    src = el.get_attribute("content")
+                                driver.get(url_sp)
+                                # Attendre un minimum que le DOM soit prêt
+                                try:
+                                    WebDriverWait(driver, 4).until(lambda d: d.execute_script("return document.readyState") in ("interactive", "complete"))
+                                except Exception:
+                                    pass
+                                # Extraire og:image via JS avec échappement correct
+                                og = driver.execute_script('var m=document.querySelector("meta[property=\'og:image\']"); return m?m.content:null;')
+                                if og and isinstance(og, str) and og.startswith("http"):
+                                    img_url = og
+                            except Exception as e_se:
+                                print(f"[Biodiv] Selenium fallback KO: {e_se}", file=self.stdout_redirect)
+
+                        # Télécharger l'image si une URL a été trouvée
+                        if img_url:
+                            try:
+                                img_resp = requests.get(
+                                    img_url,
                                     stream=True,
                                     timeout=15,
                                     headers={
@@ -3700,7 +3727,7 @@ class ContexteEcoTab(ttk.Frame):
                                 )
                                 if img_resp.ok:
                                     safe_name = re.sub(r"[^\w\-]+", "_", sp.strip())[:80]
-                                    ext = os.path.splitext(img_url.split("?")[0])[1] or ".jpg"
+                                    ext = os.path.splitext((img_url.split("?")[0]).strip())[1] or ".jpg"
                                     if len(ext) > 6:
                                         ext = ".jpg"
                                     tmp_path = os.path.join(out_dir, f"{safe_name}{ext}")
