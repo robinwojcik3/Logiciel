@@ -1194,7 +1194,11 @@ class ExportCartesTab(ttk.Frame):
         self.export_button.grid(row=0, column=0, sticky="ew", padx=(0,6))
         self.id_button = ttk.Button(act_frm, text="ID Contexte éco", command=self.start_id_thread)
         self.id_button.grid(row=0, column=1, sticky="ew", padx=(0,6))
-        self.report_button = ttk.Button(act_frm, text="Rapport auto", command=self.start_report_sequence)
+        self.report_button = ttk.Button(
+            act_frm,
+            text="Générer rapport Word",
+            command=self.start_report_sequence,
+        )
         self.report_button.grid(row=0, column=2, sticky="ew")
 
         # ID buffer
@@ -2500,35 +2504,45 @@ class ExportCartesTab(ttk.Frame):
                         found.append(name)
             return found
 
-        table_map = {
-            'TABLEAU NATURA2000': ['Natura 2000'],
-            'TABLEAU ZNIEFF': ['ZNIEFF de Type I', 'ZNIEFF de Type II'],
-            'TABLEAU APPB': ['APPB'],
-            'TABLEAU ENS': ['ENS'],
-            'TABLEAU PNN': ['PNN', 'Parc National', 'PN'],
-            'TABLEAU PRN': ['PRN', 'Parc Naturel Régional', 'PR']
+        sheet_aliases = {
+            'NATURA2000': ['Natura 2000'],
+            'ZNIEFF': ['ZNIEFF de Type I', 'ZNIEFF de Type II'],
+            'APPB': ['APPB'],
+            'ENS': ['ENS'],
+            'PNN': ['PNN', 'Parc National', 'PN'],
+            'PRN': ['PRN', 'Parc Naturel Régional', 'PR'],
+            'ZH': ['ZH', 'Zone humide'],
+            'PELOUSES': ['Pelouses', 'Pelouses sèches'],
         }
-        image_map = {
-            'CARTE NATURA2000': 'Contexte éco - N2000__AE.png',
-            'CARTE ZNIEFF': 'Contexte éco - ZNIEFF__AE.png',
-            'CARTE APPB': 'Contexte éco - APPB__AE.png',
-            'CARTE ENS': 'Contexte éco - ENS__AE.png',
-            'CARTE PNN': 'Contexte éco - Parc National__AE.png',
-            'CARTE PRN': 'Contexte éco - Parc Naturel Régional__AE.png'
+
+        image_aliases = {
+            'NATURA2000': 'Contexte éco - N2000__AE.png',
+            'ZNIEFF': 'Contexte éco - ZNIEFF__AE.png',
+            'APPB': 'Contexte éco - APPB__AE.png',
+            'ENS': 'Contexte éco - ENS__AE.png',
+            'PNN': 'Contexte éco - Parc National__AE.png',
+            'PRN': 'Contexte éco - Parc Naturel Régional__AE.png',
+            'ZH': 'Contexte éco - ZH avérées__AE.png',
+            'PELOUSES': 'Contexte éco - Pelouses sèches__AE.png',
         }
 
         for para in list(doc.paragraphs):
             text = para.text.strip()
-            if text in table_map:
-                sheets = find_sheets(table_map[text])
+            if text.startswith('TABLEAU'):
+                key = text.replace('TABLEAU', '').strip().upper()
+                patterns = sheet_aliases.get(key, [key])
+                sheets = find_sheets(patterns)
                 dfs = [pd.read_excel(xls, sheet) for sheet in sheets]
                 if dfs:
                     df = pd.concat(dfs, ignore_index=True)
                     self._insert_table_from_df(doc, para, df)
-            elif text in image_map:
-                img_path = os.path.join(OUT_IMG, image_map[text])
-                if os.path.isfile(img_path):
-                    self._insert_image(para, img_path)
+            elif text.startswith('CARTE'):
+                key = text.replace('CARTE', '').strip().upper()
+                img_name = image_aliases.get(key)
+                if img_name:
+                    img_path = os.path.join(OUT_IMG, img_name)
+                    if os.path.isfile(img_path):
+                        self._insert_image(para, img_path)
         doc.save(out_doc)
 
     def _insert_table_from_df(self, doc, paragraph, df):
