@@ -30,7 +30,7 @@ Voir aussi `docs/INSTALL.md` pour les détails et prérequis non‑Python (QGIS/
 ## Pré-requis non‑Python
 
 - QGIS 3.x installé (requis pour l’export via PyQGIS). Les chemins par défaut pointent vers `C:\\Program Files\\QGIS ...`. Pour un confinement total, il est possible d’utiliser une distribution portable de QGIS placée dans le dépôt et d’ajuster `QGIS_ROOT`/`QGIS_APP`/`PY_VER` dans `modules/main_app.py`.
-- Google Chrome (Selenium). Par défaut Selenium Manager gère le driver. Si vous exigez 100% local, placez un `chromedriver` dans le repo et initialisez le WebDriver avec ce binaire.
+- Google Chrome (Selenium). Par défaut Selenium Manager gère le driver. Si vous exigez 100% local, placez un `chromedriver` dans le repo et initialisez le WebDriver avec ce binaire. Les fenêtres Chrome ouvertes par Selenium sont automatiquement minimisées pour ne pas occuper l'écran.
 
 ## Verrouillage des versions (optionnel)
 
