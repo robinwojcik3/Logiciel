@@ -3544,10 +3544,24 @@ class ContexteEcoTab(ttk.Frame):
         self.biodiv_launch_btn = ttk.Button(btns, text="Lancer le scraping", style="Accent.TButton",
                                             command=self.start_biodiv_thread)
         self.biodiv_launch_btn.pack(side=tk.LEFT)
+        try:
+            self.biodiv_launch_btn.config(state='normal')
+        except Exception:
+            pass
+
+        # Permettre Entrée pour lancer rapidement
+        try:
+            win.bind('<Return>', lambda e: self.start_biodiv_thread())
+        except Exception:
+            pass
 
         ttk.Button(btns, text="Fermer", command=win.destroy).pack(side=tk.RIGHT)
 
     def start_biodiv_thread(self) -> None:
+        try:
+            print("[Biodiv] Bouton 'Lancer le scraping' cliqué", file=self.stdout_redirect)
+        except Exception:
+            pass
         try:
             raw = self.biodiv_text.get('1.0', tk.END)
         except Exception:
@@ -3845,14 +3859,6 @@ class ContexteEcoTab(ttk.Frame):
             # Ajouter un saut de page si ce n'est pas la dernière page
             if page_start + 6 < len(species_data):
                 doc.add_page_break()
-
-        self.rlt_button.config(state="disabled")
-
-        t = threading.Thread(target=self._run_rlt)
-
-        t.daemon = True
-
-        t.start()
 
 
 
