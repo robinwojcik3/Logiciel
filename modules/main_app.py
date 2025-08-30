@@ -157,6 +157,7 @@ from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_TABLE_ALIGNMENT
 
 from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 
 
 
@@ -756,8 +757,10 @@ def copy_and_rename_file(file_path, dest_folder, new_name, count):
         new_file_name = f"{new_name} @plantnet({count}){ext}"
 
     new_path = os.path.join(dest_folder, new_file_name)
-
+    
     try:
+        # Ensure destination directory exists
+        os.makedirs(dest_folder, exist_ok=True)
 
         shutil.copy(file_path, new_path)
 
@@ -893,11 +896,9 @@ def add_hyperlink(paragraph, url: str, text: str, italic: bool = True):
 
     )
 
-    from docx.oxml import OxmlElement, ns
-
     fld_simple = OxmlElement('w:hyperlink')
 
-    fld_simple.set(ns.qn('r:id'), r_id)
+    fld_simple.set(qn('r:id'), r_id)
 
 
 
@@ -913,7 +914,7 @@ def add_hyperlink(paragraph, url: str, text: str, italic: bool = True):
 
     u = OxmlElement('w:u')
 
-    u.set(ns.qn('w:val'), 'single')
+    u.set(qn('w:val'), 'single')
 
     r_pr.append(u)
 
@@ -1078,42 +1079,6 @@ class ExportCartesTab(ttk.Frame):
 
 
     def _build_ui(self):
-        # Zone haute défilante + console basse fixe (PlantNet)
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
-        top_container = ttk.Frame(self)
-        top_container.grid(row=0, column=0, sticky="nsew")
-        canvas = tk.Canvas(top_container, highlightthickness=0, borderwidth=0)
-        vscroll = ttk.Scrollbar(top_container, orient="vertical", command=canvas.yview)
-        hscroll = ttk.Scrollbar(top_container, orient="horizontal", command=canvas.xview)
-        canvas.configure(yscrollcommand=vscroll.set, xscrollcommand=hscroll.set)
-        vscroll.pack(side=tk.RIGHT, fill=tk.Y)
-        hscroll.pack(side=tk.BOTTOM, fill=tk.X)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        top = ttk.Frame(canvas)
-        _win = canvas.create_window((0, 0), window=top, anchor="nw")
-        def _on_frame_config(_=None):
-            try:
-                canvas.configure(scrollregion=canvas.bbox("all"))
-            except Exception:
-                pass
-        def _on_canvas_config(e):
-            try:
-                pass
-            except Exception:
-                pass
-        top.bind("<Configure>", _on_frame_config)
-        canvas.bind("<Configure>", _on_canvas_config)
-        def _mw(e):
-            try:
-                delta = -1 * (e.delta // 120)
-            except Exception:
-                delta = -1 if getattr(e, 'num', 0) == 4 else (1 if getattr(e, 'num', 0) == 5 else 0)
-            if delta:
-                canvas.yview_scroll(delta, "units")
-        canvas.bind_all("<MouseWheel>", _mw)
-        canvas.bind_all("<Button-4>", _mw)
-        canvas.bind_all("<Button-5>", _mw)
         # Layout root of the tab: top scrollable content + fixed bottom console
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
@@ -1150,6 +1115,7 @@ class ExportCartesTab(ttk.Frame):
         canvas.bind_all("<MouseWheel>", _mw)
         canvas.bind_all("<Button-4>", _mw)
         canvas.bind_all("<Button-5>", _mw)
+
         header = ttk.Frame(top, style="Header.TFrame", padding=(14, 12))
 
         header.pack(fill=tk.X, pady=(0, 10))
