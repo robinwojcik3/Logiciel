@@ -58,9 +58,27 @@ import urllib.request
 
 import webbrowser
 
+import webbrowser
+import traceback
 import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
 
-from tkinter import ttk, filedialog, messagebox
+from docx import Document
+from docx.shared import Inches, Cm
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.section import WD_ORIENT
+from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.oxml.ns import qn
+
+from openpyxl import load_workbook
+from PIL import Image
+
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 from tkinter import font as tkfont
 
@@ -81,8 +99,49 @@ import traceback
 import subprocess
 
 import geopandas as gpd
-
 from bs4 import BeautifulSoup
+
+# --- Helper functions for Word document generation ---
+def dms_to_dd(text: str) -> float:
+    pat = r'(\d{1,3})[°d]\s*(\d{1,2})[\'m]\s*([\d\.]+)[\"s]?\s*([NSEW])'
+    alt = r"(\d{1,3})\s+(\d{1,2})\s+([\d\.]+)\s*([NSEW])"
+    m = re.search(pat, text, re.I) or re.search(alt, text, re.I)
+    if not m:
+        raise ValueError(f"Format DMS invalide : {text}")
+    deg, mn, sc, hemi = m.groups()
+    dd = float(deg) + float(mn)/60 + float(sc)/3600
+    return -dd if hemi.upper() in ("S", "W") else dd
+
+def add_hyperlink(paragraph, url: str, text: str, italic: bool = True):
+    """
+    Ajoute un lien hypertexte cliquable (python-docx ne fournit pas
+    d’API dédiée ; on passe par l’XML bas niveau).
+    """
+    part = paragraph.part
+    r_id = part.relate_to(
+        url,
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+        is_external=True
+    )
+    from docx.oxml import OxmlElement, ns
+    fld_simple = OxmlElement('w:hyperlink')
+    fld_simple.set(ns.qn('r:id'), r_id)
+
+    run = OxmlElement('w:r')
+    r_pr = OxmlElement('w:rPr')
+    if italic:
+        i = OxmlElement('w:i')
+        r_pr.append(i)
+    u = OxmlElement('w:u')
+    u.set(ns.qn('w:val'), 'single')
+    r_pr.append(u)
+    run.append(r_pr)
+    run_text = OxmlElement('w:t')
+    run_text.text = text
+    run.append(run_text)
+    fld_simple.append(run)
+    paragraph._p.append(fld_simple)
+
 
 
 
@@ -223,57 +282,9 @@ QGIS_APP  = os.path.join(QGIS_ROOT, "apps", "qgis")
 
 PY_VER    = "Python312"
 
-
-
-# Préférences
-
-PREFS_PATH = os.path.join(os.path.expanduser("~"), "ExportCartesContexteEco.config.json")
-
-
-
-# Constantes « Remonter le temps » et « Bassin versant » (issues du script source)
-
-LAYERS = [
-
-    ("Aujourd’hui",   "10"),
-
-    ("2000-2005",     "18"),
-
-    ("1965-1980",     "20"),
-
-    ("1950-1965",     "19"),
-
-]
-
-URL = ("https://remonterletemps.ign.fr/comparer/?lon={lon}&lat={lat}"
-
-       "&z=17&layer1={layer}&layer2=19&mode=dub1")
-
-WAIT_TILES_DEFAULT = 1.5
-
-IMG_WIDTH = Cm(12.5 * 0.8)
-
-WORD_FILENAME = "Comparaison_temporelle_Paysage.docx"
-
-OUTPUT_DIR_RLT = os.path.join(OUT_IMG, "Remonter le temps")
-
-COMMENT_TEMPLATE = (
-
-    "Rédige un commentaire synthétique de l'évolution de l'occupation du sol observée "
-
-    "sur les images aériennes de la zone d'étude, aux différentes dates indiquées "
-
-    "(1950–1965, 1965–1980, 2000–2005, aujourd’hui). Concentre-toi sur les grandes "
-
-    "dynamiques d'aménagement (urbanisation, artificialisation, évolution des milieux "
-
-    "ouverts ou boisés), en identifiant les principales transformations visibles. "
-
-    "Fais ta réponse en un seul court paragraphe. Intègre les éléments de contexte "
-
-    "historique et territorial propres à la commune de {commune} pour interpréter ces évolutions."
-
-)
+# --- Global Paths & Constants ---
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..')) 
 
 
 
@@ -1032,6 +1043,8 @@ class ExportCartesTab(ttk.Frame):
 
         self.prefs = prefs
 
+        self.shared_driver = None
+
         self.style_helper = style_helper
 
 
@@ -1320,20 +1333,124 @@ class ExportCartesTab(ttk.Frame):
         t.start()
 
     def _open_rlt_links(self):
-        centroid = self._get_centroid_wgs84()
-        if not centroid:
-            return
-        lat, lon = centroid
         try:
-            # Ouvrir la vue principale Aujourd'hui
-            main_url = URL.format(lon=lon, lat=lat, layer=LAYERS[0][1])
-            webbrowser.open(main_url)
-            # Optionnel: ouvrir aussi d'autres périodes dans des onglets séparés
-            for name, layer in LAYERS[1:]:
-                time.sleep(0.4)
-                webbrowser.open(URL.format(lon=lon, lat=lat, layer=layer))
+            # --- Utiliser les chemins et paramètres de l'ancienne version ---
+            excel_path = r"C:\Users\utilisateur\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 3) BDD\TOOL Excel.xlsm"
+            output_dir = r"C:\Users\utilisateur\Mon Drive\1 - Bota & Travail\+++++++++  BOTA  +++++++++\---------------------- 3) BDD\PYTHON\2) Contexte éco\OUTPUT\Remonter le temps"
+            word_filename = "Comparaison_temporelle_Paysage.docx"
+            os.makedirs(output_dir, exist_ok=True)
+
+            # --- 1. Lecture des données depuis Excel ---
+            print("Lecture des coordonnées depuis le fichier Excel...")
+            tmp_dir = tempfile.mkdtemp(prefix="excel_tmp_")
+            tmp_file = os.path.join(tmp_dir, "copy.xlsm")
+            shutil.copy2(excel_path, tmp_file)
+
+            wb = load_workbook(tmp_file, read_only=True, data_only=True, keep_vba=False)
+            ws = wb["0  PYTHON"]
+            coord_raw = str(ws["H5"].value).strip()
+            commune = str(ws["I5"].value).strip()
+            wb.close()
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+            lat_dd, lon_dd = (dms_to_dd(s) for s in re.split(r"\s+|,|\t", coord_raw, maxsplit=1))
+            print(f"Commune: {commune}, Coordonnées: {lat_dd:.6f}, {lon_dd:.6f}")
+
+            # --- 2. Capture des images avec Selenium ---
+            print("Lancement de la capture d'images...")
+            driver = self._get_or_create_driver()
+            if not driver:
+                return
+            
+            driver.maximize_window()
+            images = []
+            viewport = (By.CSS_SELECTOR, "div.ol-viewport")
+
+            # Utiliser les couches de l'ancien script
+            layers_ign = [
+                ("Aujourd’hui", "10"),
+                ("2000-2005", "18"),
+                ("1965-1980", "20"),
+                ("1950-1965", "19"),
+            ]
+            url_template = "https://remonterletemps.ign.fr/comparer/?lon={lon}&lat={lat}&z=17&layer1={layer}&layer2=19&mode=dub1"
+
+            for title, layer_val in layers_ign:
+                url = url_template.format(lon=f"{lon_dd:.6f}", lat=f"{lat_dd:.6f}", layer=layer_val)
+                driver.get(url)
+                WebDriverWait(driver, 20).until(EC.visibility_of_element_located(viewport))
+                time.sleep(self.wait_tiles_var.get() or 1.5)
+                
+                tgt = driver.find_element(*viewport)
+                img_path = os.path.join(output_dir, f"{title}.png")
+                if tgt.screenshot(img_path):
+                    img = Image.open(img_path)
+                    w, h = img.size
+                    left, right = int(w * 0.05), int(w * 0.95)
+                    img.crop((left, 0, right, h)).save(img_path)
+                    images.append((title, img_path))
+                else:
+                    print(f"Capture échouée : {title}")
+
+            # --- 3. Création du document Word ---
+            if not images:
+                messagebox.showwarning("Aucune image", "Aucune image n'a été capturée, le document Word ne sera pas généré.")
+                return
+
+            print("Génération du document Word...")
+            doc = Document()
+            style_normal = doc.styles['Normal']
+            style_normal.font.name = 'Calibri'
+            style_normal._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
+
+            sec = doc.sections[0]
+            sec.orientation = WD_ORIENT.LANDSCAPE
+            sec.page_width, sec.page_height = sec.page_height, sec.page_width
+            sec.left_margin, sec.right_margin, sec.top_margin, sec.bottom_margin = [Cm(1.5)] * 4
+
+            caption_text = f"Tableau 3 : Évolution de l’occupation du sol du territoire de la zone d’étude (source : IGN – RemonterLeTemps)"
+            cap_par = doc.add_paragraph()
+            cap_par.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            add_hyperlink(cap_par, "https://remonterletemps.ign.fr/", caption_text)
+
+            table = doc.add_table(rows=2, cols=2)
+            table.alignment = WD_TABLE_ALIGNMENT.CENTER
+            table.style = "Table Grid"
+            table.autofit = False
+
+            for idx, (title, path) in enumerate(images):
+                r, c = divmod(idx, 2)
+                cell = table.cell(r, c)
+                p_t = cell.paragraphs[0]
+                run_t = p_t.add_run(title)
+                run_t.bold = True
+                p_t.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p_img = cell.add_paragraph()
+                p_img.add_run().add_picture(path, width=Cm(12.5 * 0.8))
+                p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+            doc.add_paragraph()
+            comment_template = (
+                "Rédige un commentaire synthétique de l'évolution de l'occupation du sol observée "
+                "sur les images aériennes de la zone d'étude, aux différentes dates indiquées "
+                "(1950–1965, 1965–1980, 2000–2005, aujourd’hui). Concentre-toi sur les grandes "
+                "dynamiques d'aménagement (urbanisation, artificialisation, évolution des milieux "
+                "ouverts ou boisés), en identifiant les principales transformations visibles. "
+                "Fais ta réponse en un seul court paragraphe. Intègre les éléments de contexte "
+                "historique et territorial propres à la commune de {commune} pour interpréter ces évolutions."
+            )
+            p_comm = doc.add_paragraph(comment_template.format(commune=commune))
+            p_comm.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+            doc_path = os.path.join(output_dir, word_filename)
+            doc.save(doc_path)
+            messagebox.showinfo("Succès", f"Document Word généré :\n{doc_path}")
+
         except Exception as e:
-            messagebox.showerror("Erreur", f"Impossible d'ouvrir Remonter le temps: {e}")
+            error_message = f"Une erreur est survenue lors du processus Remonter le temps: {e}"
+            print(error_message)
+            traceback.print_exc()
+            messagebox.showerror("Erreur", error_message)
 
     def start_bassin_thread(self):
         """Ouvre une recherche utile pour le bassin versant autour du centroïde."""
@@ -1364,6 +1481,33 @@ class ExportCartesTab(ttk.Frame):
                 webbrowser.open(f"file://{path}")
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible d'ouvrir le dossier: {e}")
+
+    def _get_or_create_driver(self):
+        """Initialise et retourne un driver Selenium, en le réutilisant s'il existe déjà."""
+        if self.shared_driver:
+            try:
+                # Vérifier si le driver est toujours actif
+                _ = self.shared_driver.window_handles
+                print("Réutilisation du WebDriver existant.")
+                return self.shared_driver
+            except Exception:
+                print("Le WebDriver partagé n'est plus valide, création d'un nouveau.")
+                self._cleanup_driver()
+
+        try:
+            print("Création d'un nouveau WebDriver...")
+            options = webdriver.ChromeOptions()
+            # Ajoutez ici des options si nécessaire (ex: headless)
+            # options.add_argument('--headless')
+            service = Service() # Assurez-vous que chromedriver est dans le PATH
+            driver = webdriver.Chrome(service=service, options=options)
+            self.shared_driver = driver
+            return driver
+        except Exception as e:
+            print(f"Erreur lors de la création du WebDriver: {e}")
+            traceback.print_exc()
+            messagebox.showerror("Erreur WebDriver", f"Impossible de démarrer Selenium. Assurez-vous que ChromeDriver est installé et dans votre PATH. Erreur: {e}")
+            return None
 
     def _cleanup_driver(self):
         if self.shared_driver:
