@@ -22,6 +22,9 @@ Voir aussi `docs/INSTALL.md` pour les détails et prérequis non‑Python (QGIS/
 
 - `Start.py`: point d’entrée.
 - `modules/`: logique métier (UI, export QGIS, scraping Wikipédia, etc.).
+- `modules/report_generator.py`: assemble un rapport Word en intégrant
+  automatiquement le tableau issu de l'analyse « ID contexte éco » et les
+  cartes exportées.
 - `requirements.txt`: dépendances Python installées dans `.venv` (dans le dépôt).
 - `scripts/`: scripts d’installation/ lancement (`setup.ps1`, `run.ps1`).
 - `docs/INSTALL.md`: procédure d’installation isolée.
