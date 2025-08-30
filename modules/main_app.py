@@ -1151,9 +1151,18 @@ class ExportCartesTab(ttk.Frame):
 
         # Output directory
         ttk.Label(left, text="Dossier de sortie").grid(row=4, column=0, sticky="w", pady=(4,0))
-        out_entry = ttk.Entry(left, textvariable=self.out_dir_var, width=48, style="Card.TEntry")
-        out_entry.grid(row=4, column=1, sticky="ew", padx=(6,6), pady=(4,0))
-        ttk.Button(left, text="Choisir…", command=lambda: self._browse_dir(self.out_dir_var)).grid(row=4, column=2, pady=(4,0))
+        out_frm = ttk.Frame(left)
+        out_frm.grid(row=4, column=1, columnspan=2, sticky="ew", padx=(6,0), pady=(4,0))
+        out_frm.columnconfigure(0, weight=1)
+        out_entry = ttk.Entry(out_frm, textvariable=self.out_dir_var, width=48, style="Card.TEntry")
+        out_entry.grid(row=0, column=0, sticky="ew")
+        ttk.Button(out_frm, text="Choisir…", command=lambda: self._browse_dir(self.out_dir_var)).grid(row=0, column=1, padx=(6,0))
+        btn_open_out = ttk.Button(out_frm, text="Ouvrir", command=self._open_output_dir)
+        btn_open_out.grid(row=0, column=2, padx=(6,0))
+        try:
+            ToolTip(btn_open_out, "Ouvrir le dossier d'export dans l'explorateur")
+        except Exception:
+            pass
 
         # Actions: Export, Identification
         act_frm = ttk.Frame(left)
@@ -1189,6 +1198,8 @@ class ExportCartesTab(ttk.Frame):
         self.wiki_button.grid(row=1, column=0, sticky="w", padx=6, pady=(0,6))
         self.wiki_open_button = ttk.Button(wiki_frm, text="Ouvrir la page Wikipédia", command=self._open_wiki_url, state="disabled")
         self.wiki_open_button.grid(row=1, column=1, sticky="w", padx=6, pady=(0,6))
+        self.open_output_button = ttk.Button(wiki_frm, text="Ouvrir Output", command=self._open_output_dir)
+        self.open_output_button.grid(row=1, column=2, sticky="w", padx=6, pady=(0,6))
         try:
             ToolTip(self.wiki_button, "Scrape Wikipedia et Veg&Sol en utilisant la ZE/AE")
         except Exception:
