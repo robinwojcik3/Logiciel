@@ -1062,6 +1062,7 @@ class ExportCartesTab(ttk.Frame):
         self.ze_shp_var   = tk.StringVar(value=from_long_unc(self.prefs.get("ZE_SHP", "")))
 
         self.ae_shp_var   = tk.StringVar(value=from_long_unc(self.prefs.get("AE_SHP", "")))
+        self.commune_var  = tk.StringVar(value="")
 
         self.cadrage_var  = tk.StringVar(value=self.prefs.get("CADRAGE_MODE", "BOTH"))
 
@@ -1072,8 +1073,6 @@ class ExportCartesTab(ttk.Frame):
         self.workers_var  = tk.IntVar(value=int(self.prefs.get("N_WORKERS", N_WORKERS_DEFAULT)))
 
         self.wait_tiles_var = tk.DoubleVar(value=float(self.prefs.get("WAIT_TILES", WAIT_TILES_DEFAULT)))
-
-        self.commune_var = tk.StringVar(value="")
 
         self.margin_var   = tk.DoubleVar(value=float(self.prefs.get("MARGIN_FAC", MARGIN_FAC_DEFAULT)))
         self.id_buffer_km_var = tk.DoubleVar(value=float(self.prefs.get("ID_BUFFER_KM", 5.0)))
@@ -1140,9 +1139,12 @@ class ExportCartesTab(ttk.Frame):
         ae_entry.grid(row=2, column=1, sticky="ew", padx=(6,6))
         ttk.Button(left, text="Parcourir…", command=lambda: self._browse_file(self.ae_shp_var)).grid(row=2, column=2)
 
+        ttk.Button(left, text="Identifier commune", command=self._identify_commune).grid(row=3, column=0, sticky="w", pady=(4,0))
+        ttk.Label(left, textvariable=self.commune_var).grid(row=3, column=1, columnspan=2, sticky="w", padx=(6,0))
+
         # Export options
         opt_frm = ttk.Frame(left)
-        opt_frm.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(8,4))
+        opt_frm.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(8,4))
         for i in range(6):
             opt_frm.columnconfigure(i, weight=1)
 
@@ -1582,6 +1584,28 @@ class ExportCartesTab(ttk.Frame):
         except Exception as e:
             messagebox.showerror("Erreur Géospatiale", f"Impossible de calculer le centroïde du shapefile. Erreur: {e}")
             return None
+
+    def _identify_commune(self) -> None:
+        centroid = self._get_centroid_wgs84()
+        if not centroid:
+            return
+        lat, lon = centroid
+        try:
+            url = (
+                "https://geo.api.gouv.fr/communes"
+                f"?lat={lat}&lon={lon}&fields=nom,codeDepartement&format=json"
+            )
+            resp = requests.get(url, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            if data:
+                nom = data[0].get("nom", "?")
+                code_dep = data[0].get("codeDepartement", "?")
+                self.commune_var.set(f"{nom} ({code_dep})")
+            else:
+                messagebox.showwarning("Commune inconnue", "Aucune commune trouvée pour ces coordonnées.")
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d'identifier la commune: {e}")
 
     def _run_wiki_scrape(self, driver, query: str) -> dict:
         print(f"Lancement du scraping Wikipedia pour: '{query}'")
