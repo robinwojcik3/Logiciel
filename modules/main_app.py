@@ -1623,51 +1623,59 @@ class ExportCartesTab(ttk.Frame):
 
             time.sleep(0.75)
 
-            # 8) Clic droit au centre de la carte
+            # 8) Clic droit au centre de la carte pour activer le profil
             try:
                 map_el = wait.until(EC.visibility_of_element_located((By.ID, "map")))
-                ActionChains(driver).move_to_element(map_el).context_click(map_el).perform()
-                print("[Cartes] Clic droit sur la carte", file=self.stdout_redirect)
+                # Clic au centre de la carte pour activer le profil
+                ActionChains(driver).move_to_element(map_el).click(map_el).perform()
+                print("[Cartes] Clic sur la carte pour activer le profil", file=self.stdout_redirect)
                 try:
-                    self._selenium_debug_dump(driver, "after_context_click")
+                    self._selenium_debug_dump(driver, "after_map_click")
                 except Exception:
                     pass
             except Exception as e:
-                print(f"[Cartes] Erreur clic droit carte: {e}", file=self.stdout_redirect)
+                print(f"[Cartes] Erreur clic carte: {e}", file=self.stdout_redirect)
 
             time.sleep(0.5)
 
-            # 10) Cliquer sur 'Ressources'
+            # 9) Attendre que le profil soit visible et extraire les données
             alt, veg, soil = "Erreur", "Erreur", "Erreur"
             try:
-                btn_res = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(.,'Ressources')]")))
-                btn_res.click()
-                print("[Cartes] Clic sur 'Ressources'", file=self.stdout_redirect)
-                time.sleep(0.75) # Pause de 0.75s comme demandé pour l'initialisation du popup
-                # Attendre que le popup de ressources se charge avec les données.
-                # On attend que le conteneur du popup soit présent et que la pillule de végétation contienne du texte.
-                wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".leaflet-popup-content")))
-                wait.until(EC.text_to_be_present_in_element((By.CSS_SELECTOR, ".vegetation-pill"), "."))
-                self._selenium_debug_dump(driver, "after_resources_click_and_wait")
+                # Attendre que le conteneur de profil soit visible
+                wait.until(EC.visibility_of_element_located((By.ID, "profile-container")))
+                time.sleep(0.75) # Pause de 0.75s pour laisser le profil se charger
+                
+                self._selenium_debug_dump(driver, "after_profile_loaded")
 
-                # Extraire les informations du popup
+                # Extraire les informations du profil
                 page_source = driver.page_source
                 soup = BeautifulSoup(page_source, 'html.parser')
 
-                # Altitude
-                altitude_info = soup.select_one('.altitude-info')
+                # Altitude - chercher dans profile-info ou altitude-info
+                altitude_info = soup.select_one('#profile-info') or soup.select_one('.altitude-info')
                 if altitude_info:
                     altitude_text = altitude_info.get_text(strip=True)
-                    altitude_match = re.search(r'Altitude: (\d+)m', altitude_text)
-                    alt = int(altitude_match.group(1)) if altitude_match else "Non trouvée"
+                    # Chercher pattern "XXX m" ou "Altitude: XXX m" ou "Montagnard — XXX m"
+                    altitude_match = re.search(r'(\d+)\s*m', altitude_text)
+                    if altitude_match:
+                        alt_num = altitude_match.group(1)
+                        # Extraire aussi le type climatique si présent
+                        climate_match = re.search(r'(Montagnard|Collinéen|Méditerranéen|Alpin)\s*—\s*\d+\s*m', altitude_text)
+                        if climate_match:
+                            alt = f"{climate_match.group(1)} — {alt_num} m"
+                        else:
+                            alt = f"{alt_num} m"
+                    else:
+                        alt = altitude_text if altitude_text else "Non trouvée"
                 else:
                     alt = "Non trouvée"
 
-                # Végétation et Sol - Utilise les sélecteurs de classe robustes
-                vegetation_pill = soup.select_one('.vegetation-pill')
+                # Végétation - chercher dans profile-veg-pill ou vegetation-pill
+                vegetation_pill = soup.select_one('#profile-veg-pill') or soup.select_one('.vegetation-pill')
                 veg = vegetation_pill.get_text(strip=True) if vegetation_pill and vegetation_pill.get_text(strip=True) else "Non trouvée"
 
-                soil_pill = soup.select_one('.soil-pill')
+                # Sol - chercher dans profile-soil-pill ou soil-pill
+                soil_pill = soup.select_one('#profile-soil-pill') or soup.select_one('.soil-pill')
                 soil = soil_pill.get_text(strip=True) if soil_pill and soil_pill.get_text(strip=True) else "Non trouvé"
                 
                 print(f"[Cartes] ALTITUDE : {alt}", file=self.stdout_redirect)
@@ -1675,7 +1683,7 @@ class ExportCartesTab(ttk.Frame):
                 print(f"[Cartes] SOLS : {soil}", file=self.stdout_redirect)
 
             except Exception as e:
-                print(f"[Cartes] Erreur clic Ressources: {e}", file=self.stdout_redirect)
+                print(f"[Cartes] Erreur extraction profil: {e}", file=self.stdout_redirect)
 
             # Mettre à jour le tableau des résultats
             payload = {
