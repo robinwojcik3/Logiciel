@@ -3210,6 +3210,16 @@ class ExportCartesTab(ttk.Frame):
 
 
 # =========================
+# Import de l'onglet Carto
+# =========================
+try:
+    from .carto_tab import CartoTab
+    CARTO_AVAILABLE = True
+except ImportError as e:
+    print(f"Onglet Carto non disponible: {e}")
+    CARTO_AVAILABLE = False
+
+# =========================
 # Onglets PlantNet et Biodiv (stubs)
 # =========================
 class PlantNetTab(ttk.Frame):
@@ -3254,8 +3264,16 @@ class Application(tk.Tk):
         self.export_tab = ExportCartesTab(self.notebook, self.style_helper, self.prefs)
         self.plantnet_tab = PlantNetTab(self.notebook, self.style_helper, self.prefs)
         self.biodiv_tab = BiodivTab(self.notebook, self.style_helper, self.prefs)
+        
+        # Ajouter l'onglet Carto si disponible
+        if CARTO_AVAILABLE:
+            self.carto_tab = CartoTab(self.notebook, self.style_helper, self.prefs)
+        else:
+            self.carto_tab = None
 
         self.notebook.add(self.export_tab, text="Contexte Écologique & Cartes")
+        if CARTO_AVAILABLE:
+            self.notebook.add(self.carto_tab, text="  Carto  ")
         self.notebook.add(self.plantnet_tab, text="  Pl@ntNet  ")
         self.notebook.add(self.biodiv_tab, text="Biodiv'AURA")
 
@@ -3275,6 +3293,10 @@ class Application(tk.Tk):
         # Call the cleanup method for the shared browser
         if hasattr(self, 'export_tab'):
             self.export_tab._cleanup_driver()
+        
+        # Cleanup Carto tab resources
+        if hasattr(self, 'carto_tab') and self.carto_tab:
+            self.carto_tab.cleanup()
 
         self.destroy()
 

@@ -19,3 +19,7 @@ selenium
 python-docx
 openpyxl
 
+# Interface graphique Qt pour l'onglet Carto (optionnel)
+PyQt5
+PyQtWebEngine
+
