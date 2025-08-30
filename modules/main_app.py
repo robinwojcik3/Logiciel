@@ -2751,51 +2751,32 @@ class ContexteEcoTab(ttk.Frame):
         self.wiki_query_entry = ttk.Entry(wiki_header, textvariable=self.wiki_query_var, width=15)
         self.wiki_query_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
         
-        # Tableau consolidé des résultats de scraping
-        results_frame = ttk.Frame(wiki_res, style="Card.TFrame", padding=8)
-        results_frame.pack(fill=tk.BOTH, expand=True, pady=(4,0))
-        
-        ttk.Label(results_frame, text="Résultats du scraping", style="Card.TLabel", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0,8))
-        
-        # Créer un tableau avec Treeview
-        columns = ("Type", "Résultat")
-        self.results_tree = ttk.Treeview(results_frame, columns=columns, show="headings", height=8)
-        
-        # Configurer les colonnes
+        # Panneau pour les résultats de scraping (remplace les anciens Text)
+        results_frame = ttk.Frame(right_pane, style="Card.TFrame", padding=12)
+        right_pane.add(results_frame, weight=1)
+
+        ttk.Label(results_frame, text="Résultats du scraping", style="Card.TLabel").pack(anchor="w")
+
+        self.results_tree = ttk.Treeview(results_frame, columns=("Type", "Résultat"), show="headings", height=8)
         self.results_tree.heading("Type", text="Type de donnée")
         self.results_tree.heading("Résultat", text="Résultat")
-        self.results_tree.column("Type", width=120, minwidth=100)
-        self.results_tree.column("Résultat", width=400, minwidth=200)
-        
-        # Scrollbar pour le tableau
-        results_scrollbar = ttk.Scrollbar(results_frame, orient="vertical", command=self.results_tree.yview)
-        self.results_tree.configure(yscrollcommand=results_scrollbar.set)
-        
-        # Placement du tableau et scrollbar
-        self.results_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        results_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # Initialiser le tableau avec des lignes vides
-        self.results_tree.insert("", "end", values=("Climat", ""))
-        self.results_tree.insert("", "end", values=("Occupation sols", ""))
-        self.results_tree.insert("", "end", values=("Altitude", ""))
-        self.results_tree.insert("", "end", values=("Végétation", ""))
-        self.results_tree.insert("", "end", values=("Sols", ""))
-        
+        self.results_tree.column("Type", width=100, anchor="w")
+        self.results_tree.column("Résultat", width=300, anchor="w")
+
+        # Ajout des items initiaux
+        self.results_tree.insert("", "end", values=("Climat", ""), iid="climat")
+        self.results_tree.insert("", "end", values=("Occupation sols", ""), iid="occupation_sols")
+        self.results_tree.insert("", "end", values=("Altitude", ""), iid="altitude")
+        self.results_tree.insert("", "end", values=("Végétation", ""), iid="vegetation")
+        self.results_tree.insert("", "end", values=("Sols", ""), iid="sols")
+
+        tree_scroll = ttk.Scrollbar(results_frame, orient="vertical", command=self.results_tree.yview)
+        self.results_tree.configure(yscrollcommand=tree_scroll.set)
+        self.results_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=(6, 0))
+        tree_scroll.pack(side=tk.RIGHT, fill=tk.Y, pady=(6, 0))
+
         self.wiki_open_button = ttk.Button(wiki_header, text="Ouvrir", state="disabled", command=self.open_wiki_url)
         self.wiki_open_button.pack(side=tk.RIGHT)
-        
-        # Résultats Wikipedia compacts
-        wiki_content = ttk.Frame(wiki_res)
-        wiki_content.pack(fill=tk.BOTH, expand=True)
-        
-        ttk.Label(wiki_content, text="Climat:", style="Card.TLabel").pack(anchor="w")
-        self.climat_txt = tk.Text(wiki_content, height=3, wrap=tk.WORD, state='disabled', relief='flat')
-        self.climat_txt.pack(fill=tk.BOTH, expand=True, pady=(0,2))
-        
-        ttk.Label(wiki_content, text="Occupation sols:", style="Card.TLabel").pack(anchor="w")
-        self.occ_txt = tk.Text(wiki_content, height=3, wrap=tk.WORD, state='disabled', relief='flat')
-        self.occ_txt.pack(fill=tk.BOTH, expand=True)
         
         # Végétation/sols à droite
         vegsol_res = ttk.Frame(results_horizontal, style="Card.TFrame", padding=4)
