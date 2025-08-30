@@ -3153,9 +3153,16 @@ class Application(tk.Tk):
         self.destroy()
 
 
-if __name__ == '__main__':
+def launch():
+    """Point d'entrée programmatique pour lancer l'application GUI.
+    Utilisé par `Start.py` via `modules.main_app.launch()`.
+    """
     app = Application()
     app.mainloop()
+
+
+if __name__ == '__main__':
+    launch()
 
 
 
