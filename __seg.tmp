@@ -32,7 +32,7 @@
                 self.vegsol_driver = webdriver.Chrome(service=Service(local_driver), options=options)
             else:
                 self.vegsol_driver = webdriver.Chrome(options=options)
-            self.vegsol_driver.maximize_window()
+            self.vegsol_driver.minimize_window()
 
             def _open_layer(layer_label: str) -> None:
                 try:

@@ -1386,7 +1386,7 @@ class ExportCartesTab(ttk.Frame):
             if not driver:
                 return
             
-            driver.maximize_window()
+            driver.minimize_window()
             images = []
             viewport = (By.CSS_SELECTOR, "div.ol-viewport")
 
@@ -1568,6 +1568,7 @@ class ExportCartesTab(ttk.Frame):
             # options.add_argument('--headless')
             service = Service() # Assurez-vous que chromedriver est dans le PATH
             driver = webdriver.Chrome(service=service, options=options)
+            driver.minimize_window()
             self.shared_driver = driver
             return driver
         except Exception as e:

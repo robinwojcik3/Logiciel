@@ -15,7 +15,7 @@ Ce qui est inclus dans le dépôt
 
 Pré-requis non-Python
 - QGIS 3.x: requis pour l’onglet “Contexte éco” (export carto via PyQGIS). Par défaut, l’app pointe vers une installation système (variables `QGIS_ROOT`, `QGIS_APP`, `PY_VER` dans `modules/main_app.py`). Pour un isolement maximal, vous pouvez placer une version portable de QGIS dans un sous-dossier du dépôt (ex: `third_party/QGIS`) et ajuster ces variables pour pointer vers ce chemin local.
-- Google Chrome: requis par Selenium. Selenium Manager gère le driver automatiquement. Pour un confinement 100% local, vous pouvez déposer un `chromedriver` dans le dépôt et adapter l’initialisation du `webdriver` afin d’utiliser ce binaire local.
+- Google Chrome: requis par Selenium. Selenium Manager gère le driver automatiquement. Pour un confinement 100% local, vous pouvez déposer un `chromedriver` dans le dépôt et adapter l’initialisation du `webdriver` afin d’utiliser ce binaire local. Les fenêtres Chrome lancées par l’automatisation sont minimisées pour ne pas gêner l’utilisateur.
 
 Règles de contribution (isolation garantie)
 - Ne jamais installer un paquet globalement pour les besoins de l’app. Utiliser exclusivement `.venv` (via `scripts/setup.ps1` ou `.\.venv\Scripts\pip.exe`).
