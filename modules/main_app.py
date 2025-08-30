@@ -2662,10 +2662,10 @@ class ContexteEcoTab(ttk.Frame):
         self.biodiv_button.grid(row=17, column=1, sticky="ew", pady=1, padx=(2,0))
         
         self.gmaps_button = ttk.Button(left_column, text="Google Maps", command=self.open_google_maps)
-        self.gmaps_button.grid(row=17, column=0, sticky="ew", pady=1, padx=(0,2))
+        self.gmaps_button.grid(row=18, column=0, sticky="ew", pady=1, padx=(0,2))
         
         self.remonter_button = ttk.Button(left_column, text="Remonter temps", command=self.open_remonter_temps)
-        self.remonter_button.grid(row=17, column=1, sticky="ew", pady=1, padx=(2,0))
+        self.remonter_button.grid(row=18, column=1, sticky="ew", pady=1, padx=(2,0))
         
         left_column.columnconfigure(1, weight=1)
         
@@ -2750,6 +2750,37 @@ class ContexteEcoTab(ttk.Frame):
         
         self.wiki_query_entry = ttk.Entry(wiki_header, textvariable=self.wiki_query_var, width=15)
         self.wiki_query_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+        
+        # Tableau consolidé des résultats de scraping
+        results_frame = ttk.Frame(wiki_res, style="Card.TFrame", padding=8)
+        results_frame.pack(fill=tk.BOTH, expand=True, pady=(4,0))
+        
+        ttk.Label(results_frame, text="Résultats du scraping", style="Card.TLabel", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0,8))
+        
+        # Créer un tableau avec Treeview
+        columns = ("Type", "Résultat")
+        self.results_tree = ttk.Treeview(results_frame, columns=columns, show="headings", height=8)
+        
+        # Configurer les colonnes
+        self.results_tree.heading("Type", text="Type de donnée")
+        self.results_tree.heading("Résultat", text="Résultat")
+        self.results_tree.column("Type", width=120, minwidth=100)
+        self.results_tree.column("Résultat", width=400, minwidth=200)
+        
+        # Scrollbar pour le tableau
+        results_scrollbar = ttk.Scrollbar(results_frame, orient="vertical", command=self.results_tree.yview)
+        self.results_tree.configure(yscrollcommand=results_scrollbar.set)
+        
+        # Placement du tableau et scrollbar
+        self.results_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        results_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Initialiser le tableau avec des lignes vides
+        self.results_tree.insert("", "end", values=("Climat", ""))
+        self.results_tree.insert("", "end", values=("Occupation sols", ""))
+        self.results_tree.insert("", "end", values=("Altitude", ""))
+        self.results_tree.insert("", "end", values=("Végétation", ""))
+        self.results_tree.insert("", "end", values=("Sols", ""))
         
         self.wiki_open_button = ttk.Button(wiki_header, text="Ouvrir", state="disabled", command=self.open_wiki_url)
         self.wiki_open_button.pack(side=tk.RIGHT)
