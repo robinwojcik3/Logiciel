@@ -3629,8 +3629,8 @@ class ContexteEcoTab(ttk.Frame):
                     driver.maximize_window()
                 except Exception:
                     pass
-                # Attentes Selenium très courtes (1s max)
-                wait = WebDriverWait(driver, 1)
+                # Attentes Selenium courtes mais un peu plus tolérantes (4s)
+                wait = WebDriverWait(driver, 4)
             except Exception as se_init:
                 print(f"[Biodiv] Selenium init KO: {se_init}", file=self.stdout_redirect)
             print(f"[Biodiv] Scraping de {len(species_list)} espece(s)...", file=self.stdout_redirect)
@@ -3681,7 +3681,13 @@ class ContexteEcoTab(ttk.Frame):
                         # Utiliser requests en priorité (plus rapide, pas d'attente Selenium)
                         img_url = None
                         try:
-                            resp = requests.get(url_sp, timeout=5)
+                            resp = requests.get(
+                                url_sp,
+                                timeout=8,
+                                headers={
+                                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+                                },
+                            )
                             if resp.ok:
                                 soup = BeautifulSoup(resp.text, "html.parser")
                                 tag = soup.find("meta", attrs={"property": "og:image"})
@@ -3720,26 +3726,47 @@ class ContexteEcoTab(ttk.Frame):
                                 ".gallery img",
                                 "img.card-img-top",
                             ]
-                            for sel in selectors:
-                                try:
-                                    if sel.startswith("meta["):
-                                        el = driver.find_element(By.CSS_SELECTOR, sel)
-                                        src = el.get_attribute("content")
-                                    else:
-                                        el = driver.find_element(By.CSS_SELECTOR, sel)
-                                        src = el.get_attribute("src")
-                                    if src and src.startswith("http"):
-                                        img_url = src
-                                        break
-                                except Exception:
-                                    continue
+                            # 1) Tenter via JS og:image (robuste même si images non chargées)
+                            try:
+                                og = driver.execute_script(
+                                    "var m=document.querySelector('meta[property=\\"og:image\\"]'); return m?m.content:null;"
+                                )
+                                if og and isinstance(og, str) and og.startswith("http"):
+                                    img_url = og
+                            except Exception:
+                                pass
+                            # 2) Sinon, tenter plusieurs fois les sélecteurs pendant ~3s
+                            if not img_url:
+                                end_t = time.time() + 3.0
+                                while time.time() < end_t and not img_url:
+                                    for sel in selectors:
+                                        try:
+                                            if sel.startswith("meta["):
+                                                el = driver.find_element(By.CSS_SELECTOR, sel)
+                                                src = el.get_attribute("content")
+                                            else:
+                                                el = driver.find_element(By.CSS_SELECTOR, sel)
+                                                src = el.get_attribute("src")
+                                            if src and src.startswith("http"):
+                                                img_url = src
+                                                break
+                                        except Exception:
+                                            continue
+                                    if not img_url:
+                                        time.sleep(0.3)
                         except Exception:
                             img_url = None
 
                         # Fallback: parser la page avec requests pour og:image si Selenium n'a rien trouvé
                         if not img_url and url_sp:
                             try:
-                                resp = requests.get(url_sp, timeout=5)
+                                resp = requests.get(
+                                    url_sp,
+                                    timeout=8,
+                                    headers={
+                                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+                                    },
+                                )
                                 if resp.ok:
                                     soup = BeautifulSoup(resp.text, "html.parser")
                                     tag = soup.find("meta", attrs={"property": "og:image"})
@@ -3752,7 +3779,14 @@ class ContexteEcoTab(ttk.Frame):
                         tmp_path = None
                         if img_url:
                             try:
-                                img_resp = requests.get(img_url, stream=True, timeout=15)
+                                img_resp = requests.get(
+                                    img_url,
+                                    stream=True,
+                                    timeout=15,
+                                    headers={
+                                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+                                    },
+                                )
                                 if img_resp.ok:
                                     safe_name = re.sub(r"[^\w\-]+", "_", sp.strip())[:80]
                                     ext = os.path.splitext(img_url.split("?")[0])[1] or ".jpg"
@@ -3768,8 +3802,9 @@ class ContexteEcoTab(ttk.Frame):
                                     print(f"[Biodiv] HTTP {img_resp.status_code} pour {img_url}", file=self.stdout_redirect)
                             except Exception as de_dl:
                                 print(f"[Biodiv] Echec dl image {img_url}: {de_dl}", file=self.stdout_redirect)
-                    except Exception as de:
-                        print(f"[Biodiv] Telechargement image echoue pour {sp}: {de}", file=self.stdout_redirect)
+                        else:
+                            print(f"[Biodiv] Aucune image pour {sp} ({url_sp or 'URL inconnue'})", file=self.stdout_redirect)
+                    
 
                     # URL de la page espece (deja calculee si TAXREF)
                     if not url_sp:
