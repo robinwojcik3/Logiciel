@@ -2907,41 +2907,35 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-    def start_consolidated_scraping(self):
-
-        if (not self.wiki_query_var.get().strip()) and (not self.ze_shp_var.get().strip()):
-
-            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude ou saisir une commune.")
-
-            return
-
-        print("[Wiki] Bouton Wikipédia cliqué", file=self.stdout_redirect)
-
-        self.wiki_button.config(state="disabled")
-        print("[Scraping] Démarrage du scraping consolidé...", file=self.stdout_redirect)
-
-        # Réinitialiser le tableau et le bouton avant un nouveau scraping
-
+    def _clear_results_tree(self):
+        """Resets the results in the treeview to '...' or empty."""
         try:
-
-            self.wiki_climat_var.set("")
-
-            self.wiki_occ_var.set("")
-
-            self.wiki_last_url = ""
-
-            if hasattr(self, 'wiki_open_button'):
-
-                self.wiki_open_button.config(state="disabled")
-
+            if not hasattr(self, 'results_tree'):
+                return
+            for iid in ('climat', 'occupation_sols', 'altitude', 'vegetation', 'sols'):
+                try:
+                    cur = self.results_tree.item(iid, 'values')
+                    label = cur[0]
+                    self.results_tree.item(iid, values=(label, ""))
+                except Exception:
+                    pass  # Item might not exist, ignore.
         except Exception:
-
             pass
 
-        t = threading.Thread(target=self._run_wiki)
+    def start_consolidated_scraping(self):
+        if (not self.wiki_query_var.get().strip()) and (not self.ze_shp_var.get().strip()):
+            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude ou saisir une commune.")
+            return
 
+        print("[Scraping] Démarrage du scraping consolidé...", file=self.stdout_redirect)
+        self.wiki_button.config(state="disabled")
+        self.wiki_open_button.config(state="disabled")
+        self.wiki_last_url = ""
+
+        self._clear_results_tree()
+
+        t = threading.Thread(target=self._run_all_scrapers)
         t.daemon = True
-
         t.start()
 
 
@@ -2968,10 +2962,31 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-    def _run_wiki(self):
-
+    def _run_all_scrapers(self):
+        """Runs Wikipedia and Veg/Soil scrapers sequentially."""
         try:
+            print("\n[Scraping] Étape 1: Wikipedia", file=self.stdout_redirect)
+            self._run_wiki()
 
+            print("\n[Scraping] Étape 2: Végétation et Sols", file=self.stdout_redirect)
+            self._run_vegsol()
+
+            print("\n[Scraping] Scraping consolidé terminé.", file=self.stdout_redirect)
+
+        except Exception as e:
+            print(f"[Scraping] Erreur durant le scraping consolidé: {e}", file=self.stdout_redirect)
+        finally:
+            def _reenable_ui():
+                try:
+                    self.wiki_button.config(state="normal")
+                    if self.wiki_last_url:
+                        self.wiki_open_button.config(state="normal")
+                except Exception:
+                    pass
+            self.after(0, _reenable_ui)
+
+    def _run_wiki(self):
+        try:
             print("[Wiki] Lancement du scraping Wikipedia", file=self.stdout_redirect)
 
             ze_path = self.ze_shp_var.get()
@@ -3040,21 +3055,10 @@ class ContexteEcoTab(ttk.Frame):
 
                     print(data['occupation_p1'], file=self.stdout_redirect)
 
-
-
         except Exception as e:
 
             print(f"[Wiki] Erreur : {e}", file=self.stdout_redirect)
 
-        finally:
-            def _reenable_btn():
-                try:
-                    btn = getattr(self, 'wiki_button', None) or getattr(self, 'scraping_button', None)
-                    if btn:
-                        btn.config(state="normal")
-                except Exception:
-                    pass
-            self.after(0, _reenable_btn)
 
 
 
@@ -3121,23 +3125,6 @@ class ContexteEcoTab(ttk.Frame):
 
 
 
-    def start_vegsol_thread(self):
-
-        if not self.ze_shp_var.get().strip():
-
-            messagebox.showerror("Erreur", "Sélectionner la Zone d'étude.")
-
-            return
-
-        print("[Cartes] Bouton cartes cliqué", file=self.stdout_redirect)
-
-        self.vegsol_button.config(state="disabled")
-
-        t = threading.Thread(target=self._run_vegsol)
-
-        t.daemon = True
-
-        t.start()
 
 
 
