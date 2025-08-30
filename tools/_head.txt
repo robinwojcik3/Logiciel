@@ -117,7 +117,7 @@ WORD_FILENAME = "Comparaison_temporelle_Paysage.docx"
 OUTPUT_DIR_RLT = os.path.join(OUT_IMG, "Remonter le temps")
 COMMENT_TEMPLATE = (
     "Rédige un commentaire synthétique de l'évolution de l'occupation du sol observée "
-    "sur les images aériennes de la zone d'étude, aux différentes dates indiquées "
+    "sur les images aériennes de la commune de {commune}, aux différentes dates indiquées "
     "(1950–1965, 1965–1980, 2000–2005, aujourd’hui). Concentre-toi sur les grandes "
     "dynamiques d'aménagement (urbanisation, artificialisation, évolution des milieux "
     "ouverts ou boisés), en identifiant les principales transformations visibles. "
