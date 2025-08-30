@@ -70,7 +70,7 @@ from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageTk
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -1010,11 +1010,52 @@ class StyleHelper:
 
         s.configure("Tooltip.TLabel", background="#111827", foreground="#F9FAFB")
 
-        # Buttons: compact, consistent
+        # Notebook styling for a cleaner look
+        s.configure("TNotebook", background=bg, borderwidth=0)
+        s.configure("TNotebook.Tab", background=card_bg, foreground=fg, padding=(10, 6))
+        s.map("TNotebook.Tab",
+               background=[("selected", accent)],
+               foreground=[("selected", "#FFFFFF")])
 
-        s.configure("Accent.TButton", padding=(12, 6), background=accent, foreground="#FFFFFF")
+        # Buttons: rounded with stronger contrast
+        self._button_images = {}
+        for state, col in {"normal": accent, "active": active_accent}.items():
+            img = Image.new("RGBA", (120, 40), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(img)
+            draw.rounded_rectangle((0, 0, 120, 40), radius=10, fill=col)
+            self._button_images[state] = ImageTk.PhotoImage(img)
 
-        s.map("Accent.TButton", background=[("active", active_accent)], foreground=[("active", "#FFFFFF")])
+        s.element_create(
+            "RoundedButton",
+            "image",
+            self._button_images["normal"],
+            ("pressed", self._button_images["active"]),
+            ("active", self._button_images["active"]),
+            border=10,
+            sticky="nsew",
+        )
+        s.layout(
+            "TButton",
+            [
+                (
+                    "RoundedButton",
+                    {
+                        "sticky": "nsew",
+                        "children": [
+                            (
+                                "Button.padding",
+                                {
+                                    "sticky": "nsew",
+                                    "children": [("Button.label", {"sticky": "nsew"})],
+                                },
+                            )
+                        ],
+                    },
+                )
+            ],
+        )
+        s.configure("TButton", foreground="#FFFFFF", padding=(12, 6), borderwidth=0, cursor="hand2")
+        s.map("TButton", foreground=[("active", "#FFFFFF")])
 
         s.configure("Card.TCheckbutton", background=card_bg, foreground=fg)
 
