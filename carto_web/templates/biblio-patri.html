@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carto - Analyse Patrimoniale</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Leaflet Draw CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    
+    <!-- Leaflet Grouped Layer Control CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/leaflet.groupedlayercontrol.min.css') }}" />
+    
+    <!-- Style principal -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/carto-style.css') }}" />
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+        }
+        
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 10px 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 300;
+        }
+        
+        .controls-bar {
+            background: white;
+            padding: 15px 20px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .control-group label {
+            font-weight: 500;
+            color: #555;
+        }
+        
+        #address-input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 250px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #2980b9;
+        }
+        
+        .btn-secondary {
+            background: #95a5a6;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #7f8c8d;
+        }
+        
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #229954;
+        }
+        
+        .btn-warning {
+            background: #f39c12;
+            color: white;
+        }
+        
+        .btn-warning:hover {
+            background: #e67e22;
+        }
+        
+        .main-container {
+            display: flex;
+            height: calc(100vh - 120px);
+        }
+        
+        #map {
+            flex: 1;
+            height: 100%;
+            position: relative;
+        }
+        
+        .results-panel {
+            width: 400px;
+            background: white;
+            border-left: 1px solid #ddd;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .results-header {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            background: #f8f9fa;
+        }
+        
+        .results-header h3 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+        }
+        
+        #status {
+            padding: 10px;
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            margin-bottom: 10px;
+            display: none;
+        }
+        
+        #status-shp {
+            padding: 10px;
+            background: #f3e5f5;
+            border-left: 4px solid #9c27b0;
+            margin-bottom: 10px;
+            display: none;
+        }
+        
+        #results {
+            flex: 1;
+            padding: 15px;
+        }
+        
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        
+        .results-table th,
+        .results-table td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .results-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .species-name {
+            font-style: italic;
+            font-weight: 500;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 500;
+            margin-right: 4px;
+        }
+        
+        .status-lrn { background: #ffebee; color: #c62828; }
+        .status-lrr { background: #fff3e0; color: #ef6c00; }
+        .status-pn { background: #e8f5e8; color: #2e7d32; }
+        .status-pd { background: #e3f2fd; color: #1976d2; }
+        
+        .legend-color {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            border: 1px solid #ccc;
+        }
+        
+        .import-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 10000;
+            display: none;
+        }
+        
+        .import-popup h3 {
+            margin: 0 0 15px 0;
+            color: #2c3e50;
+        }
+        
+        .import-options {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .import-option {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .import-option:hover {
+            border-color: #3498db;
+            background: #f8f9fa;
+        }
+        
+        .import-option.selected {
+            border-color: #3498db;
+            background: #e3f2fd;
+        }
+        
+        .crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+        }
+        
+        .crosshair::before,
+        .crosshair::after {
+            content: '';
+            position: absolute;
+            background: #ff0000;
+        }
+        
+        .crosshair::before {
+            width: 20px;
+            height: 2px;
+            top: -1px;
+            left: -10px;
+        }
+        
+        .crosshair::after {
+            width: 2px;
+            height: 20px;
+            top: -10px;
+            left: -1px;
+        }
+        
+        .elevation-profile {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            display: none;
+        }
+        
+        .elevation-profile h4 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+        }
+        
+        #profile-canvas {
+            width: 100%;
+            height: 200px;
+            border: 1px solid #ddd;
+            background: white;
+        }
+        
+        .profile-info {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+            
+            .results-panel {
+                width: 100%;
+                height: 300px;
+            }
+            
+            #map {
+                height: calc(100vh - 420px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🗺️ Carto - Interface cartographique d'analyse patrimoniale</h1>
+    </div>
+    
+    <div class="controls-bar">
+        <div class="control-group">
+            <label for="address-input">Recherche d'adresse :</label>
+            <input type="text" id="address-input" placeholder="Entrez une adresse ou un lieu...">
+            <button id="search-address-btn" class="btn btn-primary">🔍 Rechercher</button>
+        </div>
+        
+        <div class="control-group">
+            <button id="use-geolocation-btn" class="btn btn-success">📍 Ma position</button>
+            <button id="draw-polygon-btn" class="btn btn-warning">🔶 Zone personnalisée</button>
+            <button id="draw-line-btn" class="btn btn-secondary">📏 Linéaire</button>
+        </div>
+        
+        <div class="control-group">
+            <button id="import-shapefile-btn" class="btn btn-secondary">📁 Importer shapefile</button>
+            <button id="download-shapefile-btn" class="btn btn-success" style="display: none;">⬇️ Shapefile</button>
+            <button id="toggle-labels-btn" class="btn btn-secondary">🏷️ Masquer les étiquettes</button>
+        </div>
+        
+        <div class="control-group">
+            <button id="eco-mode-toggle" class="btn btn-warning" style="display: none;">🔄 Mode comparatif</button>
+        </div>
+    </div>
+    
+    <div class="main-container">
+        <div id="map">
+            <div id="crosshair" class="crosshair"></div>
+        </div>
+        
+        <div class="results-panel">
+            <div class="results-header">
+                <h3>Résultats d'analyse</h3>
+                <div id="status"></div>
+                <div id="status-shp"></div>
+            </div>
+            
+            <div id="results">
+                <p>Sélectionnez une zone d'étude pour commencer l'analyse patrimoniale.</p>
+            </div>
+            
+            <div class="elevation-profile" id="elevation-profile">
+                <h4>Profil altimétrique</h4>
+                <canvas id="profile-canvas"></canvas>
+                <div class="profile-info" id="profile-info"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Import Popup -->
+    <div id="import-popup" class="import-popup">
+        <h3>Type d'import</h3>
+        <div class="import-options">
+            <div class="import-option" data-type="zone">
+                <strong>Zone d'étude</strong><br>
+                <small>Délimite la zone d'analyse</small>
+            </div>
+            <div class="import-option" data-type="aire">
+                <strong>Aire d'étude élargie</strong><br>
+                <small>Zone de contexte élargi</small>
+            </div>
+        </div>
+        <div style="text-align: center;">
+            <button id="import-confirm-btn" class="btn btn-primary">Confirmer</button>
+            <button id="import-cancel-btn" class="btn btn-secondary">Annuler</button>
+        </div>
+    </div>
+    
+    <!-- Input file caché -->
+    <input type="file" id="shapefile-input" accept=".shp,.zip" style="display: none;">
+    
+    <!-- Scripts -->
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Leaflet Draw JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.min.js"></script>
+    
+    <!-- Esri Leaflet -->
+    <script src="https://unpkg.com/esri-leaflet@3.0.10/dist/esri-leaflet.js"></script>
+    
+    <!-- Turf.js -->
+    <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+    
+    <!-- Proj4js -->
+    <script src="https://unpkg.com/proj4@2.9.0/dist/proj4.js"></script>
+    
+    <!-- Shapefile.js -->
+    <script src="https://cdn.jsdelivr.net/npm/shpjs@3.5.0/dist/shp.min.js"></script>
+    
+    <!-- Geoportal Extensions (IGN) -->
+    <script src="https://unpkg.com/geoportal-extensions-leaflet@3.1.3/dist/GpPluginLeaflet.js"></script>
+    
+    <!-- Leaflet Grouped Layer Control -->
+    <script src="{{ url_for('static', filename='js/leaflet.groupedlayercontrol.min.js') }}"></script>
+    
+    <!-- Modules spécialisés -->
+    <script src="{{ url_for('static', filename='js/arcgis.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/vegetationLayer.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ignWmtsLayers.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/labelUtils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/shapefile.js') }}"></script>
+    
+    <!-- Script principal -->
+    <script src="{{ url_for('static', filename='js/biblio-patri.js') }}"></script>
+    
+    <!-- Configuration injectée -->
+    <script>
+        window.IGN_API_KEY = "{{ ign_api_key }}";
+        window.SERVER_URL = "{{ request.url_root.rstrip('/') }}";
+    </script>
+</body>
+</html>

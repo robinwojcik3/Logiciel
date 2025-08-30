@@ -212,19 +212,23 @@ class CartoTab(ttk.Frame):
             self._create_fallback_map(parent)
     
     def _create_fallback_map(self, parent):
-        """Crée une interface de fallback sans QWebEngine"""
+        """Crée une interface de fallback qui lance le serveur Flask"""
         fallback_frame = ttk.Frame(parent)
         fallback_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
         ttk.Label(fallback_frame, text="Carte interactive", 
                  font=self.font_title).pack(pady=20)
         ttk.Label(fallback_frame, 
-                 text="PyQt5 requis pour la carte interactive.\nInstallez PyQt5 pour activer cette fonctionnalité.",
+                 text="Interface cartographique complète avec analyse patrimoniale.\nReproduction fidèle de l'onglet Carto de FloreApp.",
                  justify="center").pack(pady=10)
         
-        # Bouton pour ouvrir dans le navigateur
-        ttk.Button(fallback_frame, text="Ouvrir la carte dans le navigateur", 
-                  command=self._open_in_browser).pack(pady=10)
+        # Bouton pour lancer le serveur Carto
+        ttk.Button(fallback_frame, text="🚀 Lancer l'interface Carto", 
+                  command=self._start_carto_server, style="Accent.TButton").pack(pady=10)
+        
+        # Status du serveur
+        self.server_status = ttk.Label(fallback_frame, text="", style="Status.TLabel")
+        self.server_status.pack(pady=5)
     
     def _create_map(self):
         """Initialise la carte"""
@@ -519,15 +523,31 @@ class CartoTab(ttk.Frame):
         # TODO: Implémenter le calcul du profil d'altitude
         messagebox.showinfo("Profil d'altitude", "Calcul du profil d'altitude (à implémenter)")
     
-    def _open_in_browser(self):
-        """Ouvre la carte dans le navigateur"""
-        html_content = self._generate_map_html()
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
-            f.write(html_content)
-            temp_file = f.name
-        
-        webbrowser.open(f'file://{temp_file}')
+    def _start_carto_server(self):
+        """Lance le serveur Flask Carto"""
+        try:
+            from .carto_server import start_carto_server
+            import threading
+            
+            self.server_status.config(text="🔄 Démarrage du serveur Carto...")
+            
+            # Lancer le serveur dans un thread séparé
+            def run_server():
+                try:
+                    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    start_carto_server(project_root)
+                except Exception as e:
+                    self.server_status.config(text=f"❌ Erreur serveur: {e}")
+            
+            server_thread = threading.Thread(target=run_server, daemon=True)
+            server_thread.start()
+            
+            self.server_status.config(text="✅ Serveur Carto lancé - Interface ouverte dans le navigateur")
+            
+        except ImportError as e:
+            self.server_status.config(text=f"❌ Module serveur manquant: {e}")
+        except Exception as e:
+            self.server_status.config(text=f"❌ Erreur: {e}")
     
     def _on_geometry_selected(self, geojson_str: str):
         """Callback quand une géométrie est sélectionnée"""

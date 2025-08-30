@@ -1,0 +1,281 @@
+/* Styles pour l'interface Carto */
+
+/* Variables CSS */
+:root {
+    --primary-color: #3498db;
+    --secondary-color: #2c3e50;
+    --success-color: #27ae60;
+    --warning-color: #f39c12;
+    --danger-color: #e74c3c;
+    --light-gray: #f8f9fa;
+    --border-color: #ddd;
+    --text-color: #333;
+    --shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Reset et base */
+* {
+    box-sizing: border-box;
+}
+
+/* Contrôles de couches personnalisés */
+.leaflet-control-layers {
+    background: white;
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border-color);
+}
+
+.leaflet-control-layers-expanded {
+    padding: 15px;
+    min-width: 250px;
+}
+
+.leaflet-control-layers-group {
+    margin-bottom: 15px;
+}
+
+.leaflet-control-layers-group-name {
+    font-weight: 600;
+    color: var(--secondary-color);
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #eee;
+}
+
+.leaflet-control-layers-base label,
+.leaflet-control-layers-overlays label {
+    display: flex;
+    align-items: center;
+    padding: 4px 0;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.leaflet-control-layers-base input,
+.leaflet-control-layers-overlays input {
+    margin-right: 8px;
+}
+
+/* Popup personnalisé */
+.leaflet-popup-content-wrapper {
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.leaflet-popup-content {
+    margin: 15px;
+    line-height: 1.4;
+}
+
+.popup-title {
+    font-weight: 600;
+    color: var(--secondary-color);
+    margin-bottom: 8px;
+}
+
+.popup-info {
+    font-size: 13px;
+    color: #666;
+}
+
+/* Contrôles de dessin */
+.leaflet-draw-toolbar {
+    background: white;
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+}
+
+.leaflet-draw-toolbar a {
+    background-color: white;
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+}
+
+.leaflet-draw-toolbar a:hover {
+    background-color: var(--light-gray);
+}
+
+/* Marqueurs personnalisés */
+.custom-marker {
+    background: var(--primary-color);
+    border: 2px solid white;
+    border-radius: 50%;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.marker-label {
+    background: rgba(255,255,255,0.9);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 11px;
+    font-weight: 500;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+/* Légende */
+.legend-control {
+    background: white;
+    border-radius: 6px;
+    padding: 10px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border-color);
+    max-width: 200px;
+}
+
+.legend-title {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--secondary-color);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 4px;
+    font-size: 12px;
+}
+
+.legend-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 2px;
+    margin-right: 8px;
+    border: 1px solid #ccc;
+}
+
+/* Contrôle d'échelle */
+.leaflet-control-scale {
+    background: rgba(255,255,255,0.8);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 11px;
+}
+
+/* Attributions */
+.leaflet-control-attribution {
+    background: rgba(255,255,255,0.8);
+    font-size: 10px;
+}
+
+/* Styles pour les polygones */
+.zone-etude {
+    fill: rgba(52, 152, 219, 0.3);
+    stroke: #3498db;
+    stroke-width: 2;
+    stroke-dasharray: none;
+}
+
+.aire-elargie {
+    fill: rgba(241, 196, 15, 0.2);
+    stroke: #f1c40f;
+    stroke-width: 2;
+    stroke-dasharray: 5,5;
+}
+
+.vegetation-polygon {
+    stroke-width: 1;
+    stroke-opacity: 0.8;
+    fill-opacity: 0.6;
+}
+
+/* Styles pour les lignes */
+.elevation-line {
+    stroke: #e74c3c;
+    stroke-width: 3;
+    stroke-opacity: 0.8;
+    fill: none;
+}
+
+/* Tooltip */
+.leaflet-tooltip {
+    background: rgba(0,0,0,0.8);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+/* Loading spinner */
+.loading-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .leaflet-control-layers-expanded {
+        min-width: 200px;
+        font-size: 13px;
+    }
+    
+    .leaflet-control {
+        margin: 5px;
+    }
+    
+    .leaflet-popup-content {
+        margin: 10px;
+        font-size: 13px;
+    }
+}
+
+/* Accessibilité */
+.leaflet-control-layers input:focus,
+.btn:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+/* Animation des contrôles */
+.leaflet-control {
+    transition: all 0.2s ease;
+}
+
+.leaflet-control:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+/* Styles pour les clusters */
+.marker-cluster {
+    background: rgba(52, 152, 219, 0.8);
+    border: 2px solid white;
+    border-radius: 50%;
+    color: white;
+    font-weight: bold;
+    text-align: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.marker-cluster-small {
+    width: 30px;
+    height: 30px;
+    line-height: 26px;
+    font-size: 12px;
+}
+
+.marker-cluster-medium {
+    width: 40px;
+    height: 40px;
+    line-height: 36px;
+    font-size: 14px;
+}
+
+.marker-cluster-large {
+    width: 50px;
+    height: 50px;
+    line-height: 46px;
+    font-size: 16px;
+}
