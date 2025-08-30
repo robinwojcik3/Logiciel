@@ -55,6 +55,7 @@ import datetime
 import threading
 
 import urllib.request
+import urllib.parse
 
 import webbrowser
 
@@ -1140,9 +1141,12 @@ class ExportCartesTab(ttk.Frame):
         ae_entry.grid(row=2, column=1, sticky="ew", padx=(6,6))
         ttk.Button(left, text="Parcourir…", command=lambda: self._browse_file(self.ae_shp_var)).grid(row=2, column=2)
 
+        ttk.Button(left, text="Identifier commune", command=self.identify_commune).grid(row=3, column=0, sticky="w")
+        ttk.Label(left, textvariable=self.commune_var).grid(row=3, column=1, columnspan=2, sticky="w", padx=(6,0))
+
         # Export options
         opt_frm = ttk.Frame(left)
-        opt_frm.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(8,4))
+        opt_frm.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(8,4))
         for i in range(6):
             opt_frm.columnconfigure(i, weight=1)
 
@@ -1165,9 +1169,9 @@ class ExportCartesTab(ttk.Frame):
         ttk.Radiobutton(types, text="Les deux", value="BOTH", variable=self.export_type_var, style="Card.TRadiobutton").pack(side="left", padx=(8,0))
 
         # Output directory
-        ttk.Label(left, text="Dossier de sortie").grid(row=4, column=0, sticky="w", pady=(4,0))
+        ttk.Label(left, text="Dossier de sortie").grid(row=5, column=0, sticky="w", pady=(4,0))
         out_frm = ttk.Frame(left)
-        out_frm.grid(row=4, column=1, columnspan=2, sticky="ew", padx=(6,0), pady=(4,0))
+        out_frm.grid(row=5, column=1, columnspan=2, sticky="ew", padx=(6,0), pady=(4,0))
         out_frm.columnconfigure(0, weight=1)
         out_entry = ttk.Entry(out_frm, textvariable=self.out_dir_var, width=48, style="Card.TEntry")
         out_entry.grid(row=0, column=0, sticky="ew")
@@ -1181,7 +1185,7 @@ class ExportCartesTab(ttk.Frame):
 
         # Actions: Export, Identification
         act_frm = ttk.Frame(left)
-        act_frm.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(10,4))
+        act_frm.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(10,4))
         act_frm.columnconfigure(0, weight=1)
         act_frm.columnconfigure(1, weight=1)
         self.export_button = ttk.Button(act_frm, text="Exporter cartes", style="Accent.TButton", command=self.start_export_thread)
@@ -1191,13 +1195,13 @@ class ExportCartesTab(ttk.Frame):
 
         # ID buffer
         id_frm = ttk.Frame(left)
-        id_frm.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(4,8))
+        id_frm.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(4,8))
         ttk.Label(id_frm, text="Tampon (km)").pack(side="left")
         ttk.Spinbox(id_frm, from_=0.0, to=20.0, increment=0.5, textvariable=self.buffer_var, width=6).pack(side="left", padx=(6,0))
 
         # Quick tools: RLT, Maps, BV
         tools_frm = ttk.Frame(left)
-        tools_frm.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(2,10))
+        tools_frm.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(2,10))
         self.rlt_button = ttk.Button(tools_frm, text="Remonter le temps (IGN)", command=self.start_rlt_thread)
         self.rlt_button.pack(side="left")
         ttk.Button(tools_frm, text="Google Maps", command=self.open_gmaps).pack(side="left", padx=6)
@@ -1206,7 +1210,7 @@ class ExportCartesTab(ttk.Frame):
 
         # Wikipedia + Veg/Sol scraping controls
         wiki_frm = ttk.LabelFrame(left, text="Scraping Wikipedia / Veg&Sol")
-        wiki_frm.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(8,4))
+        wiki_frm.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(8,4))
         wiki_frm.columnconfigure(0, weight=1)
 
         wiki_sub_frm = ttk.Frame(wiki_frm)
@@ -1583,6 +1587,57 @@ class ExportCartesTab(ttk.Frame):
             messagebox.showerror("Erreur Géospatiale", f"Impossible de calculer le centroïde du shapefile. Erreur: {e}")
             return None
 
+    def identify_commune(self) -> None:
+        """Calcule la commune au centroïde de la ZE et met à jour l'UI."""
+        centroid = self._get_centroid_wgs84()
+        if not centroid:
+            return
+        lat, lon = centroid
+        commune, dep = self._detect_commune(lat, lon)
+        if commune == "Inconnue":
+            messagebox.showerror("Erreur", "Impossible d'identifier la commune.")
+            return
+        result = f"{commune} ({dep})" if dep else commune
+        self.commune_var.set(result)
+        messagebox.showinfo("Commune identifiée", f"{result}\nLat: {lat:.5f}°, Lon: {lon:.5f}°")
+
+    def _detect_commune(self, lat: float, lon: float) -> tuple[str, str]:
+        """Retourne le nom de la commune et le code du département."""
+        try:
+            params = {
+                "format": "json",
+                "lat": lat,
+                "lon": lon,
+                "zoom": 12,
+                "addressdetails": 1,
+            }
+            url = (
+                "https://nominatim.openstreetmap.org/reverse?"
+                + urllib.parse.urlencode(params)
+            )
+            req = urllib.request.Request(
+                url, headers={"User-Agent": "ContexteEco/1.0"}
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.load(resp)
+            addr = data.get("address", {})
+            commune = "Inconnue"
+            for key in ("city", "town", "village", "municipality"):
+                if key in addr:
+                    commune = addr[key]
+                    break
+            dept_name = addr.get("county", "")
+            dep_rev = {v: k for k, v in DEP.items()}
+            dep = dep_rev.get(dept_name, "")
+            if not dep:
+                postcode = addr.get("postcode", "")
+                if len(postcode) >= 2:
+                    dep = postcode[:2]
+            return commune, dep
+        except Exception as e:
+            print(f"[Commune] Détection échouée : {e}", file=self.stdout_redirect)
+            return "Inconnue", ""
+
     def _run_wiki_scrape(self, driver, query: str) -> dict:
         print(f"Lancement du scraping Wikipedia pour: '{query}'")
         try:
@@ -1761,47 +1816,6 @@ class ExportCartesTab(ttk.Frame):
                     self.results_tree.insert("", "end", values=(labels[iid], text), iid=iid)
         except Exception:
             pass
-
-    # ... (rest of the code remains the same)
-            with urllib.request.urlopen(req, timeout=10) as resp:
-
-                data = json.load(resp)
-
-            addr = data.get("address", {})
-
-            commune = "Inconnue"
-
-            for key in ("city", "town", "village", "municipality"):
-
-                if key in addr:
-
-                    commune = addr[key]
-
-                    break
-
-            dept_name = addr.get("county", "")
-
-            dep_rev = {v: k for k, v in DEP.items()}
-
-            dep = dep_rev.get(dept_name, "")
-
-            if not dep:
-
-                postcode = addr.get("postcode", "")
-
-                if len(postcode) >= 2:
-
-                    dep = postcode[:2]
-
-            return commune, dep
-
-        except Exception as e:
-
-            print(f"[Wiki] Détection commune échouée : {e}", file=self.stdout_redirect)
-
-            return "Inconnue", ""
-
-
 
     # ---------- Gestion projets QGIS ----------
 
