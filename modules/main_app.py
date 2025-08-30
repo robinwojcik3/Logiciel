@@ -1156,12 +1156,10 @@ class ExportCartesTab(ttk.Frame):
         self._file_row(shp, 2, "📍 Aire d'étude élargie…", self.ae_shp_var, lambda: self._select_shapefile('AE'))
 
         # Bouton pour identifier la commune
-        commune_row = ttk.Frame(shp)
-        commune_row.grid(row=3, column=0, columnspan=3, sticky="w", pady=(10,0))
-        self.identify_commune_button = ttk.Button(commune_row, text="Identifier commune", command=self._identify_commune)
-        self.identify_commune_button.pack(side=tk.LEFT)
-        commune_label = ttk.Label(commune_row, textvariable=self.commune_var, style="Card.TLabel", wraplength=300)
-        commune_label.pack(side=tk.LEFT, padx=(10,0))
+        self.identify_commune_button = ttk.Button(shp, text="Identifier commune", command=self._identify_commune)
+        self.identify_commune_button.grid(row=3, column=0, sticky="w", pady=(10, 0))
+        commune_label = ttk.Label(shp, textvariable=self.commune_var, style="Card.TLabel", wraplength=300)
+        commune_label.grid(row=3, column=1, columnspan=3, sticky="w", padx=(10, 0), pady=(10, 0))
 
         shp.columnconfigure(1, weight=1)
 
@@ -2403,6 +2401,7 @@ class ContexteEcoTab(ttk.Frame):
         self.out_dir_var   = tk.StringVar(value=self.prefs.get("OUT_DIR", OUT_IMG))
 
         self.export_type_var = tk.StringVar(value=self.prefs.get("EXPORT_TYPE", "BOTH"))
+        self.commune_var = tk.StringVar(value="")
 
         # Resultats Wikipedia (affichage sous forme de tableau)
 
@@ -2468,10 +2467,12 @@ class ContexteEcoTab(ttk.Frame):
             lat, lon = centroid.y, centroid.x
             
             # Use the existing detection method
-            commune, _ = self._detect_commune(lat, lon)
+            commune, dep = self._detect_commune(lat, lon)
             
-            if commune and commune != "Inconnue":
-                self.commune_var.set(f"{commune}")
+            if commune and commune != "Inconnue" and dep:
+                self.commune_var.set(f"{commune} ({dep})")
+            elif commune and commune != "Inconnue":
+                self.commune_var.set(f"{commune} (département inconnu)")
             else:
                 self.commune_var.set("Commune non trouvée")
 
@@ -2552,6 +2553,12 @@ class ContexteEcoTab(ttk.Frame):
         self._file_row(shp, 1, "?? Zone d'étude…", self.ze_shp_var, self._select_ze)
 
         self._file_row(shp, 2, "?? Aire d'étude élargie…", self.ae_shp_var, self._select_ae)
+
+        # Bouton pour identifier la commune
+        self.identify_commune_button = ttk.Button(shp, text="Identifier commune", command=self._identify_commune)
+        self.identify_commune_button.grid(row=3, column=0, sticky="w", pady=(10, 0))
+        commune_label = ttk.Label(shp, textvariable=self.commune_var, style="Card.TLabel", wraplength=300)
+        commune_label.grid(row=3, column=1, columnspan=3, sticky="w", padx=(10, 0), pady=(10, 0))
 
         shp.columnconfigure(1, weight=1)
 
