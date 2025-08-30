@@ -3614,6 +3614,11 @@ class ContexteEcoTab(ttk.Frame):
                 options.add_argument("--disable-gpu")
                 options.add_argument("--no-sandbox")
                 options.add_argument("--disable-dev-shm-usage")
+                try:
+                    # Ne pas attendre le chargement complet des pages
+                    options.page_load_strategy = 'none'
+                except Exception:
+                    pass
                 # IMPORTANT: ne pas forcer headless ici afin que l'utilisateur voie le navigateur
                 local_driver = os.path.join(REPO_ROOT if 'REPO_ROOT' in globals() else os.path.abspath(os.path.join(os.path.dirname(__file__), '..')), 'tools', 'chromedriver.exe')
                 if os.path.isfile(local_driver):
@@ -3624,7 +3629,8 @@ class ContexteEcoTab(ttk.Frame):
                     driver.maximize_window()
                 except Exception:
                     pass
-                wait = WebDriverWait(driver, 8)
+                # Attentes Selenium très courtes (1s max)
+                wait = WebDriverWait(driver, 1)
             except Exception as se_init:
                 print(f"[Biodiv] Selenium init KO: {se_init}", file=self.stdout_redirect)
             print(f"[Biodiv] Scraping de {len(species_list)} espece(s)...", file=self.stdout_redirect)
@@ -3670,15 +3676,22 @@ class ContexteEcoTab(ttk.Frame):
                             cd_nom = stripped
 
                     if cd_nom:
-                        # Construire simplement l'URL; on utilisera requests pour récupérer l'image
+                        # Construire l'URL espèce directement
                         url_sp = f"https://atlas.biodiversite-auvergne-rhone-alpes.fr/espece/{cd_nom}"
-
-                    # Ouvrir la page espèce avec Selenium (via URL directe si disponible, sinon via recherche)
-                    try:
-                        if url_sp:
-                            driver.get(url_sp)
-                            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".species-header, .species-title")))
-                        else:
+                        # Utiliser requests en priorité (plus rapide, pas d'attente Selenium)
+                        img_url = None
+                        try:
+                            resp = requests.get(url_sp, timeout=5)
+                            if resp.ok:
+                                soup = BeautifulSoup(resp.text, "html.parser")
+                                tag = soup.find("meta", attrs={"property": "og:image"})
+                                if tag and tag.get("content"):
+                                    img_url = tag.get("content")
+                        except Exception:
+                            pass
+                    else:
+                        # Ouvrir la page espèce via recherche Selenium (attentes 1s max)
+                        try:
                             if "atlas.biodiversite" not in (driver.current_url or ""):
                                 driver.get("https://atlas.biodiversite-auvergne-rhone-alpes.fr/")
                             inp = wait.until(EC.element_to_be_clickable((By.ID, "searchTaxons")))
@@ -3686,12 +3699,17 @@ class ContexteEcoTab(ttk.Frame):
                             inp.clear(); inp.send_keys(sp)
                             first_result = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".search-results .result-item:first-child")))
                             driver.execute_script("arguments[0].click();", first_result)
-                            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".species-header, .species-title")))
+                            try:
+                                wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".species-header, .species-title")))
+                            except Exception:
+                                pass
                             try:
                                 url_sp = driver.current_url
                             except Exception:
                                 url_sp = None
-                        # Extraire l'URL de l'image principale
+                        except Exception:
+                            url_sp = None
+                        # Extraire l'URL de l'image principale depuis la page ouverte par Selenium
                         img_url = None
                         try:
                             # Essayer quelques sélecteurs probables
@@ -3721,7 +3739,7 @@ class ContexteEcoTab(ttk.Frame):
                         # Fallback: parser la page avec requests pour og:image si Selenium n'a rien trouvé
                         if not img_url and url_sp:
                             try:
-                                resp = requests.get(url_sp, timeout=10)
+                                resp = requests.get(url_sp, timeout=5)
                                 if resp.ok:
                                     soup = BeautifulSoup(resp.text, "html.parser")
                                     tag = soup.find("meta", attrs={"property": "og:image"})
