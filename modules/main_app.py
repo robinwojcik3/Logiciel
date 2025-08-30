@@ -1385,7 +1385,10 @@ class ExportCartesTab(ttk.Frame):
             if not driver:
                 return
             
-            driver.maximize_window()
+            try:
+                driver.minimize_window()
+            except Exception:
+                pass
             images = []
             viewport = (By.CSS_SELECTOR, "div.ol-viewport")
 
@@ -1567,6 +1570,10 @@ class ExportCartesTab(ttk.Frame):
             # options.add_argument('--headless')
             service = Service() # Assurez-vous que chromedriver est dans le PATH
             driver = webdriver.Chrome(service=service, options=options)
+            try:
+                driver.minimize_window()
+            except Exception:
+                pass
             self.shared_driver = driver
             return driver
         except Exception as e:
@@ -1745,6 +1752,10 @@ class ExportCartesTab(ttk.Frame):
             return
 
         try:
+            try:
+                driver.minimize_window()
+            except Exception:
+                pass
             # 1. Wikipedia
             self.after(0, lambda: self.wiki_status_var.set("Scraping Wikipedia..."))
             extracts = self._run_wiki_scrape(driver, query)
