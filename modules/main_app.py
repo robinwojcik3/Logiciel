@@ -1922,6 +1922,46 @@ class ExportCartesTab(ttk.Frame):
 
             self.after(0, lambda: self.export_button.config(state="normal"))
 
+    def _start_id_contexte_thread(self):
+        """Lance l'identification des zonages dans un thread séparé."""
+        if self.busy:
+            print("Une action est déjà en cours.", file=self.stdout_redirect)
+            return
+        threading.Thread(target=self._run_id_contexte, daemon=True).start()
+
+    def _run_id_contexte(self):
+        """Exécute l'identification des zonages."""
+        self.busy = True
+        self.after(0, lambda: self.id_contexte_button.config(state='disabled'))
+        self.after(0, lambda: self.export_button.config(state='disabled'))
+        
+        print("Lancement de l'identification des zonages...", file=self.stdout_redirect)
+
+        ae_shp = self.ae_shp_var.get()
+        ze_shp = self.ze_shp_var.get()
+        buffer_km = self.id_buffer_km_var.get()
+
+        if not ae_shp or not ze_shp:
+            print("Erreur: Veuillez sélectionner les shapefiles 'Zone d'étude' et 'Aire d'étude élargie'.", file=self.stdout_redirect)
+            self._restore_buttons()
+            return
+
+        try:
+            # Import et exécution du module d'identification
+            from modules.id_contexte_eco import run_analysis
+            run_analysis(ae_shp=ae_shp, ze_shp=ze_shp, buffer_km=buffer_km)
+            print("Identification des zonages terminée.", file=self.stdout_redirect)
+        except Exception as e:
+            print(f"Erreur lors de l'exécution de id_contexte_eco: {e}", file=self.stdout_redirect)
+            traceback.print_exc(file=self.stdout_redirect)
+        finally:
+            self._restore_buttons()
+
+    def _restore_buttons(self):
+        """Restaure l'état des boutons après une opération."""
+        self.busy = False
+        self.after(0, lambda: self.id_contexte_button.config(state='normal'))
+        self.after(0, lambda: self.export_button.config(state='normal'))
 
 
 # =========================
@@ -2433,6 +2473,7 @@ class ContexteEcoTab(ttk.Frame):
         self.margin_var    = tk.DoubleVar(value=float(self.prefs.get("MARGIN_FAC", MARGIN_FAC_DEFAULT)))
 
         self.buffer_var    = tk.DoubleVar(value=float(self.prefs.get("ID_TAMPON_KM", 5.0)))
+        self.id_buffer_km_var = tk.DoubleVar(value=float(self.prefs.get("ID_BUFFER_KM", 5.0)))
 
         self.out_dir_var   = tk.StringVar(value=self.prefs.get("OUT_DIR", OUT_IMG))
 
@@ -2644,18 +2685,22 @@ class ContexteEcoTab(ttk.Frame):
         self.export_button = ttk.Button(left_column, text="Lancer export", style="Accent.TButton", command=self.start_export_thread)
         self.export_button.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(4,0))
         
+        # Bouton ID Contexte éco
+        self.id_contexte_button = ttk.Button(left_column, text="ID Contexte éco", command=self._start_id_contexte_thread)
+        self.id_contexte_button.grid(row=14, column=0, columnspan=2, sticky="ew", pady=(4,0))
+        
         # Séparateur
-        ttk.Separator(left_column, orient='horizontal').grid(row=14, column=0, columnspan=2, sticky="ew", pady=6)
+        ttk.Separator(left_column, orient='horizontal').grid(row=15, column=0, columnspan=2, sticky="ew", pady=6)
         
         # Actions supplémentaires
-        ttk.Label(left_column, text="Actions", style="Card.TLabel").grid(row=15, column=0, columnspan=2, sticky="w", pady=(0,2))
+        ttk.Label(left_column, text="Actions", style="Card.TLabel").grid(row=16, column=0, columnspan=2, sticky="w", pady=(0,2))
         
         # Boutons d'actions sur 2 colonnes
         self.bassin_button = ttk.Button(left_column, text="Bassin versant", command=self.start_bassin_thread)
-        self.bassin_button.grid(row=16, column=0, sticky="ew", pady=1, padx=(0,2))
+        self.bassin_button.grid(row=17, column=0, sticky="ew", pady=1, padx=(0,2))
         
         self.biodiv_button = ttk.Button(left_column, text="Photo Biodiv", command=self.open_biodiv_dialog)
-        self.biodiv_button.grid(row=16, column=1, sticky="ew", pady=1, padx=(2,0))
+        self.biodiv_button.grid(row=17, column=1, sticky="ew", pady=1, padx=(2,0))
         
         self.gmaps_button = ttk.Button(left_column, text="Google Maps", command=self.open_google_maps)
         self.gmaps_button.grid(row=17, column=0, sticky="ew", pady=1, padx=(0,2))
